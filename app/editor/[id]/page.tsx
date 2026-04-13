@@ -1,0 +1,417 @@
+'use client';
+
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import { useCanvasStore } from '@/stores/canvasStore';
+import { useAuthStore } from '@/stores/authStore';
+import { supabase } from '@/lib/supabase/client';
+import ModeToolbar from '@/components/toolbar/ModeToolbar';
+import PartSelector from '@/components/toolbar/PartSelector';
+import CompassWidget from '@/components/canvas/CompassWidget';
+import BuildingTemplateModal from '@/components/building/BuildingTemplateModal';
+import ExportModal from '@/components/output/ExportModal';
+import ScaffoldStartModal from '@/components/scaffold/ScaffoldStartModal';
+import RoofSettingsModal from '@/components/building/RoofSettingsModal';
+import UdekiModal from '@/components/scaffold/UdekiModal';
+import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
+import { CanvasData, PaperSize, ScaleOption } from '@/types';
+import { HANDRAIL_LEGEND } from '@/lib/konva/handrailColors';
+
+// Konvaはクライアントサイドのみ
+const GridCanvas = dynamic(() => import('@/components/canvas/GridCanvas'), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center w-full h-full bg-dark-bg">
+      <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
+    </div>
+  ),
+});
+
+export default function EditorPage() {
+  const params = useParams();
+  const router = useRouter();
+  const drawingId = params.id as string;
+
+  const {
+    setDrawingId,
+    setProjectId,
+    setCanvasData,
+    canvasData,
+    mode,
+    isDirty,
+    saveStatus,
+    setSaveStatus,
+    undo,
+    redo,
+    history,
+    zoomToFitBuildings,
+    showDimensions,
+    toggleShowDimensions,
+    selectedIds,
+  } = useCanvasStore();
+  const { user, loading: authLoading, loadSession } = useAuthStore();
+
+  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
+  const [showBuildingModal, setShowBuildingModal] = useState(false);
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [showScaffoldStartModal, setShowScaffoldStartModal] = useState(false);
+  const [showRoofModal, setShowRoofModal] = useState(false);
+  const [showUdekiModal, setShowUdekiModal] = useState(false);
+  const [showAutoLayoutModal, setShowAutoLayoutModal] = useState(false);
+  const [drawingTitle, setDrawingTitle] = useState('');
+  const [siteName, setSiteName] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  // 画面サイズ計測
+  useEffect(() => {
+    const updateSize = () => {
+      if (containerRef.current) {
+        setCanvasSize({
+          width: containerRef.current.clientWidth,
+          height: containerRef.current.clientHeight,
+        });
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+  // セッション読み込み
+  useEffect(() => {
+    loadSession();
+  }, [loadSession]);
+
+  // 図面データ読み込み
+  useEffect(() => {
+    if (!drawingId) return;
+    setDrawingId(drawingId);
+
+    const loadDrawing = async () => {
+      const { data: drawing } = await supabase
+        .from('drawings')
+        .select('*, projects(name)')
+        .eq('id', drawingId)
+        .single();
+
+      if (drawing) {
+        setCanvasData(drawing.canvas_data as CanvasData);
+        setProjectId(drawing.project_id);
+        setDrawingTitle(drawing.title);
+        if (drawing.projects) {
+          setSiteName((drawing.projects as { name: string }).name);
+        }
+      }
+    };
+    loadDrawing();
+  }, [drawingId, setDrawingId, setProjectId, setCanvasData]);
+
+  // 建物モードに切り替えたときモーダル表示
+  useEffect(() => {
+    if (mode === 'building') {
+      setShowBuildingModal(true);
+    }
+  }, [mode]);
+
+  // 保存
+  const handleSave = useCallback(async () => {
+    if (!drawingId) return;
+    setSaveStatus('saving');
+    const { error } = await supabase
+      .from('drawings')
+      .update({
+        canvas_data: canvasData as unknown as Record<string, unknown>,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', drawingId);
+
+    // プロジェクトのupdated_atも更新
+    const projectId = useCanvasStore.getState().projectId;
+    if (projectId) {
+      await supabase
+        .from('projects')
+        .update({ updated_at: new Date().toISOString() })
+        .eq('id', projectId);
+    }
+
+    setSaveStatus(error ? 'error' : 'saved');
+    setTimeout(() => setSaveStatus('idle'), 2000);
+  }, [drawingId, canvasData, setSaveStatus]);
+
+  // 出力処理
+  const handleExport = useCallback(
+    async (settings: { format: 'pdf' | 'png' | 'dxf'; paperSize: PaperSize; scale: ScaleOption }) => {
+      if (settings.format === 'png') {
+        // PNG: Konvaから直接出力
+        const { exportToPng } = await import('@/lib/export/pngExport');
+        await exportToPng(siteName);
+      } else if (settings.format === 'pdf') {
+        const { exportToPdf } = await import('@/lib/export/pdfExport');
+        await exportToPdf(canvasData, {
+          format: 'pdf',
+          paperSize: settings.paperSize,
+          scale: settings.scale,
+          companyName: useAuthStore.getState().profile?.company_name || '',
+          siteName,
+          date: new Date().toLocaleDateString('ja-JP'),
+        });
+      } else {
+        const { exportToDxf } = await import('@/lib/export/dxfExport');
+        exportToDxf(canvasData, siteName);
+      }
+      setShowExportModal(false);
+    },
+    [canvasData, siteName]
+  );
+
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-dark-bg">
+        <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="h-screen flex flex-col bg-dark-bg overflow-hidden">
+      {/* ヘッダー */}
+      <header className="flex-shrink-0 bg-dark-surface border-b border-dark-border px-3 py-2 flex items-center justify-between z-10">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => router.push('/projects')}
+            className="text-accent text-sm px-2 py-1"
+          >
+            ←
+          </button>
+          <div>
+            <h1 className="text-sm font-bold truncate max-w-[150px]">{siteName}</h1>
+            <p className="text-xs text-dimension">{drawingTitle}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1">
+          {/* アンドゥ/リドゥ */}
+          <button
+            onClick={undo}
+            disabled={history.past.length === 0}
+            className="px-2 py-1 text-lg disabled:opacity-30 text-dimension hover:text-canvas"
+            title="元に戻す"
+          >
+            ↩
+          </button>
+          <button
+            onClick={redo}
+            disabled={history.future.length === 0}
+            className="px-2 py-1 text-lg disabled:opacity-30 text-dimension hover:text-canvas"
+            title="やり直し"
+          >
+            ↪
+          </button>
+
+          {/* 保存 */}
+          <button
+            onClick={handleSave}
+            className={`px-3 py-1 rounded-lg text-sm font-bold ml-1 ${
+              saveStatus === 'saved'
+                ? 'bg-success text-white'
+                : saveStatus === 'error'
+                ? 'bg-red-500 text-white'
+                : isDirty
+                ? 'bg-accent text-white'
+                : 'bg-dark-bg text-dimension border border-dark-border'
+            }`}
+          >
+            {saveStatus === 'saving'
+              ? '...'
+              : saveStatus === 'saved'
+              ? '保存済'
+              : saveStatus === 'error'
+              ? 'エラー'
+              : '保存'}
+          </button>
+
+          {/* 出力 */}
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="px-3 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
+          >
+            出力
+          </button>
+        </div>
+      </header>
+
+      {/* キャンバスエリア */}
+      <div ref={containerRef} data-canvas-container className="flex-1 relative overflow-hidden">
+        {canvasSize.width > 0 && canvasSize.height > 0 && (
+          <GridCanvas width={canvasSize.width} height={canvasSize.height} />
+        )}
+        <CompassWidget />
+
+        {/* 右上ボタン群 */}
+        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
+          {/* 全体表示ボタン */}
+          {canvasData.buildings.length > 0 && (
+            <button
+              onClick={() => {
+                const vw = canvasSize.width || window.innerWidth;
+                const vh = canvasSize.height || (window.innerHeight - 120);
+                zoomToFitBuildings(vw, vh, 3000);
+              }}
+              className="w-10 h-10 bg-dark-surface border border-dark-border rounded-xl flex items-center justify-center text-dimension hover:text-canvas shadow-lg transition-colors"
+              title="全体表示"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="8.5" cy="8.5" r="5.5" />
+                <line x1="12.5" y1="12.5" x2="17" y2="17" />
+                <line x1="6" y1="8.5" x2="11" y2="8.5" />
+                <line x1="8.5" y1="6" x2="8.5" y2="11" />
+              </svg>
+            </button>
+          )}
+
+          {/* 寸法表示トグル */}
+          <button
+            onClick={toggleShowDimensions}
+            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
+              showDimensions
+                ? 'bg-accent border-accent text-white'
+                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
+            }`}
+            title={showDimensions ? '寸法を非表示' : '寸法を表示'}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="1" y1="17" x2="17" y2="17" />
+              <line x1="1" y1="17" x2="1" y2="1" />
+              <line x1="1" y1="5" x2="4" y2="5" />
+              <line x1="1" y1="9" x2="3" y2="9" />
+              <line x1="1" y1="13" x2="4" y2="13" />
+              <line x1="5" y1="17" x2="5" y2="14" />
+              <line x1="9" y1="17" x2="9" y2="15" />
+              <line x1="13" y1="17" x2="13" y2="14" />
+            </svg>
+          </button>
+
+          {/* 足場開始ボタン（建物配置済み＆足場未設定時に表示） */}
+          {canvasData.buildings.length > 0 && !canvasData.scaffoldStart && (
+            <button
+              onClick={() => setShowScaffoldStartModal(true)}
+              className="px-4 py-2 bg-accent text-white font-bold rounded-xl text-sm shadow-lg hover:bg-accent/90 transition-colors"
+            >
+              足場開始
+            </button>
+          )}
+
+          {/* 屋根設定ボタン（建物選択中のみ表示） */}
+          {selectedIds.length === 1 && canvasData.buildings.some(b => b.id === selectedIds[0]) && (
+            <button
+              onClick={() => setShowRoofModal(true)}
+              className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
+            >
+              屋根設定
+            </button>
+          )}
+
+          {/* 自動割付ボタン（建物＆足場開始設定済み時に表示） */}
+          {canvasData.buildings.length > 0 && canvasData.scaffoldStart && (
+            <button
+              onClick={() => setShowAutoLayoutModal(true)}
+              className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
+            >
+              自動割付
+            </button>
+          )}
+
+          {/* 腕木一括配置ボタン（手摺がある場合に表示） */}
+          {canvasData.handrails.length > 0 && (
+            <button
+              onClick={() => setShowUdekiModal(true)}
+              className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
+            >
+              腕木
+            </button>
+          )}
+        </div>
+
+        {/* 手摺凡例 */}
+        {canvasData.handrails.length > 0 && (
+          <div className="absolute top-3 right-16 bg-dark-surface/85 border border-dark-border rounded-lg px-2 py-1.5 z-10">
+            {HANDRAIL_LEGEND.map(({ lengthMm, color }) => (
+              <div key={lengthMm} className="flex items-center gap-1.5 leading-tight">
+                <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
+                <span className="text-[10px] text-dimension font-mono">{lengthMm}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* スケールバー */}
+        <ScaleBar />
+      </div>
+
+      {/* 部材選択パネル */}
+      <PartSelector />
+
+      {/* モードツールバー */}
+      <ModeToolbar />
+
+      {/* モーダル */}
+      {showBuildingModal && (
+        <BuildingTemplateModal onClose={() => setShowBuildingModal(false)} />
+      )}
+      {showExportModal && (
+        <ExportModal
+          onClose={() => setShowExportModal(false)}
+          onExport={handleExport}
+          siteName={siteName}
+        />
+      )}
+      {showScaffoldStartModal && (
+        <ScaffoldStartModal onClose={() => setShowScaffoldStartModal(false)} />
+      )}
+      {showUdekiModal && (
+        <UdekiModal onClose={() => setShowUdekiModal(false)} />
+      )}
+      {showAutoLayoutModal && (
+        <AutoLayoutModal onClose={() => setShowAutoLayoutModal(false)} />
+      )}
+      {showRoofModal && selectedIds.length === 1 && (() => {
+        const bld = canvasData.buildings.find(b => b.id === selectedIds[0]);
+        return bld ? (
+          <RoofSettingsModal
+            buildingId={bld.id}
+            initialRoof={bld.roof}
+            onClose={() => setShowRoofModal(false)}
+          />
+        ) : null;
+      })()}
+    </div>
+  );
+}
+
+/** スケールバー */
+function ScaleBar() {
+  const { zoom } = useCanvasStore();
+  const GRID_PX = 3;
+  const gridPx = GRID_PX * zoom;
+
+  // 100mmをpxで計算（10グリッド = 100mm）
+  const hundredMmPx = 10 * gridPx;
+  // 画面に収まるスケールを選択
+  let scaleMm = 100;
+  let barPx = hundredMmPx;
+  if (barPx > 150) { scaleMm = 50; barPx = hundredMmPx / 2; }
+  if (barPx > 150) { scaleMm = 20; barPx = hundredMmPx / 5; }
+  if (barPx < 30) { scaleMm = 500; barPx = hundredMmPx * 5; }
+  if (barPx < 30) { scaleMm = 1000; barPx = hundredMmPx * 10; }
+
+  return (
+    <div className="absolute bottom-20 left-3 flex items-center gap-1 bg-dark-bg/80 rounded px-2 py-1">
+      <div
+        className="h-0.5 bg-dimension"
+        style={{ width: `${barPx}px` }}
+      />
+      <span className="text-xs text-dimension">{scaleMm}mm</span>
+    </div>
+  );
+}

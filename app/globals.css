@@ -1,0 +1,64 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overscroll-behavior: none;
+  font-family: system-ui, -apple-system, sans-serif;
+}
+
+/* ダークテーマベース */
+body {
+  background-color: #1a1a18;
+  color: #f5f4f0;
+}
+
+/* Konva touch-action 設定 */
+.konvajs-content {
+  touch-action: none !important;
+}
+
+/* スクロールバーを非表示 */
+::-webkit-scrollbar {
+  width: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #2c2c2a;
+}
+::-webkit-scrollbar-thumb {
+  background: #555;
+  border-radius: 2px;
+}
+
+/* ボトムシート */
+.bottom-sheet {
+  transition: transform 0.3s ease-out;
+}
+
+/* モーダルオーバーレイ */
+.modal-overlay {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+}
+
+/* ボタン共通: 最小44pxタップサイズ */
+button, [role="button"] {
+  min-height: 44px;
+  min-width: 44px;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
