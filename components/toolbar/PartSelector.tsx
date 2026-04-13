@@ -350,15 +350,129 @@ export default function PartSelector() {
   const modeLabel = mode === 'obstacle' ? '障害物' : mode === 'memo' ? 'メモ' : '部材';
   const pos = panelPos ?? { x: 0, y: 0 };
 
+  // --- 共通コンテンツ ---
+  const dirSwitch = (
+    <div className="flex rounded-lg border border-dark-border overflow-hidden">
+      <button onClick={() => setDirection('horizontal')}
+        className={`px-2.5 py-1 text-xs font-bold transition-colors ${
+          direction === 'horizontal' ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
+        }`}>━ 横</button>
+      <button onClick={() => setDirection('vertical')}
+        className={`px-2.5 py-1 text-xs font-bold transition-colors ${
+          direction === 'vertical' ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
+        }`}>┃ 縦</button>
+    </div>
+  );
+
+  const handrailButtons = (
+    <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
+      {HANDRAIL_LENGTHS.map((l) => (
+        <button key={`hr-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, direction, e)}
+          className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
+        >{l}</button>
+      ))}
+    </div>
+  );
+
+  const antiButtons = (
+    <div className="space-y-1">
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-amber-400 w-6 shrink-0">400</span>
+        <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{ANTI_LENGTHS.map((l) => (
+          <button key={`a400-${l}`} onPointerDown={(e) => handleAntiDown(l, 400, direction, e)}
+            className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-amber-500/20 text-amber-300 border border-amber-500/30">{l}</button>
+        ))}</div>
+      </div>
+      <div className="flex items-center gap-1.5">
+        <span className="text-[10px] text-yellow-400 w-6 shrink-0">250</span>
+        <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{ANTI_LENGTHS.map((l) => (
+          <button key={`a250-${l}`} onPointerDown={(e) => handleAntiDown(l, 250, direction, e)}
+            className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">{l}</button>
+        ))}</div>
+      </div>
+    </div>
+  );
+
+  const trashArea = (
+    <div
+      ref={trashRef}
+      className={`shrink-0 flex items-center justify-center gap-2 py-2 mx-2 mb-2 rounded-lg border-2 border-dashed transition-colors ${
+        trashHover ? 'border-red-500 bg-red-500/20 text-red-400' : 'border-dark-border/60 text-dimension/60'
+      }`}
+    >
+      <span className="text-sm">🗑️</span>
+      <span className="text-[10px]">ドロップで削除</span>
+    </div>
+  );
+
   return (
     <>
+      {/* ===== モバイル（sm未満）: 画面下部固定バー ===== */}
+      <div className="sm:hidden fixed bottom-16 left-0 right-0 z-50 bg-dark-surface/95 border-t border-dark-border">
+        {isTabMode && (
+          <>
+            {/* タブ */}
+            <div className="flex border-b border-dark-border">
+              {PART_TABS.map((tab) => (
+                <button key={tab.id} onClick={() => setMode(tab.id)}
+                  className={`flex-1 py-1.5 text-xs font-bold ${
+                    activeTab === tab.id ? 'text-accent border-b-2 border-accent' : 'text-dimension'
+                  }`}
+                >{tab.label}</button>
+              ))}
+            </div>
+
+            <div className="px-3 py-2">
+              {activeTab === 'handrail' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-dimension">ドラッグで配置</p>
+                    {dirSwitch}
+                  </div>
+                  {handrailButtons}
+                </div>
+              )}
+              {activeTab === 'post' && (
+                <p className="text-xs text-dimension">タップして支柱を配置</p>
+              )}
+              {activeTab === 'anti' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-dimension">ドラッグで配置</p>
+                    {dirSwitch}
+                  </div>
+                  {antiButtons}
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {mode === 'obstacle' && (
+          <div className="px-3 py-2">
+            <div className="flex gap-1.5 overflow-x-auto">
+              {OBSTACLE_TYPES.map((o) => (
+                <button key={o.id} onClick={() => selectObstacle(o.id)}
+                  className={`px-2 py-1 rounded-lg text-[10px] shrink-0 ${selectedObstacleType === o.id ? 'ring-2 ring-accent' : ''}`}
+                  style={{ backgroundColor: o.color, color: '#333' }}
+                >{o.label}</button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {mode === 'memo' && (
+          <div className="px-3 py-2"><p className="text-xs text-dimension">タップしてメモを配置</p></div>
+        )}
+      </div>
+
+      {/* ===== PC（sm以上）: フローティングパネル ===== */}
       <div
         style={{
-          position: 'fixed', left: pos.x, top: pos.y,
+          left: pos.x, top: pos.y,
           width: panelSize.w, height: expanded ? panelSize.h : 'auto',
-          zIndex: 20, opacity: 0.95,
         }}
-        className="bg-dark-surface border border-dark-border rounded-xl shadow-2xl flex flex-col"
+        className="hidden sm:flex fixed z-50 opacity-95 flex-col bg-dark-surface border border-dark-border rounded-xl shadow-2xl"
       >
         {/* ヘッダー（ドラッグハンドル） */}
         <div
@@ -384,7 +498,6 @@ export default function PartSelector() {
         {/* コンテンツ */}
         {expanded && (
           <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
-            {/* ========== タブ（手摺/支柱/アンチ） ========== */}
             {isTabMode && (
               <>
                 <div className="flex border-b border-dark-border shrink-0">
@@ -398,34 +511,16 @@ export default function PartSelector() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-3 py-2">
-                  {/* --- 手摺タブ --- */}
                   {activeTab === 'handrail' && (
                     <div className="space-y-2">
-                      {/* 横/縦スイッチ */}
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
-                        <div className="flex rounded-lg border border-dark-border overflow-hidden">
-                          <button onClick={() => setDirection('horizontal')}
-                            className={`px-2.5 py-1 text-xs font-bold transition-colors ${
-                              direction === 'horizontal' ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
-                            }`}>━ 横</button>
-                          <button onClick={() => setDirection('vertical')}
-                            className={`px-2.5 py-1 text-xs font-bold transition-colors ${
-                              direction === 'vertical' ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
-                            }`}>┃ 縦</button>
-                        </div>
+                        {dirSwitch}
                       </div>
-                      <div className="flex flex-wrap gap-1.5">
-                        {HANDRAIL_LENGTHS.map((l) => (
-                          <button key={`hr-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, direction, e)}
-                            className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
-                          >{l}</button>
-                        ))}
-                      </div>
+                      {handrailButtons}
                     </div>
                   )}
 
-                  {/* --- 支柱タブ --- */}
                   {activeTab === 'post' && (
                     <div className="space-y-3">
                       <p className="text-xs text-dimension">タップして配置</p>
@@ -437,46 +532,19 @@ export default function PartSelector() {
                     </div>
                   )}
 
-                  {/* --- アンチタブ --- */}
                   {activeTab === 'anti' && (
                     <div className="space-y-2">
-                      {/* 横/縦スイッチ */}
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
-                        <div className="flex rounded-lg border border-dark-border overflow-hidden">
-                          <button onClick={() => setDirection('horizontal')}
-                            className={`px-2.5 py-1 text-xs font-bold transition-colors ${
-                              direction === 'horizontal' ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
-                            }`}>━ 横</button>
-                          <button onClick={() => setDirection('vertical')}
-                            className={`px-2.5 py-1 text-xs font-bold transition-colors ${
-                              direction === 'vertical' ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
-                            }`}>┃ 縦</button>
-                        </div>
+                        {dirSwitch}
                       </div>
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-amber-400 w-6 shrink-0">400</span>
-                          <div className="flex flex-wrap gap-1">{ANTI_LENGTHS.map((l) => (
-                            <button key={`a400-${l}`} onPointerDown={(e) => handleAntiDown(l, 400, direction, e)}
-                              className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none bg-amber-500/20 text-amber-300 border border-amber-500/30">{l}</button>
-                          ))}</div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-[10px] text-yellow-400 w-6 shrink-0">250</span>
-                          <div className="flex flex-wrap gap-1">{ANTI_LENGTHS.map((l) => (
-                            <button key={`a250-${l}`} onPointerDown={(e) => handleAntiDown(l, 250, direction, e)}
-                              className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">{l}</button>
-                          ))}</div>
-                        </div>
-                      </div>
+                      {antiButtons}
                     </div>
                   )}
                 </div>
               </>
             )}
 
-            {/* ========== 障害物モード ========== */}
             {mode === 'obstacle' && (
               <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
                 <div>
@@ -539,21 +607,11 @@ export default function PartSelector() {
               </div>
             )}
 
-            {/* ========== メモモード ========== */}
             {mode === 'memo' && (
               <div className="px-3 py-2"><p className="text-xs text-dimension">タップしてメモを配置</p></div>
             )}
 
-            {/* ゴミ箱エリア（常時表示） */}
-            <div
-              ref={trashRef}
-              className={`shrink-0 flex items-center justify-center gap-2 py-2 mx-2 mb-2 rounded-lg border-2 border-dashed transition-colors ${
-                trashHover ? 'border-red-500 bg-red-500/20 text-red-400' : 'border-dark-border/60 text-dimension/60'
-              }`}
-            >
-              <span className="text-sm">🗑️</span>
-              <span className="text-[10px]">ドロップで削除</span>
-            </div>
+            {trashArea}
           </div>
         )}
 
