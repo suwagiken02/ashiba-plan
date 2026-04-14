@@ -3,316 +3,479 @@
 import React from 'react';
 import { Layer, Line, Rect, Text } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { INITIAL_GRID_PX, gridToMm } from '@/lib/konva/gridUtils';
+import { INITIAL_GRID_PX, gridToMm, mmToGrid } from '@/lib/konva/gridUtils';
 import { getHandrailEndpoints } from '@/lib/konva/snapUtils';
-import { getBuildingEdgesClockwise, EdgeInfo } from '@/lib/konva/autoLayoutUtils';
-import { StartCorner, Point } from '@/types';
+import { getBuildingEdgesClockwise } from '@/lib/konva/autoLayoutUtils';
 
 const GUIDE_COLOR = '#378ADD';
 const GUIDE_OPACITY = 0.3;
-const DIM_COLOR = '#888780';
-const DIM_WARN_COLOR = '#E85D3A';
-const ARROW_SIZE_BASE = 4;
+const COLOR_OK = '#888780';
+const COLOR_WARN = '#E85D3A';
+const ARROW = 4;
 
-/** 離れ寸法1本分 */
-function DistanceMarker({
+/** ガイド線 + ラベル */
+function Guide({
   x1, y1, x2, y2, label, zoom, color,
 }: {
   x1: number; y1: number; x2: number; y2: number;
   label: string; zoom: number; color: string;
 }) {
-  const dx = x2 - x1;
-  const dy = y2 - y1;
+  const dx = x2 - x1, dy = y2 - y1;
   const len = Math.sqrt(dx * dx + dy * dy);
   if (len < 2) return null;
-
-  const arrow = ARROW_SIZE_BASE * zoom;
-  const fontSize = Math.max(12, 14 * zoom);
-  const isVertical = Math.abs(dx) < Math.abs(dy);
-  const midX = (x1 + x2) / 2;
-  const midY = (y1 + y2) / 2;
-  const textW = label.length * fontSize * 0.65 + 6;
-  const textH = fontSize + 4;
+  const a = ARROW * zoom;
+  const fs = Math.max(12, 14 * zoom);
+  const isV = Math.abs(dx) < Math.abs(dy);
+  const mx = (x1 + x2) / 2, my = (y1 + y2) / 2;
+  const tw = label.length * fs * 0.65 + 6, th = fs + 4;
 
   return (
     <>
       <Line points={[x1, y1, x2, y2]}
         stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
-      {isVertical ? (
-        <Line points={[x1 - arrow, y1 + arrow, x1, y1, x1 + arrow, y1 + arrow]}
-          stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
+      {isV ? (
+        <>
+          <Line points={[x1 - a, y1 + a, x1, y1, x1 + a, y1 + a]}
+            stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
+          <Line points={[x2 - a, y2 - a, x2, y2, x2 + a, y2 - a]}
+            stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
+        </>
       ) : (
-        <Line points={[x1 + arrow, y1 - arrow, x1, y1, x1 + arrow, y1 + arrow]}
-          stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
+        <>
+          <Line points={[x1 + a, y1 - a, x1, y1, x1 + a, y1 + a]}
+            stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
+          <Line points={[x2 - a, y2 - a, x2, y2, x2 - a, y2 + a]}
+            stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
+        </>
       )}
-      {isVertical ? (
-        <Line points={[x2 - arrow, y2 - arrow, x2, y2, x2 + arrow, y2 - arrow]}
-          stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
-      ) : (
-        <Line points={[x2 - arrow, y2 - arrow, x2, y2, x2 - arrow, y2 + arrow]}
-          stroke={GUIDE_COLOR} strokeWidth={1} opacity={GUIDE_OPACITY} listening={false} />
-      )}
-      <Rect x={midX - textW / 2} y={midY - textH / 2} width={textW} height={textH}
+      <Rect x={mx - tw / 2} y={my - th / 2} width={tw} height={th}
         fill="white" opacity={0.75} cornerRadius={2} listening={false} />
-      <Text x={midX - (label.length * fontSize * 0.65) / 2} y={midY - fontSize / 2}
-        text={label} fontSize={fontSize} fontFamily="monospace" fontStyle="bold"
+      <Text x={mx - (label.length * fs * 0.65) / 2} y={my - fs / 2}
+        text={label} fontSize={fs} fontFamily="monospace" fontStyle="bold"
         fill={color} listening={false} />
     </>
   );
 }
 
-/** コーナーに対応する face1/face2 辺を特定 */
-function findFaceEdges(
-  building: { points: Point[] },
-  corner: StartCorner,
-): { f1: EdgeInfo; f2: EdgeInfo } | null {
-  const edges = getBuildingEdgesClockwise(building as any);
-  if (edges.length < 3) return null;
-
-  const f1Dir = (corner === 'ne' || corner === 'nw') ? 'north' : 'south';
-  const f2Dir = (corner === 'ne' || corner === 'se') ? 'east' : 'west';
-
-  const f1Edges = edges.filter(e => e.face === f1Dir);
-  const f2Edges = edges.filter(e => e.face === f2Dir);
-  if (f1Edges.length === 0 || f2Edges.length === 0) return null;
-
-  // face1: コーナーに近い辺
-  const f1 = [...f1Edges].sort((a, b) => {
-    const ax = Math.min(a.p1.x, a.p2.x);
-    const bx = Math.min(b.p1.x, b.p2.x);
-    return (corner === 'ne' || corner === 'se') ? bx - ax : ax - bx;
-  })[0];
-
-  // face2: コーナーに近い辺
-  const f2 = [...f2Edges].sort((a, b) => {
-    const ay = Math.min(a.p1.y, a.p2.y);
-    const by = Math.min(b.p1.y, b.p2.y);
-    return (corner === 'ne' || corner === 'nw') ? ay - by : by - ay;
-  })[0];
-
-  return { f1, f2 };
-}
-
-/**
- * 指定面の方向に沿った手摺の「先端」座標を取得。
- * その面上に手摺がない場合は null を返す。
- *
- * face1(horizontal): scaffoldY付近にある水平手摺の進行方向先端X
- * face2(vertical):   scaffoldX付近にある垂直手摺の進行方向先端Y
- */
-function findLeadingEdge(
-  allEndpoints: Point[],
-  axis: 'horizontal' | 'vertical',
-  scaffoldCoord: number, // face1→scaffoldY, face2→scaffoldX
-  direction: 1 | -1,     // +1=正方向（東/南）, -1=負方向（西/北）
-): number | null {
-  const TOL = 5; // グリッド許容差（離れ計算の丸め誤差を吸収）
-
-  // その面上の手摺端点を収集
-  const pts: number[] = [];
-  for (let i = 0; i < allEndpoints.length; i += 2) {
-    const p1 = allEndpoints[i];
-    const p2 = allEndpoints[i + 1];
-    if (axis === 'horizontal') {
-      // scaffoldY 付近の水平手摺（両端点がほぼ同じY）
-      if (Math.abs(p1.y - scaffoldCoord) < TOL && Math.abs(p2.y - scaffoldCoord) < TOL) {
-        pts.push(p1.x, p2.x);
-      }
-    } else {
-      // scaffoldX 付近の垂直手摺（両端点がほぼ同じX）
-      if (Math.abs(p1.x - scaffoldCoord) < TOL && Math.abs(p2.x - scaffoldCoord) < TOL) {
-        pts.push(p1.y, p2.y);
-      }
-    }
-  }
-
-  console.log(`[DimLayer] findLead: axis=${axis} scfCoord=${scaffoldCoord} dir=${direction} found=${pts.length} pts`);
-
-  if (pts.length === 0) return null;
-
-  // 進行方向の最先端
-  return direction > 0 ? Math.max(...pts) : Math.min(...pts);
-}
-
 export default function DimensionLayer() {
   const { canvasData, zoom, panX, panY, showDimensions } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
-  const elements: React.ReactElement[] = [];
 
   if (!showDimensions) return <Layer listening={false} />;
-  if (canvasData.buildings.length === 0 || canvasData.handrails.length === 0) {
-    return <Layer listening={false} />;
-  }
+  if (!canvasData.buildings.length || !canvasData.handrails.length) return <Layer listening={false} />;
 
   const gx = (g: number) => g * gridPx + panX;
   const gy = (g: number) => g * gridPx + panY;
+  const elements: React.ReactElement[] = [];
+  const TOL = 15; // グリッド許容差（離れ計算の丸め誤差を吸収）
 
-  // 全手摺の端点を収集（ペアで格納: [h1p1, h1p2, h2p1, h2p2, ...]）
-  const allEndpoints: Point[] = [];
+  // 全手摺の端点
+  const eps: { x: number; y: number; dir: string }[] = [];
+  // [DEBUG] 全手摺の中身をダンプ
+  console.log(`[DimLayer] handrails count=${canvasData.handrails.length}`);
   for (const h of canvasData.handrails) {
     const [p1, p2] = getHandrailEndpoints(h);
-    allEndpoints.push(p1, p2);
+    const d = typeof h.direction === 'string' ? h.direction : 'other';
+    console.log(`[DimLayer]   id=${h.id.slice(0,8)} dir="${h.direction}"(type=${typeof h.direction}) → "${d}" p1=(${p1.x},${p1.y}) p2=(${p2.x},${p2.y})`);
+    eps.push({ ...p1, dir: d }, { ...p2, dir: d });
   }
 
-  // ── scaffoldStart がある場合 ──
   const scaffoldStart = canvasData.scaffoldStart;
+  if (!scaffoldStart || scaffoldStart.corner !== 'nw') {
+    // NW以外 or scaffoldStartなし → フォールバック（BBOX）
+    return <Layer listening={false}>{renderBBoxFallback(canvasData, eps, gx, gy, zoom, elements)}</Layer>;
+  }
 
-  if (scaffoldStart && canvasData.buildings.length > 0) {
-    const result = findFaceEdges(canvasData.buildings[0], scaffoldStart.corner);
-    if (result) {
-      const { f1, f2 } = result;
-      const corner = scaffoldStart.corner;
+  // ── NWコーナー専用ロジック ──
+  const building = canvasData.buildings[0];
+  const edges = getBuildingEdgesClockwise(building);
+  if (edges.length < 3) return <Layer listening={false} />;
 
-      // face1（北/南 = 水平面）
-      const f1BldY = (f1.p1.y + f1.p2.y) / 2;
-      // face1 の終点X = 次のコーナー（進行方向の先にある辺端点）
-      // nw/sw: 東へ進行 → p2が東端 = max(p1.x, p2.x)
-      // ne/se: 西へ進行 → p2が西端 = min(p1.x, p2.x)
-      const f1GoEast = corner === 'nw' || corner === 'sw';
-      const f1CornerX = f1GoEast ? Math.max(f1.p1.x, f1.p2.x) : Math.min(f1.p1.x, f1.p2.x);
-      const f1ScfY = (corner === 'ne' || corner === 'nw') ? f1BldY - scaffoldStart.face1DistanceMm / 10 : f1BldY + scaffoldStart.face1DistanceMm / 10;
+  // A面（north辺のうちx最小側 = NWコーナーに接する北面辺）
+  const northEdges = edges.filter(e => e.face === 'north');
+  // F面（west辺のうちy最小側 = NWコーナーに接する西面辺）
+  const westEdges = edges.filter(e => e.face === 'west');
 
-      // face1 上の手摺先端を探す
-      console.log(`[DimLayer] face1(${f1.label}): bldY=${f1BldY} scfY=${f1ScfY} goEast=${f1GoEast} cornerX=${f1CornerX}`);
+  if (!northEdges.length || !westEdges.length) return <Layer listening={false} />;
 
-      const f1Lead = findLeadingEdge(
-        allEndpoints,
-        'horizontal', Math.round(f1ScfY), f1GoEast ? 1 : -1,
-      );
+  const faceA = [...northEdges].sort((a, b) => Math.min(a.p1.x, a.p2.x) - Math.min(b.p1.x, b.p2.x))[0];
+  const faceF = [...westEdges].sort((a, b) => Math.min(a.p1.y, a.p2.y) - Math.min(b.p1.y, b.p2.y))[0];
 
-      if (f1Lead !== null) {
-        // 正=手前に余裕あり, 負=コーナーを超えている
-        const f1Remain = f1GoEast ? f1CornerX - f1Lead : f1Lead - f1CornerX;
-        const f1Mm = Math.round(gridToMm(f1Remain));
+  // 建物辺の座標
+  const bldNorthY = (faceA.p1.y + faceA.p2.y) / 2;
+  const bldWestX = (faceF.p1.x + faceF.p2.x) / 2;
 
-        console.log(`[DimLayer] face1: leadX=${f1Lead} remain=${f1Remain} mm=${f1Mm}`);
+  // AB角（A面の終点 = 東端）
+  const abCornerX = Math.max(faceA.p1.x, faceA.p2.x);
+  // EF角（F面の始点 = 南端）
+  const efCornerY = Math.max(faceF.p1.y, faceF.p2.y);
 
-        if (f1Mm !== 0) {
-          // マイナス=超過の場合は赤色でマイナス表記
-          const label = f1Mm > 0 ? `${f1Mm}` : `${f1Mm}`;
-          const color = f1Mm > 0 ? DIM_COLOR : DIM_WARN_COLOR;
-          // ガイド線: 手摺先端 → コーナー（超過時はコーナー → 手摺先端）
-          const drawX1 = f1Mm > 0 ? f1Lead : f1CornerX;
-          const drawX2 = f1Mm > 0 ? f1CornerX : f1Lead;
-          elements.push(
-            <DistanceMarker key="dim-f1"
-              x1={gx(drawX1)} y1={gy(f1ScfY)}
-              x2={gx(drawX2)} y2={gy(f1ScfY)}
-              label={label} zoom={zoom} color={color} />,
-          );
-        }
-      }
+  // 足場ライン座標
+  const face1DistGrid = mmToGrid(scaffoldStart.face1DistanceMm);
+  const face2DistGrid = mmToGrid(scaffoldStart.face2DistanceMm);
+  const scaffoldY = bldNorthY - face1DistGrid;
+  const scaffoldX = bldWestX - face2DistGrid;
 
-      // face2（東/西 = 垂直面）
-      const f2BldX = (f2.p1.x + f2.p2.x) / 2;
-      const f2GoSouth = corner === 'nw' || corner === 'ne';
-      // 終点コーナー = 進行方向の先にある辺端点
-      // 時計回りで: NWのwest面(F面)は p1=EF角(南端) p2=FA角(北端=NWコーナー)
-      // 南へ進むので終点 = EF角 = max(p1.y, p2.y)
-      const f2CornerY = f2GoSouth ? Math.max(f2.p1.y, f2.p2.y) : Math.min(f2.p1.y, f2.p2.y);
-      // 足場ラインのX座標
-      const f2ScfX = (corner === 'ne' || corner === 'se')
-        ? f2BldX + scaffoldStart.face2DistanceMm / 10
-        : f2BldX - scaffoldStart.face2DistanceMm / 10;
+  console.log(`[DimLayer] NW: faceA=${faceA.label} p1=(${faceA.p1.x},${faceA.p1.y}) p2=(${faceA.p2.x},${faceA.p2.y}) abCornerX=${abCornerX}`);
+  console.log(`[DimLayer] NW: faceF=${faceF.label} p1=(${faceF.p1.x},${faceF.p1.y}) p2=(${faceF.p2.x},${faceF.p2.y}) efCornerY=${efCornerY}`);
+  console.log(`[DimLayer] NW: scaffoldY=${scaffoldY} scaffoldX=${scaffoldX}`);
 
-      console.log(`[DimLayer] face2(${f2.label}): bldX=${f2BldX} scfX=${f2ScfX} goSouth=${f2GoSouth} cornerY=${f2CornerY} p1=(${f2.p1.x},${f2.p1.y}) p2=(${f2.p2.x},${f2.p2.y})`);
-
-      const f2Lead = findLeadingEdge(
-        allEndpoints,
-        'vertical', Math.round(f2ScfX), f2GoSouth ? 1 : -1,
-      );
-
-      if (f2Lead !== null) {
-        const f2Remain = f2GoSouth ? f2CornerY - f2Lead : f2Lead - f2CornerY;
-        const f2Mm = Math.round(gridToMm(f2Remain));
-
-        console.log(`[DimLayer] face2: leadY=${f2Lead} remain=${f2Remain} mm=${f2Mm}`);
-
-        if (f2Mm !== 0) {
-          const label = f2Mm > 0 ? `${f2Mm}` : `${f2Mm}`;
-          const color = f2Mm > 0 ? DIM_COLOR : DIM_WARN_COLOR;
-          const drawY1 = f2Mm > 0 ? f2Lead : f2CornerY;
-          const drawY2 = f2Mm > 0 ? f2CornerY : f2Lead;
-          elements.push(
-            <DistanceMarker key="dim-f2"
-              x1={gx(f2ScfX)} y1={gy(drawY1)}
-              x2={gx(f2ScfX)} y2={gy(drawY2)}
-              label={label} zoom={zoom} color={color} />,
-          );
-        }
-      }
-
-      return <Layer listening={false}>{elements}</Layer>;
+  // ── ガイド1: A面（北面）の残り距離 ──
+  // scaffoldY 付近の水平手摺の最大X
+  // dir判定を緩和: horizontal, vertical, number すべての手摺からY座標が近いものを収集
+  const northHandrailXs: number[] = [];
+  for (const ep of eps) {
+    const yDiff = Math.abs(ep.y - scaffoldY);
+    if (yDiff < TOL) {
+      northHandrailXs.push(ep.x);
+      console.log(`[DimLayer] A面 match: ep=(${ep.x},${ep.y}) dir=${ep.dir} yDiff=${yDiff.toFixed(1)}`);
     }
   }
+  console.log(`[DimLayer] A面 result: ${northHandrailXs.length} pts near Y=${scaffoldY}`);
 
-  // ── フォールバック: scaffoldStart未設定時はBBOXベース ──
-  let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
-  for (const b of canvasData.buildings) {
-    for (const p of b.points) {
-      if (p.x < bMinX) bMinX = p.x;
-      if (p.y < bMinY) bMinY = p.y;
-      if (p.x > bMaxX) bMaxX = p.x;
-      if (p.y > bMaxY) bMaxY = p.y;
+  if (northHandrailXs.length > 0) {
+    const leadX = Math.max(...northHandrailXs);
+    const remainGrid = abCornerX - leadX;
+    const remainMm = Math.round(gridToMm(remainGrid));
+    const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
+    const x1 = Math.min(leadX, abCornerX);
+    const x2 = Math.max(leadX, abCornerX);
+
+    console.log(`[DimLayer] PUSH f1: leadX=${leadX} abCornerX=${abCornerX} remainMm=${remainMm} x1=${x1} x2=${x2} screenX1=${gx(x1).toFixed(1)} screenX2=${gx(x2).toFixed(1)}`);
+
+    elements.push(
+      <Guide key="guide-a"
+        x1={gx(x1)} y1={gy(scaffoldY)}
+        x2={gx(x2)} y2={gy(scaffoldY)}
+        label={`${remainMm}`} zoom={zoom} color={color} />,
+    );
+  } else {
+    console.log(`[DimLayer] A面 SKIP: no handrails found near scaffoldY=${scaffoldY}`);
+    // 全端点のY座標をダンプして確認
+    const allYs = eps.map(ep => ep.y);
+    const uniqueYs = Array.from(new Set(allYs)).sort((a, b) => a - b);
+    console.log(`[DimLayer] all endpoint Y values: [${uniqueYs.join(', ')}]`);
+  }
+
+  // ── ガイド2: F面（西面）の残り距離 ──
+  const westHandrailYs: number[] = [];
+  for (const ep of eps) {
+    const xDiff = Math.abs(ep.x - scaffoldX);
+    if (xDiff < TOL) {
+      westHandrailYs.push(ep.y);
+      console.log(`[DimLayer] F面 match: ep=(${ep.x},${ep.y}) dir=${ep.dir} xDiff=${xDiff.toFixed(1)}`);
     }
   }
-  let hMinX = Infinity, hMinY = Infinity, hMaxX = -Infinity, hMaxY = -Infinity;
-  for (const p of allEndpoints) {
-    if (p.x < hMinX) hMinX = p.x;
-    if (p.y < hMinY) hMinY = p.y;
-    if (p.x > hMaxX) hMaxX = p.x;
-    if (p.y > hMaxY) hMaxY = p.y;
+  console.log(`[DimLayer] F面 result: ${westHandrailYs.length} pts near X=${scaffoldX}`);
+
+  if (westHandrailYs.length > 0) {
+    const leadY = Math.max(...westHandrailYs);
+    const remainGrid = efCornerY - leadY;
+    const remainMm = Math.round(gridToMm(remainGrid));
+    const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
+    const y1 = Math.min(leadY, efCornerY);
+    const y2 = Math.max(leadY, efCornerY);
+
+    console.log(`[DimLayer] PUSH f2: leadY=${leadY} efCornerY=${efCornerY} remainMm=${remainMm} y1=${y1} y2=${y2} screenY1=${gy(y1).toFixed(1)} screenY2=${gy(y2).toFixed(1)}`);
+
+    elements.push(
+      <Guide key="guide-f"
+        x1={gx(scaffoldX)} y1={gy(y1)}
+        x2={gx(scaffoldX)} y2={gy(y2)}
+        label={`${remainMm}`} zoom={zoom} color={color} />,
+    );
+  } else {
+    console.log(`[DimLayer] F面 SKIP: no handrails found near scaffoldX=${scaffoldX}`);
+    const allXs = eps.map(ep => ep.x);
+    const uniqueXs = Array.from(new Set(allXs)).sort((a, b) => a - b);
+    console.log(`[DimLayer] all endpoint X values: [${uniqueXs.join(', ')}]`);
   }
 
-  const northDist = bMinY - hMinY;
-  const southDist = hMaxY - bMaxY;
-  const eastDist = hMaxX - bMaxX;
-  const westDist = bMinX - hMinX;
+  // ── ガイド3: B面（東面、AB角から南へ進行）の残り距離 ──
+  // B面 = east向き辺のうち、AB角(x=abCornerX)に接する辺
+  const eastEdges = edges.filter(e => e.face === 'east');
+  // AB角のX座標に近い辺を選ぶ（p1.xまたはp2.xがabCornerXに近い）
+  const faceBCandidates = eastEdges.filter(e =>
+    Math.abs(e.p1.x - abCornerX) < TOL || Math.abs(e.p2.x - abCornerX) < TOL
+  );
+  // 候補がなければeast辺のうちy最小側（NWコーナー寄り）
+  const faceB = faceBCandidates.length > 0
+    ? faceBCandidates.sort((a, b) => Math.min(a.p1.y, a.p2.y) - Math.min(b.p1.y, b.p2.y))[0]
+    : eastEdges.length > 0
+      ? [...eastEdges].sort((a, b) => Math.min(a.p1.y, a.p2.y) - Math.min(b.p1.y, b.p2.y))[0]
+      : null;
 
-  if (northDist !== 0) {
-    const mm = Math.round(gridToMm(Math.abs(northDist)));
-    const c = DIM_COLOR;
-    const pts = allEndpoints.filter(p => Math.abs(p.y - hMinY) < 2);
-    const xs = pts.map(p => p.x);
-    const lx = xs.length > 0 ? Math.min(...xs) : (bMinX + bMaxX) / 2;
-    const rx = xs.length > 1 ? Math.max(...xs) : lx;
-    elements.push(<DistanceMarker key="dim-n-l" x1={gx(lx)} y1={gy(bMinY)} x2={gx(lx)} y2={gy(hMinY)} label={`${mm}`} zoom={zoom} color={c} />);
-    if (Math.abs(rx - lx) > 30)
-      elements.push(<DistanceMarker key="dim-n-r" x1={gx(rx)} y1={gy(bMinY)} x2={gx(rx)} y2={gy(hMinY)} label={`${mm}`} zoom={zoom} color={c} />);
-  }
-  if (southDist !== 0) {
-    const mm = Math.round(gridToMm(Math.abs(southDist)));
-    const c = DIM_COLOR;
-    const pts = allEndpoints.filter(p => Math.abs(p.y - hMaxY) < 2);
-    const xs = pts.map(p => p.x);
-    const lx = xs.length > 0 ? Math.min(...xs) : (bMinX + bMaxX) / 2;
-    const rx = xs.length > 1 ? Math.max(...xs) : lx;
-    elements.push(<DistanceMarker key="dim-s-l" x1={gx(lx)} y1={gy(bMaxY)} x2={gx(lx)} y2={gy(hMaxY)} label={`${mm}`} zoom={zoom} color={c} />);
-    if (Math.abs(rx - lx) > 30)
-      elements.push(<DistanceMarker key="dim-s-r" x1={gx(rx)} y1={gy(bMaxY)} x2={gx(rx)} y2={gy(hMaxY)} label={`${mm}`} zoom={zoom} color={c} />);
-  }
-  if (eastDist !== 0) {
-    const mm = Math.round(gridToMm(Math.abs(eastDist)));
-    const c = DIM_COLOR;
-    const pts = allEndpoints.filter(p => Math.abs(p.x - hMaxX) < 2);
-    const ys = pts.map(p => p.y);
-    const ty = ys.length > 0 ? Math.min(...ys) : (bMinY + bMaxY) / 2;
-    const by = ys.length > 1 ? Math.max(...ys) : ty;
-    elements.push(<DistanceMarker key="dim-e-t" x1={gx(bMaxX)} y1={gy(ty)} x2={gx(hMaxX)} y2={gy(ty)} label={`${mm}`} zoom={zoom} color={c} />);
-    if (Math.abs(by - ty) > 30)
-      elements.push(<DistanceMarker key="dim-e-b" x1={gx(bMaxX)} y1={gy(by)} x2={gx(hMaxX)} y2={gy(by)} label={`${mm}`} zoom={zoom} color={c} />);
-  }
-  if (westDist !== 0) {
-    const mm = Math.round(gridToMm(Math.abs(westDist)));
-    const c = DIM_COLOR;
-    const pts = allEndpoints.filter(p => Math.abs(p.x - hMinX) < 2);
-    const ys = pts.map(p => p.y);
-    const ty = ys.length > 0 ? Math.min(...ys) : (bMinY + bMaxY) / 2;
-    const by = ys.length > 1 ? Math.max(...ys) : ty;
-    elements.push(<DistanceMarker key="dim-w-t" x1={gx(bMinX)} y1={gy(ty)} x2={gx(hMinX)} y2={gy(ty)} label={`${mm}`} zoom={zoom} color={c} />);
-    if (Math.abs(by - ty) > 30)
-      elements.push(<DistanceMarker key="dim-w-b" x1={gx(bMinX)} y1={gy(by)} x2={gx(hMinX)} y2={gy(by)} label={`${mm}`} zoom={zoom} color={c} />);
+  if (faceB) {
+    // B面の建物X座標
+    const bldBX = (faceB.p1.x + faceB.p2.x) / 2;
+    // BC角 = B面の南端（進行方向の終点）
+    const bcCornerY = Math.max(faceB.p1.y, faceB.p2.y);
+    // B面の足場ラインX = AB角のX + 北面の離れ（東側に離れる）
+    const scaffoldBX = bldBX + face1DistGrid;
+
+    console.log(`[DimLayer] NW: faceB=${faceB.label} p1=(${faceB.p1.x},${faceB.p1.y}) p2=(${faceB.p2.x},${faceB.p2.y}) bcCornerY=${bcCornerY} scaffoldBX=${scaffoldBX}`);
+
+    // scaffoldBX 付近の垂直手摺の最南端Y
+    const bHandrailYs: number[] = [];
+    for (const ep of eps) {
+      const xDiff = Math.abs(ep.x - scaffoldBX);
+      if (xDiff < TOL) {
+        bHandrailYs.push(ep.y);
+        console.log(`[DimLayer] B面 match: ep=(${ep.x},${ep.y}) dir=${ep.dir} xDiff=${xDiff.toFixed(1)}`);
+      }
+    }
+    console.log(`[DimLayer] B面 result: ${bHandrailYs.length} pts near X=${scaffoldBX}`);
+
+    if (bHandrailYs.length > 0) {
+      const leadY = Math.max(...bHandrailYs); // 南へ進行 → 最大Y
+      const remainGrid = bcCornerY - leadY;
+      const remainMm = Math.round(gridToMm(remainGrid));
+      const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
+      const y1 = Math.min(leadY, bcCornerY);
+      const y2 = Math.max(leadY, bcCornerY);
+
+      console.log(`[DimLayer] PUSH B面: leadY=${leadY} bcCornerY=${bcCornerY} remainMm=${remainMm}`);
+
+      elements.push(
+        <Guide key="guide-b"
+          x1={gx(scaffoldBX)} y1={gy(y1)}
+          x2={gx(scaffoldBX)} y2={gy(y2)}
+          label={`${remainMm}`} zoom={zoom} color={color} />,
+      );
+    } else {
+      console.log(`[DimLayer] B面 SKIP: no handrails found near scaffoldBX=${scaffoldBX}`);
+    }
+  } else {
+    console.log(`[DimLayer] B面 SKIP: no east edge found`);
   }
 
+  // ── ガイド4: C面（内側north面、BC角から東へ進行）の残り距離 ──
+  // C面 = north向き辺のうち、A面ではない方（Y座標がA面より大きい = 内側）
+  // NWコーナーL字: A面y=-150, C面y=150 → C面はYが大きい方
+  const faceCCandidates = northEdges.filter(e => {
+    const ey = (e.p1.y + e.p2.y) / 2;
+    return Math.abs(ey - bldNorthY) > TOL; // A面と異なるY位置のnorth辺
+  });
+  const faceC = faceCCandidates.length > 0
+    ? faceCCandidates.sort((a, b) => {
+        // Y座標が大きい（南寄り = 内側）を優先
+        return ((b.p1.y + b.p2.y) / 2) - ((a.p1.y + a.p2.y) / 2);
+      })[0]
+    : null;
+
+  if (faceC) {
+    const faceCY = (faceC.p1.y + faceC.p2.y) / 2;
+    // CD角 = C面の東端X
+    const cdCornerX = Math.max(faceC.p1.x, faceC.p2.x);
+    // C面の足場ラインY = C面外壁Y - 北向き離れ
+    const scaffoldCY = faceCY - face1DistGrid;
+
+    console.log(`[DimLayer] NW: faceC=${faceC.label} p1=(${faceC.p1.x},${faceC.p1.y}) p2=(${faceC.p2.x},${faceC.p2.y}) cdCornerX=${cdCornerX} scaffoldCY=${scaffoldCY}`);
+
+    // scaffoldCY 付近の手摺端点の最東端X
+    const cHandrailXs: number[] = [];
+    for (const ep of eps) {
+      const yDiff = Math.abs(ep.y - scaffoldCY);
+      if (yDiff < TOL) {
+        cHandrailXs.push(ep.x);
+        console.log(`[DimLayer] C面 match: ep=(${ep.x},${ep.y}) dir=${ep.dir} yDiff=${yDiff.toFixed(1)}`);
+      }
+    }
+    console.log(`[DimLayer] C面 result: ${cHandrailXs.length} pts near Y=${scaffoldCY}`);
+
+    if (cHandrailXs.length > 0) {
+      const leadX = Math.max(...cHandrailXs); // 東へ進行 → 最大X
+      const remainGrid = cdCornerX - leadX;
+      const remainMm = Math.round(gridToMm(remainGrid));
+      const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
+      const x1 = Math.min(leadX, cdCornerX);
+      const x2 = Math.max(leadX, cdCornerX);
+
+      console.log(`[DimLayer] PUSH C面: leadX=${leadX} cdCornerX=${cdCornerX} remainMm=${remainMm}`);
+
+      elements.push(
+        <Guide key="guide-c"
+          x1={gx(x1)} y1={gy(scaffoldCY)}
+          x2={gx(x2)} y2={gy(scaffoldCY)}
+          label={`${remainMm}`} zoom={zoom} color={color} />,
+      );
+    } else {
+      console.log(`[DimLayer] C面 SKIP: no handrails found near scaffoldCY=${scaffoldCY}`);
+    }
+  } else {
+    console.log(`[DimLayer] C面 SKIP: no inner north edge found (rect building?)`);
+  }
+
+  // ── ガイド5: D面（east向き、外側、CD角から南へ進行）の残り距離 ──
+  // D面 = east辺のうち B面とは異なるX位置（外側 = X最大側）
+  // B面は内側east (x=450)、D面は外側east (x=750)
+  const faceDCandidates = eastEdges.filter(e => {
+    const ex = (e.p1.x + e.p2.x) / 2;
+    // B面がある場合はそれと異なるX、ない場合は全候補
+    if (faceB) {
+      const faceBX = (faceB.p1.x + faceB.p2.x) / 2;
+      return Math.abs(ex - faceBX) > TOL;
+    }
+    return true;
+  });
+  const faceD = faceDCandidates.length > 0
+    ? faceDCandidates.sort((a, b) => {
+        // X座標が大きい（東側 = 外側）を優先
+        return ((b.p1.x + b.p2.x) / 2) - ((a.p1.x + a.p2.x) / 2);
+      })[0]
+    : null;
+
+  if (faceD) {
+    const faceDX = (faceD.p1.x + faceD.p2.x) / 2;
+    // DE角 = D面の南端Y
+    const deCornerY = Math.max(faceD.p1.y, faceD.p2.y);
+    // D面の足場ラインX = D面外壁X + 東向き離れ
+    const scaffoldDX = faceDX + face1DistGrid;
+
+    console.log(`[DimLayer] NW: faceD=${faceD.label} p1=(${faceD.p1.x},${faceD.p1.y}) p2=(${faceD.p2.x},${faceD.p2.y}) deCornerY=${deCornerY} scaffoldDX=${scaffoldDX}`);
+
+    const dHandrailYs: number[] = [];
+    for (const ep of eps) {
+      const xDiff = Math.abs(ep.x - scaffoldDX);
+      if (xDiff < TOL) {
+        dHandrailYs.push(ep.y);
+        console.log(`[DimLayer] D面 match: ep=(${ep.x},${ep.y}) dir=${ep.dir} xDiff=${xDiff.toFixed(1)}`);
+      }
+    }
+    console.log(`[DimLayer] D面 result: ${dHandrailYs.length} pts near X=${scaffoldDX}`);
+
+    if (dHandrailYs.length > 0) {
+      const leadY = Math.max(...dHandrailYs); // 南へ進行 → 最大Y
+      const remainGrid = deCornerY - leadY;
+      const remainMm = Math.round(gridToMm(remainGrid));
+      const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
+      const y1 = Math.min(leadY, deCornerY);
+      const y2 = Math.max(leadY, deCornerY);
+
+      console.log(`[DimLayer] PUSH D面: leadY=${leadY} deCornerY=${deCornerY} remainMm=${remainMm}`);
+
+      elements.push(
+        <Guide key="guide-d"
+          x1={gx(scaffoldDX)} y1={gy(y1)}
+          x2={gx(scaffoldDX)} y2={gy(y2)}
+          label={`${remainMm}`} zoom={zoom} color={color} />,
+      );
+    } else {
+      console.log(`[DimLayer] D面 SKIP: no handrails found near scaffoldDX=${scaffoldDX}`);
+    }
+  } else {
+    console.log(`[DimLayer] D面 SKIP: no outer east edge found (rect building?)`);
+  }
+
+  // ── ガイド6: E面（south向き、DE角から西へ進行）の残り距離 ──
+  const southEdges = edges.filter(e => e.face === 'south');
+  // E面 = south辺のうちY最大側（最南端）
+  const faceE = southEdges.length > 0
+    ? [...southEdges].sort((a, b) => {
+        return ((b.p1.y + b.p2.y) / 2) - ((a.p1.y + a.p2.y) / 2);
+      })[0]
+    : null;
+
+  if (faceE) {
+    const faceEY = (faceE.p1.y + faceE.p2.y) / 2;
+    // EF角 = E面の西端X（NWコーナー方向 = 最小X）
+    const efCornerX = Math.min(faceE.p1.x, faceE.p2.x);
+    // E面の足場ラインY = E面外壁Y + 南向き離れ
+    const scaffoldEY = faceEY + face1DistGrid;
+
+    console.log(`[DimLayer] NW: faceE=${faceE.label} p1=(${faceE.p1.x},${faceE.p1.y}) p2=(${faceE.p2.x},${faceE.p2.y}) efCornerX=${efCornerX} scaffoldEY=${scaffoldEY}`);
+
+    const eHandrailXs: number[] = [];
+    for (const ep of eps) {
+      const yDiff = Math.abs(ep.y - scaffoldEY);
+      if (yDiff < TOL) {
+        eHandrailXs.push(ep.x);
+        console.log(`[DimLayer] E面 match: ep=(${ep.x},${ep.y}) dir=${ep.dir} yDiff=${yDiff.toFixed(1)}`);
+      }
+    }
+    console.log(`[DimLayer] E面 result: ${eHandrailXs.length} pts near Y=${scaffoldEY}`);
+
+    if (eHandrailXs.length > 0) {
+      const leadX = Math.min(...eHandrailXs); // 西へ進行 → 最小X
+      const remainGrid = leadX - efCornerX;
+      const remainMm = Math.round(gridToMm(remainGrid));
+      const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
+      const x1 = Math.min(leadX, efCornerX);
+      const x2 = Math.max(leadX, efCornerX);
+
+      console.log(`[DimLayer] PUSH E面: leadX=${leadX} efCornerX=${efCornerX} remainMm=${remainMm}`);
+
+      elements.push(
+        <Guide key="guide-e"
+          x1={gx(x1)} y1={gy(scaffoldEY)}
+          x2={gx(x2)} y2={gy(scaffoldEY)}
+          label={`${remainMm}`} zoom={zoom} color={color} />,
+      );
+    } else {
+      console.log(`[DimLayer] E面 SKIP: no handrails found near scaffoldEY=${scaffoldEY}`);
+    }
+  } else {
+    console.log(`[DimLayer] E面 SKIP: no south edge found`);
+  }
+
+  console.log(`[DimLayer] scaffoldStart path: ${elements.length} elements`);
   return <Layer listening={false}>{elements}</Layer>;
+}
+
+/** scaffoldStart 未設定時の BBOX フォールバック */
+function renderBBoxFallback(
+  canvasData: ReturnType<typeof useCanvasStore.getState>['canvasData'],
+  eps: { x: number; y: number }[],
+  gx: (g: number) => number,
+  gy: (g: number) => number,
+  zoom: number,
+  elements: React.ReactElement[],
+): React.ReactElement[] {
+  let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+  for (const b of canvasData.buildings)
+    for (const p of b.points) {
+      if (p.x < bMinX) bMinX = p.x; if (p.y < bMinY) bMinY = p.y;
+      if (p.x > bMaxX) bMaxX = p.x; if (p.y > bMaxY) bMaxY = p.y;
+    }
+  let hMinX = Infinity, hMinY = Infinity, hMaxX = -Infinity, hMaxY = -Infinity;
+  for (const p of eps) {
+    if (p.x < hMinX) hMinX = p.x; if (p.y < hMinY) hMinY = p.y;
+    if (p.x > hMaxX) hMaxX = p.x; if (p.y > hMaxY) hMaxY = p.y;
+  }
+
+  const faces: { dist: number; key: string; x1: number; y1: number; x2: number; y2: number }[] = [];
+  const nd = bMinY - hMinY;
+  if (nd !== 0) {
+    const pts = eps.filter(p => Math.abs(p.y - hMinY) < 2);
+    const lx = pts.length ? Math.min(...pts.map(p => p.x)) : (bMinX + bMaxX) / 2;
+    faces.push({ dist: nd, key: 'n', x1: lx, y1: bMinY, x2: lx, y2: hMinY });
+  }
+  const sd = hMaxY - bMaxY;
+  if (sd !== 0) {
+    const pts = eps.filter(p => Math.abs(p.y - hMaxY) < 2);
+    const lx = pts.length ? Math.min(...pts.map(p => p.x)) : (bMinX + bMaxX) / 2;
+    faces.push({ dist: sd, key: 's', x1: lx, y1: bMaxY, x2: lx, y2: hMaxY });
+  }
+  const ed = hMaxX - bMaxX;
+  if (ed !== 0) {
+    const pts = eps.filter(p => Math.abs(p.x - hMaxX) < 2);
+    const ty = pts.length ? Math.min(...pts.map(p => p.y)) : (bMinY + bMaxY) / 2;
+    faces.push({ dist: ed, key: 'e', x1: bMaxX, y1: ty, x2: hMaxX, y2: ty });
+  }
+  const wd = bMinX - hMinX;
+  if (wd !== 0) {
+    const pts = eps.filter(p => Math.abs(p.x - hMinX) < 2);
+    const ty = pts.length ? Math.min(...pts.map(p => p.y)) : (bMinY + bMaxY) / 2;
+    faces.push({ dist: wd, key: 'w', x1: bMinX, y1: ty, x2: hMinX, y2: ty });
+  }
+
+  for (const f of faces) {
+    const mm = Math.round(gridToMm(Math.abs(f.dist)));
+    elements.push(
+      <Guide key={`dim-${f.key}`}
+        x1={gx(f.x1)} y1={gy(f.y1)} x2={gx(f.x2)} y2={gy(f.y2)}
+        label={`${mm}`} zoom={zoom} color={COLOR_OK} />,
+    );
+  }
+  return elements;
 }
