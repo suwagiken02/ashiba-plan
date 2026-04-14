@@ -6,6 +6,7 @@ import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from './gridUtils';
 import { snapToHandrail, snapHandrailPlacement } from './snapUtils';
+import { getHandrailColor } from './handrailColors';
 import { Point, Handrail, HandrailDirection } from '@/types';
 
 const SNAP_PX = 80;
@@ -246,7 +247,7 @@ export function useCanvasInteraction() {
             y: placePos.y,
             lengthMm: s.selectedHandrailLength,
             direction,
-            color: '#185FA5',
+            color: getHandrailColor(s.selectedHandrailLength),
           });
         }
       }

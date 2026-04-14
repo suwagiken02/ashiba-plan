@@ -133,46 +133,105 @@ export function getBuildingEdgesClockwise(building: BuildingShape): EdgeInfo[] {
 }
 
 // ============================================================
-// グリーディ充填 + 端数パターン生成
+// 手摺割付: 1800mm優先 → 端数を小部材で充填
+//
+// 1. 1800mm をできるだけ多く使う
+// 2. 残りの端数（< 1800mm）を小部材で埋める複数パターンを生成
+// 3. 端数が最小になるパターンを返す
 // ============================================================
 export function findBestEndCombinations(effectiveMm: number): LayoutCombination[] {
   if (effectiveMm <= 0) return [{ rails: [], remainder: 0, count: 0 }];
 
-  const results: LayoutCombination[] = [];
+  // 端数サイズ（1800mm以外、降順）
+  const FILLER_SIZES: HandrailLengthMm[] = [1200, 900, 600, 400, 300, 200];
 
-  const fillGreedy = (remaining: number): HandrailLengthMm[] => {
+  // 1800mm をできるだけ詰める
+  const num1800 = Math.floor(effectiveMm / 1800);
+  const leftover = effectiveMm - num1800 * 1800;
+  const base1800: HandrailLengthMm[] = Array(num1800).fill(1800 as HandrailLengthMm);
+
+  // 端数がゼロなら完璧
+  if (leftover === 0) {
+    return [{ rails: base1800, remainder: 0, count: num1800 }];
+  }
+
+  const results: LayoutCombination[] = [];
+  const seen = new Set<string>();
+
+  const addResult = (rails: HandrailLengthMm[], rem: number) => {
+    const key = rails.join(',') + '|' + rem;
+    if (seen.has(key)) return;
+    seen.add(key);
+    results.push({ rails, remainder: rem, count: rails.length });
+  };
+
+  // ── パターンA: 端数をグリーディに充填 ──
+  const fillGreedy = (remaining: number, sizes: HandrailLengthMm[]): HandrailLengthMm[] => {
     const rails: HandrailLengthMm[] = [];
     let left = remaining;
-    for (const size of HANDRAIL_SIZES) {
+    for (const size of sizes) {
       while (left >= size) { rails.push(size); left -= size; }
     }
     return rails;
   };
 
-  const baseRails = fillGreedy(effectiveMm);
-  const baseTotal = baseRails.reduce((s, r) => s + r, 0);
-  const baseRemainder = effectiveMm - baseTotal;
-  results.push({ rails: baseRails, remainder: baseRemainder, count: baseRails.length });
+  const fillerA = fillGreedy(leftover, FILLER_SIZES);
+  const totalA = fillerA.reduce((s, r) => s + r, 0);
+  addResult([...base1800, ...fillerA], leftover - totalA);
 
-  if (baseRails.length > 0) {
-    const lastIdx = HANDRAIL_SIZES.indexOf(baseRails[baseRails.length - 1]);
-    if (lastIdx > 0) {
-      const altRails = [...baseRails];
-      altRails[altRails.length - 1] = HANDRAIL_SIZES[lastIdx - 1];
-      const altTotal = altRails.reduce((s, r) => s + r, 0);
-      results.push({ rails: altRails, remainder: effectiveMm - altTotal, count: altRails.length });
+  // ── パターンB: 端数部の末尾を1サイズ上げる（はみ出し許容） ──
+  if (fillerA.length > 0) {
+    const lastSize = fillerA[fillerA.length - 1];
+    const idx = FILLER_SIZES.indexOf(lastSize);
+    if (idx > 0) {
+      const altFiller = [...fillerA];
+      altFiller[altFiller.length - 1] = FILLER_SIZES[idx - 1];
+      const totalB = altFiller.reduce((s, r) => s + r, 0);
+      addResult([...base1800, ...altFiller], leftover - totalB);
     }
   }
 
-  if (baseRails.length > 0) {
-    const fewer = baseRails.slice(0, -1);
-    const fewerTotal = fewer.reduce((s, r) => s + r, 0);
-    const fewerRem = effectiveMm - fewerTotal;
-    if (fewerRem !== baseRemainder) {
-      results.push({ rails: fewer, remainder: fewerRem, count: fewer.length });
+  // ── パターンC: 端数部の末尾を削除 ──
+  if (fillerA.length > 1) {
+    const fewer = fillerA.slice(0, -1);
+    const totalC = fewer.reduce((s, r) => s + r, 0);
+    addResult([...base1800, ...fewer], leftover - totalC);
+  }
+
+  // ── パターンD: 端数を1本で賄えるサイズを試す ──
+  for (const size of HANDRAIL_SIZES) {
+    const rem = leftover - size;
+    addResult([...base1800, size], rem);
+    if (rem < 0) break; // これ以上小さいサイズは端数がさらに大きくなる
+  }
+
+  // ── パターンE: 端数を2本で賄う組み合わせ ──
+  for (const s1 of FILLER_SIZES) {
+    if (s1 > leftover) continue;
+    const rest = leftover - s1;
+    for (const s2 of FILLER_SIZES) {
+      if (s2 > s1) continue; // 降順で重複防止
+      const rem = rest - s2;
+      addResult([...base1800, s1, s2], rem);
+      if (rem <= 0) break;
     }
   }
 
+  // ── パターンF: 1800mm を1本減らして端数を広げる ──
+  if (num1800 > 0) {
+    const base1800m1: HandrailLengthMm[] = Array(num1800 - 1).fill(1800 as HandrailLengthMm);
+    const bigLeftover = leftover + 1800;
+    const fillerF = fillGreedy(bigLeftover, HANDRAIL_SIZES);
+    const totalF = fillerF.reduce((s, r) => s + r, 0);
+    addResult([...base1800m1, ...fillerF], bigLeftover - totalF);
+  }
+
+  // 結果がなければフォールバック
+  if (results.length === 0) {
+    addResult(base1800, leftover);
+  }
+
+  // ソート: 端数の絶対値が小さい → 部材数が少ない → はみ出しより不足を優先
   results.sort((a, b) => {
     const da = Math.abs(a.remainder), db = Math.abs(b.remainder);
     if (da !== db) return da - db;

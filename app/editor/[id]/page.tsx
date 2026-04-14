@@ -50,8 +50,6 @@ export default function EditorPage() {
     toggleShowDimensions,
     selectedIds,
   } = useCanvasStore();
-  const { user, loading: authLoading, loadSession } = useAuthStore();
-
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
@@ -59,6 +57,7 @@ export default function EditorPage() {
   const [showRoofModal, setShowRoofModal] = useState(false);
   const [showUdekiModal, setShowUdekiModal] = useState(false);
   const [showAutoLayoutModal, setShowAutoLayoutModal] = useState(false);
+  const [showDimensionLines, setShowDimensionLines] = useState(false);
   const [drawingTitle, setDrawingTitle] = useState('');
   const [siteName, setSiteName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -77,11 +76,6 @@ export default function EditorPage() {
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
   }, []);
-
-  // セッション読み込み
-  useEffect(() => {
-    loadSession();
-  }, [loadSession]);
 
   // 図面データ読み込み
   useEffect(() => {
@@ -165,14 +159,6 @@ export default function EditorPage() {
     [canvasData, siteName]
   );
 
-  if (authLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-dark-bg">
-        <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-      </div>
-    );
-  }
-
   return (
     <div className="h-screen flex flex-col bg-dark-bg overflow-hidden">
       {/* ヘッダー */}
@@ -244,7 +230,7 @@ export default function EditorPage() {
       {/* キャンバスエリア */}
       <div ref={containerRef} data-canvas-container className="flex-1 relative overflow-hidden">
         {canvasSize.width > 0 && canvasSize.height > 0 && (
-          <GridCanvas width={canvasSize.width} height={canvasSize.height} />
+          <GridCanvas width={canvasSize.width} height={canvasSize.height} showDimensionLines={showDimensionLines} />
         )}
         <CompassWidget />
 
@@ -289,6 +275,27 @@ export default function EditorPage() {
               <line x1="5" y1="17" x2="5" y2="14" />
               <line x1="9" y1="17" x2="9" y2="15" />
               <line x1="13" y1="17" x2="13" y2="14" />
+            </svg>
+          </button>
+
+          {/* 寸法線トグル（方位別スパン寸法） */}
+          <button
+            onClick={() => setShowDimensionLines((v) => !v)}
+            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
+              showDimensionLines
+                ? 'bg-accent border-accent text-white'
+                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
+            }`}
+            title={showDimensionLines ? '寸法線を非表示' : '寸法線を表示'}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="2" y1="2" x2="2" y2="16" />
+              <line x1="16" y1="2" x2="16" y2="16" />
+              <line x1="2" y1="9" x2="16" y2="9" />
+              <line x1="5" y1="7" x2="2" y2="9" />
+              <line x1="5" y1="11" x2="2" y2="9" />
+              <line x1="13" y1="7" x2="16" y2="9" />
+              <line x1="13" y1="11" x2="16" y2="9" />
             </svg>
           </button>
 

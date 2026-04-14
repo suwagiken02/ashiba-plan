@@ -8,7 +8,7 @@ import { Project } from '@/types';
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user, loading, loadSession, signOut, profile } = useAuthStore();
+  const { user, profile, signOut } = useAuthStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated');
@@ -18,37 +18,26 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
 
   const loadProjects = useCallback(async () => {
-    if (!user) return;
-    const { data } = await supabase
-      .from('projects')
-      .select('*')
-      .eq('owner_id', user.id)
-      .order('updated_at', { ascending: false });
+    const query = user && user.id !== 'anonymous'
+      ? supabase.from('projects').select('*').eq('owner_id', user.id).order('updated_at', { ascending: false })
+      : supabase.from('projects').select('*').order('updated_at', { ascending: false });
+    const { data } = await query;
     if (data) setProjects(data);
   }, [user]);
 
   useEffect(() => {
-    loadSession();
-  }, [loadSession]);
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.replace('/auth');
-    }
-  }, [user, loading, router]);
-
-  useEffect(() => {
-    if (user) loadProjects();
-  }, [user, loadProjects]);
+    loadProjects();
+  }, [loadProjects]);
 
   const createProject = async () => {
-    if (!user || !newName.trim()) return;
+    if (!newName.trim()) return;
     setCreating(true);
 
+    const ownerId = user && user.id !== 'anonymous' ? user.id : null;
     const { data, error } = await supabase
       .from('projects')
       .insert({
-        owner_id: user.id,
+        owner_id: ownerId,
         name: newName.trim(),
         address: newAddress.trim() || null,
       })
@@ -118,14 +107,6 @@ export default function ProjectsPage() {
       if (sortBy === 'name') return a.name.localeCompare(b.name, 'ja');
       return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
     });
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin w-8 h-8 border-2 border-accent border-t-transparent rounded-full" />
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen">

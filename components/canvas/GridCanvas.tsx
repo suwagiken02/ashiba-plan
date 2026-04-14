@@ -12,6 +12,7 @@ import {
 import BuildingLayer from './BuildingLayer';
 import ScaffoldLayer from './ScaffoldLayer';
 import DimensionLayer from './DimensionLayer';
+import DimensionLineLayer from './DimensionLineLayer';
 import ObstacleLayer from './ObstacleLayer';
 import MemoLayer from './MemoLayer';
 import CompassWidget from './CompassWidget';
@@ -21,9 +22,10 @@ import { mmToGrid } from '@/lib/konva/gridUtils';
 type Props = {
   width: number;
   height: number;
+  showDimensionLines?: boolean;
 };
 
-export default function GridCanvas({ width, height }: Props) {
+export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
   const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor } = useCanvasStore();
   const { handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, selectionRect } = useCanvasInteraction();
@@ -289,8 +291,11 @@ export default function GridCanvas({ width, height }: Props) {
       {/* 足場部材レイヤー（手摺・支柱・アンチ） */}
       <ScaffoldLayer />
 
-      {/* 寸法線レイヤー */}
+      {/* 寸法線レイヤー（離れ寸法） */}
       <DimensionLayer />
+
+      {/* 寸法線レイヤー（方位別スパン寸法） */}
+      <DimensionLineLayer visible={showDimensionLines} />
 
       {/* メモレイヤー */}
       <MemoLayer />

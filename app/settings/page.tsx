@@ -1,24 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { supabase } from '@/lib/supabase/client';
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { user, profile, loading, loadSession, updateProfile } = useAuthStore();
+  const { user, profile, updateProfile } = useAuthStore();
   const [companyName, setCompanyName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    loadSession();
-  }, [loadSession]);
-
-  useEffect(() => {
-    if (!loading && !user) router.replace('/auth');
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (profile) setCompanyName(profile.company_name || '');
@@ -44,8 +36,6 @@ export default function SettingsPage() {
     const { data } = supabase.storage.from('assets').getPublicUrl(path);
     await updateProfile(companyName, data.publicUrl);
   };
-
-  if (loading) return null;
 
   return (
     <div className="min-h-screen">

@@ -9,6 +9,9 @@ type Profile = {
   logo_url: string | null;
 };
 
+const ANON_USER = { id: 'anonymous', email: '' };
+const ANON_PROFILE: Profile = { id: 'anonymous', company_name: null, logo_url: null };
+
 type AuthStore = {
   user: { id: string; email: string } | null;
   profile: Profile | null;
@@ -24,51 +27,21 @@ type AuthStore = {
 };
 
 export const useAuthStore = create<AuthStore>((set, get) => ({
-  user: null,
-  profile: null,
-  loading: true,
+  user: ANON_USER,
+  profile: ANON_PROFILE,
+  loading: false,
   setUser: (user) => set({ user }),
   setProfile: (profile) => set({ profile }),
   setLoading: (loading) => set({ loading }),
 
-  signIn: async (email, password) => {
-    try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) return error.message;
-      await get().loadSession();
-      return null;
-    } catch (e) {
-      return e instanceof Error ? e.message : '接続エラー';
-    }
-  },
-
-  signUp: async (email, password, companyName) => {
-    try {
-      const { data, error } = await supabase.auth.signUp({ email, password });
-      if (error) return error.message;
-      if (data.user) {
-        await supabase.from('profiles').upsert({
-          id: data.user.id,
-          company_name: companyName,
-        });
-      }
-      await get().loadSession();
-      return null;
-    } catch (e) {
-      return e instanceof Error ? e.message : '接続エラー';
-    }
-  },
-
+  signIn: async () => null,
+  signUp: async () => null,
   signOut: async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch {
-      // ignore
-    }
-    set({ user: null, profile: null });
+    // no-op: 認証スキップ中
   },
 
   loadSession: async () => {
+    // Supabaseセッションがあれば使用、なければ匿名ユーザーのまま
     set({ loading: true });
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -85,17 +58,18 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           // profile取得失敗しても続行
         }
       } else {
-        set({ user: null, profile: null });
+        // セッションなし → 匿名ユーザーとして続行
+        set({ user: ANON_USER, profile: ANON_PROFILE });
       }
     } catch {
-      set({ user: null, profile: null });
+      set({ user: ANON_USER, profile: ANON_PROFILE });
     }
     set({ loading: false });
   },
 
   updateProfile: async (companyName, logoUrl) => {
     const { user } = get();
-    if (!user) return;
+    if (!user || user.id === 'anonymous') return;
     const updates: Record<string, string> = { company_name: companyName };
     if (logoUrl) updates.logo_url = logoUrl;
     try {
