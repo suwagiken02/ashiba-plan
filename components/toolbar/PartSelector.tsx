@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { HandrailLengthMm, AntiWidth, ObstacleType } from '@/types';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
-import { snapHandrailPlacement } from '@/lib/konva/snapUtils';
+import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 
 const HANDRAIL_LENGTHS: HandrailLengthMm[] = [1800, 1200, 900, 600, 400, 300, 200];
@@ -56,6 +56,7 @@ function MmInput({ value, onChange, min = 0 }: { value: number; onChange: (v: nu
 type ToolbarDrag =
   | { type: 'handrail'; lengthMm: number; direction: 'horizontal' | 'vertical'; currentX: number; currentY: number }
   | { type: 'anti'; lengthMm: number; direction: 'horizontal' | 'vertical'; antiWidth: AntiWidth; currentX: number; currentY: number }
+  | { type: 'post'; currentX: number; currentY: number }
   | { type: 'obstacle'; obstacleType: ObstacleType; widthMm: number; heightMm: number; rotation: number; currentX: number; currentY: number };
 
 type PartTab = 'handrail' | 'post' | 'anti';
@@ -71,7 +72,7 @@ export default function PartSelector() {
     selectedHandrailLength, setSelectedHandrailLength,
     selectedAntiWidth, setSelectedAntiWidth,
     selectedAntiLength, setSelectedAntiLength,
-    addHandrail, addAnti, addObstacle,
+    addHandrail, addAnti, addPost, addObstacle,
     canvasData, setHandrailPreview, setSnapPoint,
   } = useCanvasStore();
   const [expanded, setExpanded] = useState(true);
@@ -158,6 +159,14 @@ export default function PartSelector() {
     }, [setSelectedAntiWidth, setSelectedAntiLength]
   );
 
+  // --- 支柱ドラッグ ---
+  const handlePostDown = useCallback(
+    (e: React.PointerEvent) => {
+      e.preventDefault();
+      setToolbarDrag({ type: 'post', currentX: e.clientX, currentY: e.clientY });
+    }, []
+  );
+
   // --- 障害物ドラッグ ---
   const handleObstacleDown = useCallback(
     (e: React.PointerEvent) => {
@@ -208,6 +217,13 @@ export default function PartSelector() {
     const onMove = (e: PointerEvent) => {
       setToolbarDrag((prev) => prev ? { ...prev, currentX: e.clientX, currentY: e.clientY } : null);
       setTrashHover(isOverTrash(e.clientX, e.clientY));
+
+      if (toolbarDrag.type === 'post') {
+        // 支柱はプレビューなし
+        useCanvasStore.getState().setHandrailPreview(null);
+        useCanvasStore.getState().setSnapPoint(null);
+        return;
+      }
 
       if (toolbarDrag.type === 'obstacle') {
         useCanvasStore.getState().setHandrailPreview(null);
@@ -279,6 +295,23 @@ export default function PartSelector() {
           const dropPos = result ? result.snappedStart : gridPos;
           if (result) { useCanvasStore.getState().setSnapPoint(result.snapIndicator); setTimeout(() => useCanvasStore.getState().setSnapPoint(null), 400); }
           addAnti({ id: uuidv4(), x: dropPos.x, y: dropPos.y, width: toolbarDrag.antiWidth, lengthMm: toolbarDrag.lengthMm, direction: toolbarDrag.direction });
+        } else if (toolbarDrag.type === 'post') {
+          const snapRadius = Math.max(Math.round(SNAP_PX / (INITIAL_GRID_PX * zoom)), 5);
+          let snapX = gridPos.x;
+          let snapY = gridPos.y;
+          let bestDist = snapRadius;
+          for (const h of canvasData.handrails) {
+            const [p1, p2] = getHandrailEndpoints(h);
+            for (const p of [p1, p2]) {
+              const d = Math.hypot(p.x - gridPos.x, p.y - gridPos.y);
+              if (d < bestDist) {
+                bestDist = d;
+                snapX = p.x;
+                snapY = p.y;
+              }
+            }
+          }
+          addPost({ id: uuidv4(), x: snapX, y: snapY });
         } else if (toolbarDrag.type === 'obstacle') {
           const wGrid = mmToGrid(toolbarDrag.widthMm);
           const hGrid = mmToGrid(toolbarDrag.heightMm);
@@ -335,7 +368,7 @@ export default function PartSelector() {
     window.addEventListener('pointermove', onMove);
     window.addEventListener('pointerup', onUp);
     return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
-  }, [toolbarDrag, addHandrail, addAnti, addObstacle, isOverTrash]);
+  }, [toolbarDrag, addHandrail, addAnti, addPost, addObstacle, isOverTrash]);
 
   if (mode === 'erase' || mode === 'building') return null;
 
@@ -345,21 +378,32 @@ export default function PartSelector() {
 
   // --- カーソル追従プレビュー ---
   const dragPreview = toolbarDrag && (
-    <div style={{ position: 'fixed', left: toolbarDrag.currentX, top: toolbarDrag.currentY - 20, transform: 'translate(-50%, -100%)', pointerEvents: 'none', zIndex: 9999 }}>
-      <div className={`${
-        toolbarDrag.type === 'anti' ? 'bg-amber-500/80' :
-        toolbarDrag.type === 'obstacle' ? 'bg-purple-500/80' : 'bg-handrail/80'
-      } text-white text-xs font-mono px-2 py-1 rounded shadow-lg whitespace-nowrap flex items-center gap-1`}>
-        {toolbarDrag.type === 'obstacle' ? (
-          <span>{OBSTACLE_TYPES.find(o => o.id === toolbarDrag.obstacleType)?.label}</span>
-        ) : (
-          <>
-            <span>{toolbarDrag.direction === 'horizontal' ? '━' : '┃'}</span>
-            <span>{toolbarDrag.type === 'anti' ? `${toolbarDrag.antiWidth}×` : ''}{toolbarDrag.lengthMm}</span>
-          </>
-        )}
+    toolbarDrag.type === 'post' ? (
+      <div style={{ position: 'fixed', left: toolbarDrag.currentX, top: toolbarDrag.currentY, transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 9999 }}>
+        <div style={{
+          width: 16, height: 16, borderRadius: '50%',
+          border: '3px solid #1a1a1a',
+          backgroundColor: 'rgba(30,30,30,0.7)',
+          boxShadow: '0 0 0 2px white, 0 0 8px rgba(0,0,0,0.5)',
+        }} />
       </div>
-    </div>
+    ) : (
+      <div style={{ position: 'fixed', left: toolbarDrag.currentX, top: toolbarDrag.currentY - 20, transform: 'translate(-50%, -100%)', pointerEvents: 'none', zIndex: 9999 }}>
+        <div className={`${
+          toolbarDrag.type === 'anti' ? 'bg-amber-500/80' :
+          toolbarDrag.type === 'obstacle' ? 'bg-purple-500/80' : 'bg-handrail/80'
+        } text-white text-xs font-mono px-2 py-1 rounded shadow-lg whitespace-nowrap flex items-center gap-1`}>
+          {toolbarDrag.type === 'obstacle' ? (
+            <span>{OBSTACLE_TYPES.find(o => o.id === toolbarDrag.obstacleType)?.label}</span>
+          ) : (
+            <>
+              <span>{toolbarDrag.direction === 'horizontal' ? '━' : '┃'}</span>
+              <span>{toolbarDrag.type === 'anti' ? `${toolbarDrag.antiWidth}×` : ''}{toolbarDrag.lengthMm}</span>
+            </>
+          )}
+        </div>
+      </div>
+    )
   );
 
   const modeLabel = mode === 'obstacle' ? '障害物' : mode === 'memo' ? 'メモ' : '部材';
@@ -448,7 +492,15 @@ export default function PartSelector() {
                 </div>
               )}
               {activeTab === 'post' && (
-                <p className="text-xs text-dimension">タップして支柱を配置</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onPointerDown={handlePostDown}
+                    className="flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-bg border border-dark-border text-canvas text-sm select-none touch-none"
+                  >
+                    <span className="w-3 h-3 rounded-full bg-canvas inline-block" />
+                    支柱をドラッグして配置
+                  </button>
+                </div>
               )}
               {activeTab === 'anti' && (
                 <div className="space-y-2">
@@ -540,8 +592,11 @@ export default function PartSelector() {
 
                   {activeTab === 'post' && (
                     <div className="space-y-3">
-                      <p className="text-xs text-dimension">タップして配置</p>
-                      <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-bg border border-dark-border text-canvas text-sm">
+                      <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
+                      <button
+                        onPointerDown={handlePostDown}
+                        className="flex items-center gap-2 px-3 py-2 rounded-lg bg-dark-bg border border-dark-border text-canvas text-sm select-none touch-none cursor-grab active:cursor-grabbing"
+                      >
                         <span className="w-3 h-3 rounded-full bg-canvas inline-block" />
                         支柱
                       </button>
