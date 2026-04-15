@@ -79,11 +79,6 @@ function findCornerVertexIndex(
   return bestIdx;
 }
 
-/** 対角コーナー */
-const OPPOSITE_CORNER: Record<StartCorner, StartCorner> = {
-  nw: 'se', ne: 'sw', se: 'nw', sw: 'ne',
-};
-
 export default function DimensionLayer() {
   const { canvasData, zoom, panX, panY, showDimensions } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
@@ -102,6 +97,12 @@ export default function DimensionLayer() {
     eps.push(p1, p2);
   }
 
+  // [DEBUG] 全端点のX/Y座標をダンプ
+  const uniqueXs = Array.from(new Set(eps.map(ep => ep.x))).sort((a, b) => a - b);
+  const uniqueYs = Array.from(new Set(eps.map(ep => ep.y))).sort((a, b) => a - b);
+  console.log(`[DimLayer] all endpoint Xs: [${uniqueXs.join(', ')}]`);
+  console.log(`[DimLayer] all endpoint Ys: [${uniqueYs.join(', ')}]`);
+
   const scaffoldStart = canvasData.scaffoldStart;
 
   if (scaffoldStart && canvasData.buildings.length > 0) {
@@ -117,15 +118,58 @@ export default function DimensionLayer() {
 
     // コーナー頂点（巡回開始点）
     const startIdx = findCornerVertexIndex(pts, corner);
-    // 対角頂点（Path1/Path2 の分割点）
-    const oppIdx = findCornerVertexIndex(pts, OPPOSITE_CORNER[corner]);
 
-    // 分割ステップ: CWで対角頂点に到達するまでのステップ数
+    // 分割ステップ: CW巡回で凸角を数え、凸角の半数に達した時点で分割
     // step 0..splitStep-1 = Path1（CW腕、forward: p1→p2）
     // step splitStep..n-1 = Path2（CCW腕、reversed: p2→p1）
-    const splitStep = (oppIdx - startIdx + n) % n;
+    //
+    // 凸角判定: CW巡回で前辺→次辺のクロス積が正 = 右折 = 凸角（外角90度）
+    // 矩形(4頂点): 凸角4→半数2→step2で分割
+    // L字(6頂点): 凸角4→半数2→step... ではなく凸角の総数/2で分割
+    // T字(8頂点): 凸角6→半数3→step位置で分割
 
-    console.log(`[DimLayer] corner=${corner} startIdx=${startIdx} vertex=(${pts[startIdx].x},${pts[startIdx].y}) oppIdx=${oppIdx} oppVertex=(${pts[oppIdx].x},${pts[oppIdx].y}) splitStep=${splitStep}`);
+    // まず全凸角を数える
+    let totalConvex = 0;
+    for (let s = 0; s < n; s++) {
+      const idx = (startIdx + s) % n;
+      const prevIdx = (startIdx + s - 1 + n) % n;
+      const prevEdge = edges[prevIdx];
+      const currEdge = edges[idx];
+      // クロス積: prev方向 × curr方向 （CWで正 = 右折 = 凸角）
+      const ax = prevEdge.p2.x - prevEdge.p1.x;
+      const ay = prevEdge.p2.y - prevEdge.p1.y;
+      const bx = currEdge.p2.x - currEdge.p1.x;
+      const by = currEdge.p2.y - currEdge.p1.y;
+      const cross = ax * by - ay * bx;
+      if (cross > 0) totalConvex++;
+    }
+    const halfConvex = Math.ceil(totalConvex / 2);
+
+    // CW巡回で凸角を数え、半数に達したステップで分割
+    let convexCount = 0;
+    let splitStep = Math.floor(n / 2); // フォールバック
+    for (let s = 0; s < n; s++) {
+      const idx = (startIdx + s) % n;
+      const prevIdx = (startIdx + s - 1 + n) % n;
+      const prevEdge = edges[prevIdx];
+      const currEdge = edges[idx];
+      const ax = prevEdge.p2.x - prevEdge.p1.x;
+      const ay = prevEdge.p2.y - prevEdge.p1.y;
+      const bx = currEdge.p2.x - currEdge.p1.x;
+      const by = currEdge.p2.y - currEdge.p1.y;
+      const cross = ax * by - ay * bx;
+      if (cross > 0) convexCount++;
+      if (convexCount >= halfConvex && s > 0) {
+        splitStep = s;
+        break;
+      }
+    }
+
+    console.log(`[DimLayer] corner=${corner} startIdx=${startIdx} vertex=(${pts[startIdx].x},${pts[startIdx].y}) totalConvex=${totalConvex} halfConvex=${halfConvex} splitStep=${splitStep}`);
+
+    // 前ステップの足場ライン座標を記憶（コーナー部の手摺を拾うため）
+    let prevScaffoldX: number | null = null; // 前の垂直辺のscaffoldCoord
+    let prevScaffoldY: number | null = null; // 前の水平辺のscaffoldCoord
 
     for (let step = 0; step < n; step++) {
       const idx = (startIdx + step) % n;
@@ -134,8 +178,6 @@ export default function DimensionLayer() {
       const isH = edge.face === 'north' || edge.face === 'south';
 
       // 進行方向と終点
-      // Path1 (forward): p1→p2 方向、farEnd=p2
-      // Path2 (reversed): p2→p1 方向、farEnd=p1
       const farEnd = isReversed ? edge.p1 : edge.p2;
       const progressDx = isReversed ? edge.p1.x - edge.p2.x : edge.p2.x - edge.p1.x;
       const progressDy = isReversed ? edge.p1.y - edge.p2.y : edge.p2.y - edge.p1.y;
@@ -148,36 +190,130 @@ export default function DimensionLayer() {
       else if (edge.face === 'east') scaffoldCoord = ((edge.p1.x + edge.p2.x) / 2) + dist;
       else /* west */ scaffoldCoord = ((edge.p1.x + edge.p2.x) / 2) - dist;
 
-      // 足場ライン付近の手摺端点を収集
-      const coords: number[] = [];
-      for (const ep of eps) {
-        if (isH && Math.abs(ep.y - scaffoldCoord) < TOL) coords.push(ep.x);
-        if (!isH && Math.abs(ep.x - scaffoldCoord) < TOL) coords.push(ep.y);
+      // 辺の基本X/Y範囲
+      let edgeMinX = Math.min(edge.p1.x, edge.p2.x) - TOL;
+      let edgeMaxX = Math.max(edge.p1.x, edge.p2.x) + TOL;
+      let edgeMinY = Math.min(edge.p1.y, edge.p2.y) - TOL;
+      let edgeMaxY = Math.max(edge.p1.y, edge.p2.y) + TOL;
+
+      // コーナー部の手摺を拾うため、前ステップの足場ライン座標まで範囲を拡張
+      // 水平辺: 前の垂直辺のscaffoldX（コーナーで折れ曲がった手摺の端点）
+      // 垂直辺: 前の水平辺のscaffoldY
+      if (isH && prevScaffoldX !== null) {
+        edgeMinX = Math.min(edgeMinX, prevScaffoldX - TOL);
+        edgeMaxX = Math.max(edgeMaxX, prevScaffoldX + TOL);
+      }
+      if (!isH && prevScaffoldY !== null) {
+        edgeMinY = Math.min(edgeMinY, prevScaffoldY - TOL);
+        edgeMaxY = Math.max(edgeMaxY, prevScaffoldY + TOL);
       }
 
-      console.log(`[DimLayer] step=${step} ${edge.label}(${edge.face}) ${isReversed ? 'REV' : 'FWD'} farEnd=(${farEnd.x},${farEnd.y}) dx=${progressDx} dy=${progressDy} scf=${scaffoldCoord} pts=${coords.length}`);
+      // 足場ライン付近 かつ 拡張済み範囲内 の手摺端点を収集
+      const coords: number[] = [];
+      for (const ep of eps) {
+        if (isH && Math.abs(ep.y - scaffoldCoord) < TOL && ep.x >= edgeMinX && ep.x <= edgeMaxX) {
+          coords.push(ep.x);
+        }
+        if (!isH && Math.abs(ep.x - scaffoldCoord) < TOL && ep.y >= edgeMinY && ep.y <= edgeMaxY) {
+          coords.push(ep.y);
+        }
+      }
+
+      // デバッグ: 範囲フィルタ前の候補も出力
+      if (isH) {
+        const nearY = eps.filter(ep => Math.abs(ep.y - scaffoldCoord) < TOL);
+        console.log(`[DimLayer] step=${step} ${edge.label}(${edge.face}) ${isReversed ? 'REV' : 'FWD'} scf=${scaffoldCoord} edgeX=[${edgeMinX},${edgeMaxX}] prevScfX=${prevScaffoldX} nearY=${nearY.length} xs=[${nearY.map(ep => ep.x).join(',')}] → pts=${coords.length}`);
+      } else {
+        // デバッグ: nearX の計算を詳しく追跡
+        const nearX: typeof eps = [];
+        for (const ep of eps) {
+          const diff = Math.abs(ep.x - scaffoldCoord);
+          if (diff < TOL) nearX.push(ep);
+        }
+        // edgeY範囲チェック後の端点
+        const inRange = nearX.filter(ep => ep.y >= edgeMinY && ep.y <= edgeMaxY);
+        // X=scaffoldCoord±50の端点（広域検索）
+        const closeX = eps.filter(ep => Math.abs(ep.x - scaffoldCoord) < 50);
+        console.log(`[DimLayer] step=${step} ${edge.label}(${edge.face}) ${isReversed ? 'REV' : 'FWD'} scf=${scaffoldCoord}(type=${typeof scaffoldCoord}) edgeY=[${edgeMinY},${edgeMaxY}]`);
+        console.log(`[DimLayer]   nearX(TOL=${TOL})=${nearX.length} [${nearX.map(ep => `(${ep.x},${ep.y})`).join(' ')}]`);
+        console.log(`[DimLayer]   inRange=${inRange.length} [${inRange.map(ep => `(${ep.x},${ep.y})`).join(' ')}]`);
+        console.log(`[DimLayer]   closeX(50)=${closeX.length} [${closeX.map(ep => `(${ep.x},${ep.y})d=${(ep.x - scaffoldCoord).toFixed(2)}`).join(' ')}]`);
+        console.log(`[DimLayer]   coords=${coords.length} [${coords.join(',')}]`);
+      }
+
+      // 今回のscaffoldCoordを記憶（次ステップで使用）
+      if (isH) prevScaffoldY = scaffoldCoord;
+      else prevScaffoldX = scaffoldCoord;
 
       if (coords.length === 0) continue;
 
       // リード（進行方向の最先端）と残り距離
-      let lead: number, remainGrid: number;
+      // 各辺には2つの端点(p1, p2)がある。
+      // FWD辺: 進行=p1→p2、lead=p2側の最先端、remain=p2-lead
+      // REV辺: 進行=p2→p1、lead=p1側の最先端、remain=p1-lead
+      //
+      // ただし、手摺がfarEnd側を超えている場合(remain<0)、
+      // 反対端(otherEnd)側の残りも計算し、正の方を採用する。
+      // これにより、splitStepの境界付近の辺で正しいガイドが出る。
+      const otherEnd = isReversed ? edge.p2 : edge.p1;
+
+      let lead: number, remainGrid: number, guideEnd: { x: number; y: number };
       if (isH) {
-        lead = progressDx > 0 ? Math.max(...coords) : Math.min(...coords);
-        remainGrid = progressDx > 0 ? farEnd.x - lead : lead - farEnd.x;
+        const leadFwd = progressDx > 0 ? Math.max(...coords) : Math.min(...coords);
+        const remainFwd = progressDx > 0 ? farEnd.x - leadFwd : leadFwd - farEnd.x;
+
+        // farEnd側の残りが負なら、otherEnd側からの残りを試す
+        if (remainFwd < 0) {
+          const leadRev = progressDx > 0 ? Math.min(...coords) : Math.max(...coords);
+          const remainRev = progressDx > 0 ? leadRev - otherEnd.x : otherEnd.x - leadRev;
+          if (remainRev > 0) {
+            // otherEnd側に余裕がある → そちらのガイドを表示
+            lead = leadRev;
+            remainGrid = remainRev;
+            guideEnd = otherEnd;
+          } else {
+            // 両方超えている → farEnd側のマイナスを表示
+            lead = leadFwd;
+            remainGrid = remainFwd;
+            guideEnd = farEnd;
+          }
+        } else {
+          lead = leadFwd;
+          remainGrid = remainFwd;
+          guideEnd = farEnd;
+        }
       } else {
-        lead = progressDy > 0 ? Math.max(...coords) : Math.min(...coords);
-        remainGrid = progressDy > 0 ? farEnd.y - lead : lead - farEnd.y;
+        const leadFwd = progressDy > 0 ? Math.max(...coords) : Math.min(...coords);
+        const remainFwd = progressDy > 0 ? farEnd.y - leadFwd : leadFwd - farEnd.y;
+
+        if (remainFwd < 0) {
+          const leadRev = progressDy > 0 ? Math.min(...coords) : Math.max(...coords);
+          const remainRev = progressDy > 0 ? leadRev - otherEnd.y : otherEnd.y - leadRev;
+          if (remainRev > 0) {
+            lead = leadRev;
+            remainGrid = remainRev;
+            guideEnd = otherEnd;
+          } else {
+            lead = leadFwd;
+            remainGrid = remainFwd;
+            guideEnd = farEnd;
+          }
+        } else {
+          lead = leadFwd;
+          remainGrid = remainFwd;
+          guideEnd = farEnd;
+        }
       }
 
       const remainMm = Math.round(gridToMm(remainGrid));
       const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
 
-      console.log(`[DimLayer]   lead=${lead} remain=${remainMm}mm`);
+      console.log(`[DimLayer]   lead=${lead} farEnd=(${farEnd.x},${farEnd.y}) guideEnd=(${guideEnd.x},${guideEnd.y}) remain=${remainMm}mm`);
 
       // ガイド描画
       if (isH) {
-        const x1 = Math.min(lead, farEnd.x);
-        const x2 = Math.max(lead, farEnd.x);
+        const x1 = Math.min(lead, guideEnd.x);
+        const x2 = Math.max(lead, guideEnd.x);
         elements.push(
           <Guide key={`guide-${edge.label}`}
             x1={gx(x1)} y1={gy(scaffoldCoord)}
@@ -185,8 +321,8 @@ export default function DimensionLayer() {
             label={`${remainMm}`} zoom={zoom} color={color} />,
         );
       } else {
-        const y1 = Math.min(lead, farEnd.y);
-        const y2 = Math.max(lead, farEnd.y);
+        const y1 = Math.min(lead, guideEnd.y);
+        const y2 = Math.max(lead, guideEnd.y);
         elements.push(
           <Guide key={`guide-${edge.label}`}
             x1={gx(scaffoldCoord)} y1={gy(y1)}

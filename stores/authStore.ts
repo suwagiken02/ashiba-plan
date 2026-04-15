@@ -41,7 +41,6 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   },
 
   loadSession: async () => {
-    // Supabaseセッションがあれば使用、なければ匿名ユーザーのまま
     set({ loading: true });
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -58,8 +57,17 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           // profile取得失敗しても続行
         }
       } else {
-        // セッションなし → 匿名ユーザーとして続行
-        set({ user: ANON_USER, profile: ANON_PROFILE });
+        // セッションなし → Supabase匿名サインインを試行（RLS回避）
+        try {
+          const { data: anonData } = await supabase.auth.signInAnonymously();
+          if (anonData?.user) {
+            set({ user: { id: anonData.user.id, email: '' } });
+          } else {
+            set({ user: ANON_USER, profile: ANON_PROFILE });
+          }
+        } catch {
+          set({ user: ANON_USER, profile: ANON_PROFILE });
+        }
       }
     } catch {
       set({ user: ANON_USER, profile: ANON_PROFILE });

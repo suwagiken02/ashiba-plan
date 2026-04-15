@@ -8,7 +8,7 @@ import { Project } from '@/types';
 
 export default function ProjectsPage() {
   const router = useRouter();
-  const { user, profile, signOut } = useAuthStore();
+  const { user, profile, signOut, loadSession } = useAuthStore();
   const [projects, setProjects] = useState<Project[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<'updated' | 'name'>('updated');
@@ -18,35 +18,57 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
 
   const loadProjects = useCallback(async () => {
-    const query = user && user.id !== 'anonymous'
-      ? supabase.from('projects').select('*').eq('owner_id', user.id).order('updated_at', { ascending: false })
+    const currentUser = useAuthStore.getState().user;
+    const query = currentUser && currentUser.id !== 'anonymous'
+      ? supabase.from('projects').select('*').eq('owner_id', currentUser.id).order('updated_at', { ascending: false })
       : supabase.from('projects').select('*').order('updated_at', { ascending: false });
     const { data } = await query;
     if (data) setProjects(data);
-  }, [user]);
+  }, []);
 
   useEffect(() => {
-    loadProjects();
-  }, [loadProjects]);
+    loadSession().then(() => loadProjects());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const createProject = async () => {
     if (!newName.trim()) return;
     setCreating(true);
 
-    const ownerId = user && user.id !== 'anonymous' ? user.id : null;
-    const { data, error } = await supabase
-      .from('projects')
-      .insert({
-        owner_id: ownerId,
-        name: newName.trim(),
-        address: newAddress.trim() || null,
-      })
-      .select()
-      .single();
+    try {
+      // セッション確認（Safari対策: 匿名セッションが切れている場合に再取得）
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        await supabase.auth.signInAnonymously();
+      }
 
-    if (!error && data) {
+      const currentUser = useAuthStore.getState().user;
+      const ownerId = currentUser ? currentUser.id : null;
+
+      const { data, error } = await supabase
+        .from('projects')
+        .insert({
+          owner_id: ownerId,
+          name: newName.trim(),
+          address: newAddress.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        console.error('[createProject] projects insert error:', error);
+        alert(`現場作成エラー: ${error.message}`);
+        setCreating(false);
+        return;
+      }
+      if (!data) {
+        alert('現場作成エラー: データが返されませんでした');
+        setCreating(false);
+        return;
+      }
+
       // 図面も自動作成
-      const { data: drawing } = await supabase
+      const { data: drawing, error: drawingError } = await supabase
         .from('drawings')
         .insert({
           project_id: data.id,
@@ -67,10 +89,21 @@ export default function ProjectsPage() {
         .select()
         .single();
 
+      if (drawingError) {
+        console.error('[createProject] drawings insert error:', drawingError);
+        alert(`図面作成エラー: ${drawingError.message}`);
+        setCreating(false);
+        return;
+      }
+
       if (drawing) {
         router.push(`/editor/${drawing.id}`);
       }
+    } catch (e) {
+      console.error('[createProject] unexpected error:', e);
+      alert(`予期しないエラー: ${e instanceof Error ? e.message : String(e)}`);
     }
+
     setCreating(false);
     setShowNewModal(false);
     setNewName('');
@@ -158,6 +191,7 @@ export default function ProjectsPage() {
 
         {/* 新規作成ボタン */}
         <button
+          type="button"
           onClick={() => setShowNewModal(true)}
           className="w-full mb-6 py-4 bg-accent text-white font-bold rounded-xl text-lg hover:bg-blue-600 transition-colors"
         >
@@ -203,13 +237,15 @@ export default function ProjectsPage() {
 
       {/* 新規作成モーダル */}
       {showNewModal && (
-        <div
-          className="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-50"
-          onClick={() => setShowNewModal(false)}
-        >
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          {/* 背景overlay（クリックで閉じる） */}
           <div
-            className="bg-dark-surface border border-dark-border rounded-2xl p-6 w-full max-w-sm"
-            onClick={(e) => e.stopPropagation()}
+            className="absolute inset-0 modal-overlay"
+            onClick={() => setShowNewModal(false)}
+          />
+          {/* コンテンツ（overlayの上にrelativeで配置） */}
+          <div
+            className="relative bg-dark-surface border border-dark-border rounded-2xl p-6 w-full max-w-sm"
           >
             <h2 className="text-lg font-bold mb-4">新規プロジェクト</h2>
             <div className="space-y-3">
@@ -237,13 +273,15 @@ export default function ProjectsPage() {
             </div>
             <div className="flex gap-3 mt-6">
               <button
+                type="button"
                 onClick={() => setShowNewModal(false)}
                 className="flex-1 py-3 bg-dark-bg border border-dark-border rounded-lg text-dimension"
               >
                 キャンセル
               </button>
               <button
-                onClick={createProject}
+                type="button"
+                onClick={() => { alert('作成ボタン押下'); createProject(); }}
                 disabled={!newName.trim() || creating}
                 className="flex-1 py-3 bg-accent text-white font-bold rounded-lg disabled:opacity-50"
               >
