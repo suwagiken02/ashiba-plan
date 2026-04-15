@@ -16,7 +16,6 @@ import RoofSettingsModal from '@/components/building/RoofSettingsModal';
 import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
-import { HANDRAIL_LEGEND } from '@/lib/konva/handrailColors';
 
 // Konvaはクライアントサイドのみ
 const GridCanvas = dynamic(() => import('@/components/canvas/GridCanvas'), {
@@ -381,22 +380,11 @@ export default function EditorPage() {
               onClick={() => setShowUdekiModal(true)}
               className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
             >
-              腕木
+              内柱
             </button>
           )}
         </div>
 
-        {/* 手摺凡例 */}
-        {canvasData.handrails.length > 0 && (
-          <div className="absolute top-3 right-16 bg-dark-surface/85 border border-dark-border rounded-lg px-2 py-1.5 z-10">
-            {HANDRAIL_LEGEND.map(({ lengthMm, color }) => (
-              <div key={lengthMm} className="flex items-center gap-1.5 leading-tight">
-                <span className="inline-block w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                <span className="text-[10px] text-dimension font-mono">{lengthMm}</span>
-              </div>
-            ))}
-          </div>
-        )}
 
         {/* スケールバー */}
         <ScaleBar />
