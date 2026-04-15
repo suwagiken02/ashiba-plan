@@ -73,9 +73,16 @@ type CanvasStore = {
   obstaclePreview: { x: number; y: number; widthGrid: number; heightGrid: number; type: import('@/types').ObstacleType } | null;
   setObstaclePreview: (p: { x: number; y: number; widthGrid: number; heightGrid: number; type: import('@/types').ObstacleType } | null) => void;
 
+  // 頂点タップモード
+  vertexPoints: { x: number; y: number }[];
+  addVertexPoint: (p: { x: number; y: number }) => void;
+  clearVertexPoints: () => void;
+
   // Dimensions toggle
   showDimensions: boolean;
   toggleShowDimensions: () => void;
+  showGridGuide: boolean;
+  toggleShowGridGuide: () => void;
 
   // Measurement
   isMeasuring: boolean;
@@ -137,7 +144,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setCanvasData: (data) => set({ canvasData: data, isDirty: false }),
 
   mode: 'select',
-  setMode: (mode) => set({ mode, selectedIds: [] }),
+  setMode: (mode) => set({ mode, selectedIds: [], vertexPoints: [] }),
   buildingInputMethod: 'template',
   setBuildingInputMethod: (m) => set({ buildingInputMethod: m }),
 
@@ -158,8 +165,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   obstaclePreview: null,
   setObstaclePreview: (p) => set({ obstaclePreview: p }),
 
+  vertexPoints: [],
+  addVertexPoint: (p) => set((state) => ({ vertexPoints: [...state.vertexPoints, p] })),
+  clearVertexPoints: () => set({ vertexPoints: [] }),
+
   showDimensions: true,
   toggleShowDimensions: () => set({ showDimensions: !get().showDimensions }),
+  showGridGuide: false,
+  toggleShowGridGuide: () => set({ showGridGuide: !get().showGridGuide }),
 
   isMeasuring: false,
   measurePoint1: null,

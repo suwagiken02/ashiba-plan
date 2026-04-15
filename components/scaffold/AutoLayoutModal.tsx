@@ -92,7 +92,7 @@ function formatRailsSummary(rails: HandrailLengthMm[]): string {
 }
 
 export default function AutoLayoutModal({ onClose }: Props) {
-  const { canvasData, addHandrails } = useCanvasStore();
+  const { canvasData, addHandrails, removeElements } = useCanvasStore();
   const building = canvasData.buildings[0];
   const scaffoldStart = canvasData.scaffoldStart;
 
@@ -153,7 +153,12 @@ export default function AutoLayoutModal({ onClose }: Props) {
       }
     }
 
-    if (allHandrails.length > 0) addHandrails(allHandrails);
+    if (allHandrails.length > 0) {
+      // 既存の手摺を全て削除してから自動割付結果を配置
+      const existingIds = canvasData.handrails.map(h => h.id);
+      if (existingIds.length > 0) removeElements(existingIds);
+      addHandrails(allHandrails);
+    }
     onClose();
   };
 

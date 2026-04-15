@@ -299,11 +299,19 @@ export default function BuildingTemplateModal({ onClose }: Props) {
         </div>
 
         <div className="flex border-b border-dark-border">
-          {(['template', 'freedraw', 'vertex'] as BuildingInputMethod[]).map(m => (
+          {(['template', 'vertex'] as BuildingInputMethod[]).map(m => (
             <button key={m}
-              onClick={() => { setBuildingInputMethod(m); if (m !== 'template') onClose(); }}
+              onClick={() => {
+                setBuildingInputMethod(m);
+                if (m === 'vertex') {
+                  // 頂点タップモード: モーダルを閉じてキャンバスモードに切り替え
+                  useCanvasStore.getState().setMode('building');
+                  useCanvasStore.getState().clearVertexPoints();
+                  onClose();
+                }
+              }}
               className={`flex-1 py-3 text-sm ${buildingInputMethod === m ? 'text-accent border-b-2 border-accent' : 'text-dimension'}`}
-            >{m === 'template' ? 'テンプレート' : m === 'freedraw' ? 'フリー描画' : '頂点タップ'}</button>
+            >{m === 'template' ? 'テンプレート' : '頂点タップ'}</button>
           ))}
         </div>
 

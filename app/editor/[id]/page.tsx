@@ -48,6 +48,8 @@ export default function EditorPage() {
     zoomToFitBuildings,
     showDimensions,
     toggleShowDimensions,
+    showGridGuide,
+    toggleShowGridGuide,
     selectedIds,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -103,7 +105,8 @@ export default function EditorPage() {
 
   // 建物モードに切り替えたときモーダル表示
   useEffect(() => {
-    if (mode === 'building') {
+    // 頂点タップモードではモーダルを開かない（キャンバス直接操作）
+    if (mode === 'building' && useCanvasStore.getState().buildingInputMethod !== 'vertex') {
       setShowBuildingModal(true);
     }
   }, [mode]);
@@ -296,6 +299,26 @@ export default function EditorPage() {
               <line x1="5" y1="11" x2="2" y2="9" />
               <line x1="13" y1="7" x2="16" y2="9" />
               <line x1="13" y1="11" x2="16" y2="9" />
+            </svg>
+          </button>
+
+          {/* グリッドガイドトグル */}
+          <button
+            onClick={toggleShowGridGuide}
+            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
+              showGridGuide
+                ? 'bg-accent border-accent text-white'
+                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
+            }`}
+            title={showGridGuide ? 'グリッドガイドを非表示' : 'グリッドガイドを表示'}
+          >
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+              <line x1="1" y1="1" x2="1" y2="17" />
+              <line x1="9" y1="1" x2="9" y2="17" />
+              <line x1="17" y1="1" x2="17" y2="17" />
+              <line x1="1" y1="1" x2="17" y2="1" />
+              <line x1="1" y1="9" x2="17" y2="9" />
+              <line x1="1" y1="17" x2="17" y2="17" />
             </svg>
           </button>
 

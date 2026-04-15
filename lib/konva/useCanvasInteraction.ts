@@ -227,6 +227,35 @@ export function useCanvasInteraction() {
 
       // obstacle モード: クリック配置は無効化（パレットからのD&Dのみ）
 
+      // building + vertex モード: 頂点をタップで追加
+      if (s.mode === 'building' && s.buildingInputMethod === 'vertex') {
+        const CLOSE_TOL = 10; // 始点に戻る判定の許容差（グリッド）
+        const pts = s.vertexPoints;
+
+        if (pts.length >= 3) {
+          const first = pts[0];
+          const dist = Math.hypot(rawPos.x - first.x, rawPos.y - first.y);
+          if (dist < CLOSE_TOL) {
+            // 始点に近い → ポリゴン確定
+            s.addBuilding({
+              id: uuidv4(),
+              type: 'polygon',
+              points: [...pts],
+              fill: '#3d3d3a',
+            });
+            s.clearVertexPoints();
+            s.setMode('select');
+            dragStart.current = null;
+            return;
+          }
+        }
+
+        // 頂点を追加
+        s.addVertexPoint({ x: Math.round(rawPos.x), y: Math.round(rawPos.y) });
+        dragStart.current = null;
+        return;
+      }
+
       // erase モード
       if (s.mode === 'erase') {
         const target = e.target;

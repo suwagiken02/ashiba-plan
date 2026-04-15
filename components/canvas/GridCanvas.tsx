@@ -27,7 +27,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide } = useCanvasStore();
   const { handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, selectionRect } = useCanvasInteraction();
 
   // ピンチズーム用
@@ -86,6 +86,48 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
     }
     return lines;
   }, [zoom, panX, panY, width, height]);
+
+  // グリッドガイド（500mm/1000mmライン）
+  const gridGuideLines = useCallback(() => {
+    if (!showGridGuide) return [];
+    const lines: React.ReactElement[] = [];
+    const gridPx = INITIAL_GRID_PX * zoom;
+
+    // 50グリッド=500mm, 100グリッド=1000mm
+    const minorStep = 50;
+    const majorStep = 100;
+
+    const startCol = Math.floor(-panX / gridPx / minorStep) * minorStep - minorStep;
+    const endCol = Math.ceil((width - panX) / gridPx / minorStep) * minorStep + minorStep;
+    const startRow = Math.floor(-panY / gridPx / minorStep) * minorStep - minorStep;
+    const endRow = Math.ceil((height - panY) / gridPx / minorStep) * minorStep + minorStep;
+
+    for (let i = startCol; i <= endCol; i += minorStep) {
+      const x = i * gridPx + panX;
+      const isMajor = i % majorStep === 0;
+      lines.push(
+        <Line key={`gv${i}`}
+          points={[x, 0, x, height]}
+          stroke={isMajor ? '#888' : '#666'}
+          strokeWidth={isMajor ? 0.8 : 0.4}
+          opacity={isMajor ? 0.3 : 0.15}
+          listening={false} />,
+      );
+    }
+    for (let j = startRow; j <= endRow; j += minorStep) {
+      const y = j * gridPx + panY;
+      const isMajor = j % majorStep === 0;
+      lines.push(
+        <Line key={`gh${j}`}
+          points={[0, y, width, y]}
+          stroke={isMajor ? '#888' : '#666'}
+          strokeWidth={isMajor ? 0.8 : 0.4}
+          opacity={isMajor ? 0.3 : 0.15}
+          listening={false} />,
+      );
+    }
+    return lines;
+  }, [zoom, panX, panY, width, height, showGridGuide]);
 
   // マウスホイールズーム
   const handleWheel = useCallback(
@@ -239,6 +281,15 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
           s.removeElements(s.selectedIds);
         }
       }
+      // Escape: 頂点タップモードをキャンセル
+      if (e.key === 'Escape') {
+        const s = useCanvasStore.getState();
+        if (s.mode === 'building' && s.buildingInputMethod === 'vertex') {
+          e.preventDefault();
+          s.clearVertexPoints();
+          s.setMode('select');
+        }
+      }
     };
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') setIsPanning(false);
@@ -280,6 +331,7 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
       {/* グリッド線（キャンバス全体の背景として描画） */}
       <Layer listening={false}>
         {gridLines()}
+        {gridGuideLines()}
       </Layer>
 
       {/* 建物レイヤー（グリッドの上） */}
@@ -376,6 +428,48 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
               <>
                 <Rect x={sx} y={sy} width={w} height={h} fill={color} opacity={0.5} stroke={color} strokeWidth={1.5} cornerRadius={2} />
                 {label && <Text x={sx + 2} y={sy + 2} text={label} fontSize={Math.max(8, 9 * zoom)} fill="#333" />}
+              </>
+            );
+          })()}
+        </Layer>
+      )}
+
+      {/* 頂点タップ建物入力プレビュー */}
+      {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0 && (
+        <Layer listening={false}>
+          {(() => {
+            const gridPx = INITIAL_GRID_PX * zoom;
+            const screenPts = vertexPoints.map(p => ({
+              x: p.x * gridPx + panX,
+              y: p.y * gridPx + panY,
+            }));
+            const flatPts = screenPts.flatMap(p => [p.x, p.y]);
+            const first = screenPts[0];
+            return (
+              <>
+                {/* 辺の線 */}
+                <Line points={flatPts} stroke="#378ADD" strokeWidth={2} opacity={0.6} />
+                {/* 始点に戻る破線（3点以上） */}
+                {screenPts.length >= 3 && (
+                  <Line
+                    points={[screenPts[screenPts.length - 1].x, screenPts[screenPts.length - 1].y, first.x, first.y]}
+                    stroke="#378ADD" strokeWidth={1.5} opacity={0.3} dash={[6, 4]}
+                  />
+                )}
+                {/* 各頂点のドット */}
+                {screenPts.map((p, i) => (
+                  <Circle key={i} x={p.x} y={p.y} radius={i === 0 ? 8 : 5}
+                    fill={i === 0 ? '#EF4444' : '#378ADD'}
+                    stroke={i === 0 ? '#fff' : undefined}
+                    strokeWidth={i === 0 ? 2 : 0}
+                  />
+                ))}
+                {/* 始点ラベル */}
+                <Text x={first.x + 10} y={first.y - 10}
+                  text="始点" fontSize={12} fill="#EF4444" />
+                {/* 頂点数表示 */}
+                <Text x={screenPts[screenPts.length - 1].x + 10} y={screenPts[screenPts.length - 1].y - 10}
+                  text={`${screenPts.length}点`} fontSize={11} fill="#378ADD" />
               </>
             );
           })()}
