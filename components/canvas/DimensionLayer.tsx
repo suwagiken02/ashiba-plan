@@ -308,9 +308,21 @@ export default function DimensionLayer() {
       const remainMm = Math.round(gridToMm(remainGrid));
       const color = remainMm >= 0 ? COLOR_OK : COLOR_WARN;
 
-      console.log(`[DimLayer]   lead=${lead} farEnd=(${farEnd.x},${farEnd.y}) guideEnd=(${guideEnd.x},${guideEnd.y}) remain=${remainMm}mm`);
+      // otherEnd 側の残り距離も計算（手摺からの反対方向）
+      let remainOtherGrid: number;
+      if (isH) {
+        const leadOther = progressDx > 0 ? Math.min(...coords) : Math.max(...coords);
+        remainOtherGrid = progressDx > 0 ? leadOther - otherEnd.x : otherEnd.x - leadOther;
+      } else {
+        const leadOther = progressDy > 0 ? Math.min(...coords) : Math.max(...coords);
+        remainOtherGrid = progressDy > 0 ? leadOther - otherEnd.y : otherEnd.y - leadOther;
+      }
+      const remainOtherMm = Math.round(gridToMm(remainOtherGrid));
+      const colorOther = remainOtherMm >= 0 ? COLOR_OK : COLOR_WARN;
 
-      // ガイド描画
+      console.log(`[DimLayer]   lead=${lead} farEnd=(${farEnd.x},${farEnd.y}) remain=${remainMm}mm | otherEnd=(${otherEnd.x},${otherEnd.y}) remainOther=${remainOtherMm}mm`);
+
+      // ── ガイド描画: farEnd 側 ──
       if (isH) {
         const x1 = Math.min(lead, guideEnd.x);
         const x2 = Math.max(lead, guideEnd.x);
@@ -329,6 +341,33 @@ export default function DimensionLayer() {
             x2={gx(scaffoldCoord)} y2={gy(y2)}
             label={`${remainMm}`} zoom={zoom} color={color} />,
         );
+      }
+
+      // ── ガイド描画: otherEnd 側（反対方向の残り） ──
+      if (isH) {
+        const leadOther = progressDx > 0 ? Math.min(...coords) : Math.max(...coords);
+        const ox1 = Math.min(leadOther, otherEnd.x);
+        const ox2 = Math.max(leadOther, otherEnd.x);
+        if (Math.abs(ox2 - ox1) > 0) {
+          elements.push(
+            <Guide key={`guide-${edge.label}-o`}
+              x1={gx(ox1)} y1={gy(scaffoldCoord)}
+              x2={gx(ox2)} y2={gy(scaffoldCoord)}
+              label={`${remainOtherMm}`} zoom={zoom} color={colorOther} />,
+          );
+        }
+      } else {
+        const leadOther = progressDy > 0 ? Math.min(...coords) : Math.max(...coords);
+        const oy1 = Math.min(leadOther, otherEnd.y);
+        const oy2 = Math.max(leadOther, otherEnd.y);
+        if (Math.abs(oy2 - oy1) > 0) {
+          elements.push(
+            <Guide key={`guide-${edge.label}-o`}
+              x1={gx(scaffoldCoord)} y1={gy(oy1)}
+              x2={gx(scaffoldCoord)} y2={gy(oy2)}
+              label={`${remainOtherMm}`} zoom={zoom} color={colorOther} />,
+          );
+        }
       }
     }
 
