@@ -34,9 +34,12 @@ export function getPrintAreaGrid(
   const paper = PAPER_MM[paperSize];
   const factor = SCALE_FACTORS[scale];
   if (!paper || !factor) return null;
+  // 1グリッド = 10mm実寸
+  // 縮尺1/S → 紙1mm = S mm実寸
+  // 紙W mm → 実寸 W×S mm → W×S/10 グリッド
   return {
-    widthGrid: (paper.width * factor) / 100,
-    heightGrid: (paper.height * factor) / 100,
+    widthGrid: (paper.width * factor) / 10,
+    heightGrid: (paper.height * factor) / 10,
   };
 }
 
@@ -105,6 +108,15 @@ export const exportToPdf = async (
   panX: number,
   panY: number,
 ): Promise<void> => {
+  console.log('[exportToPdf]', {
+    paperSize: settings.paperSize,
+    scale: settings.scale,
+    printAreaCenter,
+    zoom,
+    panX,
+    panY,
+  });
+
   const pdfDoc = await PDFDocument.create();
   const paperDim = PAPER_DIMENSIONS[settings.paperSize] || PAPER_DIMENSIONS.A4_landscape;
   const page = pdfDoc.addPage([paperDim.width, paperDim.height]);
@@ -151,17 +163,49 @@ export const exportToPdf = async (
   const stages = Konva.stages;
   if (stages.length > 0) {
     const stage = stages[0];
+
+    // printAreaCenterがnullの場合は建物の中心を使う
+    let center = printAreaCenter;
+    if (!center) {
+      if (canvasData.buildings.length > 0) {
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const b of canvasData.buildings)
+          for (const p of b.points) {
+            if (p.x < minX) minX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y > maxY) maxY = p.y;
+          }
+        center = { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+      }
+    }
+
     const area = getPrintAreaGrid(settings.paperSize, settings.scale);
 
-    if (area && printAreaCenter) {
-      // 印刷枠の中心グリッド座標 → スクリーン座標に変換
+    if (area && center) {
       const gridPx = INITIAL_GRID_PX * zoom;
       const pw = area.widthGrid * gridPx;
       const ph = area.heightGrid * gridPx;
-      const rectX = printAreaCenter.x * gridPx + panX - pw / 2;
-      const rectY = printAreaCenter.y * gridPx + panY - ph / 2;
+      const rectX = center.x * gridPx + panX - pw / 2;
+      const rectY = center.y * gridPx + panY - ph / 2;
 
-      // 印刷枠範囲のみをキャプチャ（高解像度）
+      // 印刷枠の赤い破線を一時的に非表示にしてキャプチャ
+      const layers = stage.getLayers();
+      const hiddenLayers: Konva.Layer[] = [];
+      for (let i = 0; i < layers.length; i++) {
+        const layer = layers[i];
+        // 印刷枠Rectを含むレイヤーを探して非表示にする
+        const printRects = layer.find('Rect').filter((node: Konva.Node) => {
+          const rect = node as Konva.Rect;
+          return rect.stroke() === '#EF4444' && rect.dash()?.length > 0;
+        });
+        if (printRects.length > 0) {
+          layer.visible(false);
+          hiddenLayers.push(layer);
+        }
+      }
+      stage.batchDraw();
+
       const pixelRatio = Math.max(2, Math.ceil(drawableWidthPt / pw));
       const dataUrl = stage.toDataURL({
         x: rectX,
@@ -170,6 +214,12 @@ export const exportToPdf = async (
         height: ph,
         pixelRatio,
       });
+
+      // 非表示にしたレイヤーを再表示
+      for (const layer of hiddenLayers) {
+        layer.visible(true);
+      }
+      stage.batchDraw();
 
       const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
       const pngImage = await pdfDoc.embedPng(imageBytes);

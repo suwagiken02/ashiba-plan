@@ -198,16 +198,34 @@ export default function DimensionLayer() {
       let edgeMinY = Math.min(edge.p1.y, edge.p2.y) - TOL;
       let edgeMaxY = Math.max(edge.p1.y, edge.p2.y) + TOL;
 
-      // コーナー部の手摺を拾うため、前ステップの足場ライン座標まで範囲を拡張
-      // 水平辺: 前の垂直辺のscaffoldX（コーナーで折れ曲がった手摺の端点）
-      // 垂直辺: 前の水平辺のscaffoldY
-      if (isH && prevScaffoldX !== null) {
-        edgeMinX = Math.min(edgeMinX, prevScaffoldX - TOL);
-        edgeMaxX = Math.max(edgeMaxX, prevScaffoldX + TOL);
+      // 水平辺: 前の垂直辺のscaffoldX方向に加え、全端点Xの範囲まで拡張
+      if (isH) {
+        // 前ステップのscaffoldX方向への拡張（既存）
+        if (prevScaffoldX !== null) {
+          edgeMinX = Math.min(edgeMinX, prevScaffoldX - TOL);
+          edgeMaxX = Math.max(edgeMaxX, prevScaffoldX + TOL);
+        }
+        // scaffoldCoord付近の全端点Xも範囲に含める
+        const nearYeps = eps.filter(ep => Math.abs(ep.y - scaffoldCoord) < TOL);
+        for (const ep of nearYeps) {
+          edgeMinX = Math.min(edgeMinX, ep.x - TOL);
+          edgeMaxX = Math.max(edgeMaxX, ep.x + TOL);
+        }
       }
+      // 垂直辺: 前の水平辺のscaffoldY方向への拡張
       if (!isH && prevScaffoldY !== null) {
         edgeMinY = Math.min(edgeMinY, prevScaffoldY - TOL);
         edgeMaxY = Math.max(edgeMaxY, prevScaffoldY + TOL);
+      }
+
+      // L字内側辺スキップ: 足場ラインに手摺がない辺
+      // scaffoldCoordと全端点の最小距離を計算し、離れ距離の2倍より遠ければ内側辺と判断
+      if (isH) {
+        const minDistY = eps.length > 0 ? Math.min(...eps.map(ep => Math.abs(ep.y - scaffoldCoord))) : Infinity;
+        if (minDistY > face1Dist * 2) continue;
+      } else {
+        const minDistX = eps.length > 0 ? Math.min(...eps.map(ep => Math.abs(ep.x - scaffoldCoord))) : Infinity;
+        if (minDistX > face2Dist * 2) continue;
       }
 
       // 足場ライン付近 かつ 拡張済み範囲内 の手摺端点を収集

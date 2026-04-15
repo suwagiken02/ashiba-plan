@@ -458,9 +458,10 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
             centerGrid = { x: (width / 2 - panX) / gridPx, y: (height / 2 - panY) / gridPx };
           }
         }
-        // サイズ・位置: 建物と同じ座標変換（gridCoord * gridPx + pan）
-        const pw = area.widthGrid * gridPx;
-        const ph = area.heightGrid * gridPx;
+        // 印刷枠サイズはズームに追従する（グリッド数 × 1グリッドのピクセルサイズ）
+        // INITIAL_GRID_PX はズーム1.0のときの1グリッドのピクセルサイズ
+        const pw = area.widthGrid * INITIAL_GRID_PX * zoom;
+        const ph = area.heightGrid * INITIAL_GRID_PX * zoom;
         const px = centerGrid.x * gridPx + panX - pw / 2;
         const py = centerGrid.y * gridPx + panY - ph / 2;
 
