@@ -34,13 +34,18 @@ export function getPrintAreaGrid(
   const paper = PAPER_MM[paperSize];
   const factor = SCALE_FACTORS[scale];
   if (!paper || !factor) return null;
-  // 用紙サイズをグリッド単位で返す
-  // 用紙mmをそのままグリッド数に変換: 1グリッド = 1mm on paper at this scale
-  // A4縦(210×297mm)・1/100 → 210×297グリッド
-  // A4横(297×210mm)・1/100 → 297×210グリッド
+  // 用紙サイズ × 縮尺 → グリッド数
+  // 1グリッド = 10mm（実寸）, 縮尺1/S → 紙1mm = S mm実寸 = S/10 グリッド
+  // widthGrid = paper_mm × S / 10
+  // ただし 1/100基準で paper_mm がそのままグリッド数になるよう:
+  // widthGrid = paper_mm × factor / 100
+  //
+  // A4横(297mm)・1/100 → 297 × 100/100 = 297グリッド (29,700mm = 29.7m)
+  // A4横(297mm)・1/50  → 297 × 50/100  = 148.5グリッド (14,850mm)
+  // A4横(297mm)・1/200 → 297 × 200/100 = 594グリッド (59,400mm)
   return {
-    widthGrid: paper.width,
-    heightGrid: paper.height,
+    widthGrid: (paper.width * factor) / 100,
+    heightGrid: (paper.height * factor) / 100,
   };
 }
 
