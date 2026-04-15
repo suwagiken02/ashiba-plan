@@ -34,15 +34,6 @@ export function getPrintAreaGrid(
   const paper = PAPER_MM[paperSize];
   const factor = SCALE_FACTORS[scale];
   if (!paper || !factor) return null;
-  // 用紙サイズ × 縮尺 → グリッド数
-  // 1グリッド = 10mm（実寸）, 縮尺1/S → 紙1mm = S mm実寸 = S/10 グリッド
-  // widthGrid = paper_mm × S / 10
-  // ただし 1/100基準で paper_mm がそのままグリッド数になるよう:
-  // widthGrid = paper_mm × factor / 100
-  //
-  // A4横(297mm)・1/100 → 297 × 100/100 = 297グリッド (29,700mm = 29.7m)
-  // A4横(297mm)・1/50  → 297 × 50/100  = 148.5グリッド (14,850mm)
-  // A4横(297mm)・1/200 → 297 × 200/100 = 594グリッド (59,400mm)
   return {
     widthGrid: (paper.width * factor) / 100,
     heightGrid: (paper.height * factor) / 100,
@@ -51,7 +42,6 @@ export function getPrintAreaGrid(
 
 /**
  * 表題欄をCanvas で画像化して PNG ArrayBuffer を返す。
- * 日本語フォントを使うため、ブラウザの Canvas2D で描画する。
  */
 function renderTitleBlock(
   siteName: string,
@@ -68,21 +58,17 @@ function renderTitleBlock(
   const ctx = canvas.getContext('2d')!;
   ctx.scale(dpr, dpr);
 
-  // 背景
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, width, height);
 
-  // 枠線
   ctx.strokeStyle = '#888';
   ctx.lineWidth = 1;
   ctx.strokeRect(0.5, 0.5, width - 1, height - 1);
-  // 区切り線
   ctx.beginPath();
   ctx.moveTo(0, height * 0.5);
   ctx.lineTo(width, height * 0.5);
   ctx.stroke();
 
-  // テキスト
   ctx.fillStyle = '#000';
   ctx.font = 'bold 14px "Hiragino Sans", "Noto Sans JP", "Yu Gothic", sans-serif';
   ctx.fillText(siteName || '', 8, 22);
@@ -102,7 +88,6 @@ function renderTitleBlock(
     ctx.fillText(scaleLabel, width - 8, height - 8);
   }
 
-  // PNG dataURL → ArrayBuffer
   const dataUrl = canvas.toDataURL('image/png');
   const binaryString = atob(dataUrl.split(',')[1]);
   const bytes = new Uint8Array(binaryString.length);
@@ -114,55 +99,47 @@ function renderTitleBlock(
 
 export const exportToPdf = async (
   canvasData: CanvasData,
-  settings: ExportSettings
+  settings: ExportSettings,
+  printAreaCenter: { x: number; y: number } | null,
+  zoom: number,
+  panX: number,
+  panY: number,
 ): Promise<void> => {
   const pdfDoc = await PDFDocument.create();
   const paperDim = PAPER_DIMENSIONS[settings.paperSize] || PAPER_DIMENSIONS.A4_landscape;
   const page = pdfDoc.addPage([paperDim.width, paperDim.height]);
 
-  const marginPt = 30;
-  const titleBlockPt = 80;
+  const marginPt = 20;
+  const titleBlockPt = 50;
   const drawableWidthPt = paperDim.width - marginPt * 2;
   const drawableHeightPt = paperDim.height - marginPt * 2 - titleBlockPt;
   const drawableX = marginPt;
   const drawableY = marginPt + titleBlockPt;
 
-  // ── グリッド線を描画エリア全体に描画 ──
-  // 縮尺からグリッド間隔(pt)を計算
+  // ── グリッド線を紙全体に描画 ──
   const paperMm = PAPER_MM[settings.paperSize] || PAPER_MM.A4_landscape;
   const ptPerMm = paperDim.width / paperMm.width;
   const scaleFactor = SCALE_FACTORS[settings.scale] || 100;
-  // 1グリッド = 10mm実寸 = (10/scaleFactor)mm on paper = ... pt
   const gridPt = (10 / scaleFactor) * ptPerMm;
-  const minorStep = 5;  // 50グリッド=500mm → 5グリッド単位
-  const majorStep = 10; // 100グリッド=1000mm → 10グリッド単位
+  const minorStep = 5;
+  const majorStep = 10;
   const minorPt = gridPt * minorStep;
   const majorPt = gridPt * majorStep;
 
-  if (minorPt > 2) { // 線間隔が2pt以上なら描画
-    // 紙全体（余白含む）にグリッド線を描画
-    const gridAreaX = 0;
-    const gridAreaY = 0;
-    const gridAreaW = paperDim.width;
-    const gridAreaH = paperDim.height;
-
-    // 縦線
-    for (let x = minorPt; x < gridAreaW; x += minorPt) {
+  if (minorPt > 2) {
+    for (let x = minorPt; x < paperDim.width; x += minorPt) {
       const nearMajor = Math.abs(x % majorPt) < 0.5;
       page.drawLine({
-        start: { x: gridAreaX + x, y: gridAreaY },
-        end: { x: gridAreaX + x, y: gridAreaY + gridAreaH },
+        start: { x, y: 0 }, end: { x, y: paperDim.height },
         thickness: nearMajor ? 0.4 : 0.15,
         color: rgb(0.8, 0.8, 0.8),
         opacity: nearMajor ? 0.4 : 0.2,
       });
     }
-    // 横線
-    for (let y = minorPt; y < gridAreaH; y += minorPt) {
+    for (let y = minorPt; y < paperDim.height; y += minorPt) {
       const nearMajor = Math.abs(y % majorPt) < 0.5;
       page.drawLine({
-        start: { x: gridAreaX, y: gridAreaY + y },
-        end: { x: gridAreaX + gridAreaW, y: gridAreaY + y },
+        start: { x: 0, y }, end: { x: paperDim.width, y },
         thickness: nearMajor ? 0.4 : 0.15,
         color: rgb(0.8, 0.8, 0.8),
         opacity: nearMajor ? 0.4 : 0.2,
@@ -170,36 +147,78 @@ export const exportToPdf = async (
     }
   }
 
-  // ── Konvaステージの画像を取得 ──
+  // ── Konvaステージの印刷枠範囲だけをキャプチャ ──
   const stages = Konva.stages;
   if (stages.length > 0) {
     const stage = stages[0];
+    const area = getPrintAreaGrid(settings.paperSize, settings.scale);
 
-    const dataUrl = stage.toDataURL({ pixelRatio: 2 });
-    const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
-    const pngImage = await pdfDoc.embedPng(imageBytes);
+    if (area && printAreaCenter) {
+      // 印刷枠の中心グリッド座標 → スクリーン座標に変換
+      const gridPx = INITIAL_GRID_PX * zoom;
+      const pw = area.widthGrid * gridPx;
+      const ph = area.heightGrid * gridPx;
+      const rectX = printAreaCenter.x * gridPx + panX - pw / 2;
+      const rectY = printAreaCenter.y * gridPx + panY - ph / 2;
 
-    // 画像をフィット
-    const imgAspect = pngImage.width / pngImage.height;
-    const areaAspect = drawableWidthPt / drawableHeightPt;
-    let imgWidth: number, imgHeight: number;
-    if (imgAspect > areaAspect) {
-      imgWidth = drawableWidthPt;
-      imgHeight = drawableWidthPt / imgAspect;
+      // 印刷枠範囲のみをキャプチャ（高解像度）
+      const pixelRatio = Math.max(2, Math.ceil(drawableWidthPt / pw));
+      const dataUrl = stage.toDataURL({
+        x: rectX,
+        y: rectY,
+        width: pw,
+        height: ph,
+        pixelRatio,
+      });
+
+      const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
+      const pngImage = await pdfDoc.embedPng(imageBytes);
+
+      // 描画可能エリアにフィット
+      const imgAspect = pw / ph;
+      const areaAspect = drawableWidthPt / drawableHeightPt;
+      let imgWidth: number, imgHeight: number;
+      if (imgAspect > areaAspect) {
+        imgWidth = drawableWidthPt;
+        imgHeight = drawableWidthPt / imgAspect;
+      } else {
+        imgHeight = drawableHeightPt;
+        imgWidth = drawableHeightPt * imgAspect;
+      }
+
+      page.drawImage(pngImage, {
+        x: drawableX + (drawableWidthPt - imgWidth) / 2,
+        y: drawableY + (drawableHeightPt - imgHeight) / 2,
+        width: imgWidth,
+        height: imgHeight,
+      });
     } else {
-      imgHeight = drawableHeightPt;
-      imgWidth = drawableHeightPt * imgAspect;
-    }
+      // 印刷枠なし: ステージ全体をキャプチャ（フォールバック）
+      const dataUrl = stage.toDataURL({ pixelRatio: 2 });
+      const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
+      const pngImage = await pdfDoc.embedPng(imageBytes);
 
-    page.drawImage(pngImage, {
-      x: drawableX + (drawableWidthPt - imgWidth) / 2,
-      y: drawableY + (drawableHeightPt - imgHeight) / 2,
-      width: imgWidth,
-      height: imgHeight,
-    });
+      const imgAspect = pngImage.width / pngImage.height;
+      const areaAspect = drawableWidthPt / drawableHeightPt;
+      let imgWidth: number, imgHeight: number;
+      if (imgAspect > areaAspect) {
+        imgWidth = drawableWidthPt;
+        imgHeight = drawableWidthPt / imgAspect;
+      } else {
+        imgHeight = drawableHeightPt;
+        imgWidth = drawableHeightPt * imgAspect;
+      }
+
+      page.drawImage(pngImage, {
+        x: drawableX + (drawableWidthPt - imgWidth) / 2,
+        y: drawableY + (drawableHeightPt - imgHeight) / 2,
+        width: imgWidth,
+        height: imgHeight,
+      });
+    }
   }
 
-  // 表題欄（右下）— Canvas で画像化して埋め込み（日本語対応）
+  // ── 表題欄（右下） ──
   const tbWidthPx = 250;
   const tbHeightPx = 60;
   const scaleLabel = settings.scale !== 'auto' ? `S=${settings.scale}` : '';
@@ -208,14 +227,12 @@ export const exportToPdf = async (
     settings.companyName || '',
     settings.date || '',
     scaleLabel,
-    tbWidthPx,
-    tbHeightPx,
+    tbWidthPx, tbHeightPx,
   );
   const tbImage = await pdfDoc.embedPng(tbImageBytes);
 
   const tbPdfWidth = 200;
   const tbPdfHeight = tbPdfWidth * (tbHeightPx / tbWidthPx);
-  // 印刷可能範囲の右下端にぴったり配置
   page.drawImage(tbImage, {
     x: drawableX + drawableWidthPt - tbPdfWidth,
     y: marginPt,
@@ -223,7 +240,7 @@ export const exportToPdf = async (
     height: tbPdfHeight,
   });
 
-  // ダウンロード
+  // ── ダウンロード ──
   const pdfBytes = await pdfDoc.save();
   const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' });
   const url = URL.createObjectURL(blob);

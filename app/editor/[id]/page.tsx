@@ -145,14 +145,22 @@ export default function EditorPage() {
           await exportToPng(siteName);
         } else if (settings.format === 'pdf') {
           const { exportToPdf } = await import('@/lib/export/pdfExport');
-          await exportToPdf(canvasData, {
-            format: 'pdf',
-            paperSize: settings.paperSize,
-            scale: settings.scale,
-            companyName: useAuthStore.getState().profile?.company_name || '',
-            siteName,
-            date: new Date().toLocaleDateString('ja-JP'),
-          });
+          const store = useCanvasStore.getState();
+          await exportToPdf(
+            canvasData,
+            {
+              format: 'pdf',
+              paperSize: settings.paperSize,
+              scale: settings.scale,
+              companyName: useAuthStore.getState().profile?.company_name || '',
+              siteName,
+              date: new Date().toLocaleDateString('ja-JP'),
+            },
+            store.printAreaCenter,
+            store.zoom,
+            store.panX,
+            store.panY,
+          );
         } else {
           const { exportToDxf } = await import('@/lib/export/dxfExport');
           exportToDxf(canvasData, siteName);
