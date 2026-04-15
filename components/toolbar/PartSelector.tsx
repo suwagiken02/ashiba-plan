@@ -79,6 +79,8 @@ export default function PartSelector() {
   const [direction, setDirection] = useState<'horizontal' | 'vertical'>('horizontal');
   const [trashHover, setTrashHover] = useState(false);
   const trashRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const mobilePanelRef = useRef<HTMLDivElement>(null);
 
   // --- フローティングパネル状態 ---
   const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
@@ -171,11 +173,24 @@ export default function PartSelector() {
     }, [selectedObstacleType, obsWidthMm, obsHeightMm, obsRotation]
   );
 
-  // --- ゴミ箱ヒットテスト ---
+  // --- 削除判定: パレットパネル全体にドロップで削除 ---
   const isOverTrash = useCallback((x: number, y: number): boolean => {
-    if (!trashRef.current) return false;
-    const rect = trashRef.current.getBoundingClientRect();
-    return x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    // PC: フローティングパネル全体
+    if (panelRef.current) {
+      const rect = panelRef.current.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+    }
+    // モバイル: 固定パレット全体
+    if (mobilePanelRef.current) {
+      const rect = mobilePanelRef.current.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+    }
+    // フォールバック: 旧ゴミ箱エリア
+    if (trashRef.current) {
+      const rect = trashRef.current.getBoundingClientRect();
+      if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) return true;
+    }
+    return false;
   }, []);
 
   // --- グローバルポインターイベント ---
@@ -322,10 +337,10 @@ export default function PartSelector() {
     return () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); };
   }, [toolbarDrag, addHandrail, addAnti, addObstacle, isOverTrash]);
 
-  if (mode === 'select' || mode === 'erase' || mode === 'building') return null;
+  if (mode === 'erase' || mode === 'building') return null;
 
   // タブ系モードかどうか
-  const isTabMode = mode === 'handrail' || mode === 'post' || mode === 'anti';
+  const isTabMode = mode === 'handrail' || mode === 'post' || mode === 'anti' || mode === 'select';
   const activeTab: PartTab = (mode === 'handrail' || mode === 'post' || mode === 'anti') ? mode : 'handrail';
 
   // --- カーソル追従プレビュー ---
@@ -408,7 +423,7 @@ export default function PartSelector() {
   return (
     <>
       {/* ===== モバイル（sm未満）: 画面下部固定バー ===== */}
-      <div className="sm:hidden fixed bottom-16 left-0 right-0 z-50 bg-dark-surface/95 border-t border-dark-border">
+      <div ref={mobilePanelRef} data-palette-panel className="sm:hidden fixed bottom-16 left-0 right-0 z-50 bg-dark-surface/95 border-t border-dark-border">
         {isTabMode && (
           <>
             {/* タブ */}
@@ -468,6 +483,8 @@ export default function PartSelector() {
 
       {/* ===== PC（sm以上）: フローティングパネル ===== */}
       <div
+        ref={panelRef}
+        data-palette-panel
         style={{
           left: pos.x, top: pos.y,
           width: panelSize.w, height: expanded ? panelSize.h : 'auto',

@@ -1,15 +1,41 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from './gridUtils';
-import { snapToHandrail, snapHandrailPlacement } from './snapUtils';
+import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints } from './snapUtils';
 import { getHandrailColor } from './handrailColors';
-import { Point, Handrail, HandrailDirection } from '@/types';
+import { mmToGrid as toMmGrid } from './gridUtils';
+import { Point, Handrail, HandrailDirection, HandrailLengthMm } from '@/types';
 
 const SNAP_PX = 80;
+const HIT_TOL = 25; // 手摺ヒット判定のグリッド許容差（250mm、タッチ操作対応）
+
+/** クリック位置に最も近い手摺を見つける（距離がHIT_TOL以内） */
+function findHandrailAtPos(pos: Point, handrails: Handrail[]): Handrail | null {
+  let best: Handrail | null = null;
+  let bestDist = HIT_TOL;
+  for (const h of handrails) {
+    const [p1, p2] = getHandrailEndpoints(h);
+    // 線分と点の最短距離
+    const dx = p2.x - p1.x;
+    const dy = p2.y - p1.y;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 0.01) {
+      const d = Math.hypot(pos.x - p1.x, pos.y - p1.y);
+      if (d < bestDist) { bestDist = d; best = h; }
+      continue;
+    }
+    const t = Math.max(0, Math.min(1, ((pos.x - p1.x) * dx + (pos.y - p1.y) * dy) / len2));
+    const projX = p1.x + t * dx;
+    const projY = p1.y + t * dy;
+    const d = Math.hypot(pos.x - projX, pos.y - projY);
+    if (d < bestDist) { bestDist = d; best = h; }
+  }
+  return best;
+}
 
 function snapRadiusGrid(zoom: number) {
   return Math.max(Math.round(SNAP_PX / (INITIAL_GRID_PX * zoom)), 5);
@@ -31,12 +57,101 @@ function applySnap(pos: Point, direction?: 'horizontal' | 'vertical'): Point {
   return pos;
 }
 
+/** ドロップ位置がパレットパネル上かどうかを判定 */
+function isDropOnPalette(clientX: number, clientY: number): boolean {
+  // data属性でパレットパネルを検索
+  const panels = document.querySelectorAll('[data-palette-panel]');
+  for (let i = 0; i < panels.length; i++) {
+    const rect = panels[i].getBoundingClientRect();
+    if (clientX >= rect.left && clientX <= rect.right &&
+        clientY >= rect.top && clientY <= rect.bottom) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function useCanvasInteraction() {
   const dragStart = useRef<Point | null>(null);
   const isDragging = useRef(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  /** ドラッグ移動中の手摺情報（全モード共通） */
+  const movingElementId = useRef<string | null>(null);
+  const movingHandrail = useRef<Handrail | null>(null);
+  /** window レベルのドラッグ追跡用（キャンバス外でも動作） */
+  const stageRef = useRef<Konva.Stage | null>(null);
+
+  // キャンバス外でのドラッグ追跡: window の pointermove/pointerup を使用
+  useEffect(() => {
+    const onWindowMove = (e: PointerEvent) => {
+      if (!movingElementId.current || !dragStart.current || !stageRef.current) return;
+      const s = useCanvasStore.getState();
+      const rect = stageRef.current.container().getBoundingClientRect();
+      const gridPos = screenToGrid(e.clientX - rect.left, e.clientY - rect.top, s.panX, s.panY, s.zoom);
+
+      const dx = gridPos.x - dragStart.current.x;
+      const dy = gridPos.y - dragStart.current.y;
+      if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+        if (!isDragging.current) {
+          s.pushHistory();
+        }
+        isDragging.current = true;
+        s.moveElement(movingElementId.current!, dx, dy);
+        dragStart.current = gridPos;
+      }
+    };
+
+    const onWindowUp = (e: PointerEvent) => {
+      if (!movingElementId.current) return;
+      const s = useCanvasStore.getState();
+
+      if (isDragging.current) {
+        if (isDropOnPalette(e.clientX, e.clientY)) {
+          // パレット上にドロップ → 削除
+          s.removeElement(movingElementId.current!);
+          s.setSelectedIds([]);
+          s.setSnapPoint(null);
+        } else {
+          // キャンバス上にドロップ → スナップ適用
+          const currentH = s.canvasData.handrails.find(h => h.id === movingElementId.current);
+          if (currentH) {
+            const dir = typeof currentH.direction === 'string' ? currentH.direction : 'horizontal';
+            const otherHandrails = s.canvasData.handrails.filter(h => h.id !== movingElementId.current);
+            const result = snapHandrailPlacement(
+              { x: currentH.x, y: currentH.y },
+              currentH.lengthMm, dir as 'horizontal' | 'vertical',
+              otherHandrails, snapRadiusGrid(s.zoom), s.canvasData.antis,
+            );
+            if (result) {
+              const snapDx = result.snappedStart.x - currentH.x;
+              const snapDy = result.snappedStart.y - currentH.y;
+              if (Math.abs(snapDx) > 0 || Math.abs(snapDy) > 0) {
+                s.moveElement(movingElementId.current!, snapDx, snapDy);
+              }
+              s.setSnapPoint(result.snapIndicator);
+              setTimeout(() => s.setSnapPoint(null), 400);
+            } else {
+              s.setSnapPoint(null);
+            }
+          }
+        }
+      }
+
+      movingElementId.current = null;
+      movingHandrail.current = null;
+      isDragging.current = false;
+      dragStart.current = null;
+    };
+
+    window.addEventListener('pointermove', onWindowMove);
+    window.addEventListener('pointerup', onWindowUp);
+    return () => {
+      window.removeEventListener('pointermove', onWindowMove);
+      window.removeEventListener('pointerup', onWindowUp);
+    };
+  }, []);
 
   // 画面座標をグリッド座標に変換
   const toGrid = useCallback(
@@ -78,9 +193,23 @@ export function useCanvasInteraction() {
         return;
       }
 
-      // 手摺モード: ドラッグ開始点をスナップ
-      const gridPos = applySnap(rawPos);
+      // 全モード共通: クリック位置に既存手摺があれば移動モード
+      const hitHandrail = findHandrailAtPos(rawPos, s.canvasData.handrails);
+      if (hitHandrail) {
+        stageRef.current = stage; // window イベントで座標変換に使用
+        movingElementId.current = hitHandrail.id;
+        movingHandrail.current = { ...hitHandrail };
+        dragStart.current = rawPos;
+        isDragging.current = false;
+        s.setSelectedIds([hitHandrail.id]);
+        return; // 他のモード処理をスキップ
+      }
 
+      // 手摺なし → 通常のモード処理
+      movingElementId.current = null;
+      movingHandrail.current = null;
+
+      const gridPos = applySnap(rawPos);
       dragStart.current = gridPos;
       isDragging.current = false;
 
@@ -89,37 +218,14 @@ export function useCanvasInteraction() {
         longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
       }
 
-      // post モード
-      if (s.mode === 'post') {
-        const snapped = snapToHandrail(rawPos, s.canvasData.handrails, snapRadiusGrid(s.zoom));
-        s.addPost({ id: uuidv4(), x: (snapped || rawPos).x, y: (snapped || rawPos).y });
-      }
-
-      // memo モード
+      // post モード: クリック配置は無効化（パレットからのD&Dのみ）
+      // memo モード: プロンプトでの配置は残す
       if (s.mode === 'memo') {
         const text = prompt('メモを入力:');
         if (text) s.addMemo({ id: uuidv4(), x: rawPos.x, y: rawPos.y, text, style: 'plain' });
       }
 
-      // obstacle モード
-      if (s.mode === 'obstacle') {
-        const obstacleDefaults: Record<string, { w: number; h: number }> = {
-          ecocute: { w: mmToGrid(460), h: mmToGrid(1100) },
-          aircon: { w: mmToGrid(800), h: mmToGrid(300) },
-          bay_window: { w: mmToGrid(1600), h: mmToGrid(600) },
-          carport: { w: mmToGrid(2700), h: mmToGrid(5000) },
-          sunroom: { w: mmToGrid(2000), h: mmToGrid(1500) },
-          custom_rect: { w: mmToGrid(1000), h: mmToGrid(1000) },
-          custom_circle: { w: mmToGrid(800), h: mmToGrid(800) },
-        };
-        const type = 'aircon';
-        const size = obstacleDefaults[type] || { w: 100, h: 100 };
-        s.addObstacle({
-          id: uuidv4(), type,
-          x: rawPos.x - Math.round(size.w / 2), y: rawPos.y - Math.round(size.h / 2),
-          width: size.w, height: size.h,
-        });
-      }
+      // obstacle モード: クリック配置は無効化（パレットからのD&Dのみ）
 
       // erase モード
       if (s.mode === 'erase') {
@@ -127,8 +233,8 @@ export function useCanvasInteraction() {
         if (target !== stage && target.id()) s.removeElement(target.id());
       }
 
-      // select モード
-      if (s.mode === 'select' && !isLongPress) {
+      // select モード（ドラッグ移動中でなければ選択更新）
+      if (s.mode === 'select' && !isLongPress && !isDragging.current) {
         const target = e.target;
         if (target === stage) s.setSelectedIds([]);
         else if (target.id()) s.setSelectedIds([target.id()]);
@@ -186,6 +292,9 @@ export function useCanvasInteraction() {
         }
       }
 
+      // 手摺ドラッグ移動中は window イベントで処理するためスキップ
+      if (movingElementId.current) return;
+
       // select + longPress: 範囲選択矩形
       if (s.mode === 'select' && isLongPress) {
         setSelectionRect({
@@ -223,49 +332,13 @@ export function useCanvasInteraction() {
       const gridPos = toGrid(stage, clientPos);
       const s = useCanvasStore.getState();
 
-      // 手摺モード: ドラッグで配置（始点+終点の両方でスナップ）
-      if (s.mode === 'handrail' && dragStart.current && isDragging.current) {
-        const start = dragStart.current;
-        const dx = Math.abs(gridPos.x - start.x);
-        const dy = Math.abs(gridPos.y - start.y);
-
-        if (dx > 2 || dy > 2) {
-          const direction: 'horizontal' | 'vertical' = dx >= dy ? 'horizontal' : 'vertical';
-          const radius = snapRadiusGrid(s.zoom);
-
-          const result = snapHandrailPlacement(start, s.selectedHandrailLength, direction, s.canvasData.handrails, radius, s.canvasData.antis);
-          const placePos = result ? result.snappedStart : start;
-
-          if (result) {
-            s.setSnapPoint(result.snapIndicator);
-            setTimeout(() => useCanvasStore.getState().setSnapPoint(null), 400);
-          }
-
-          s.addHandrail({
-            id: uuidv4(),
-            x: placePos.x,
-            y: placePos.y,
-            lengthMm: s.selectedHandrailLength,
-            direction,
-            color: getHandrailColor(s.selectedHandrailLength),
-          });
-        }
-      }
+      // 手摺モード: キャンバスドラッグでの配置は無効化（パレットD&Dのみ）
       s.setHandrailPreview(null);
       if (!s.snapPoint) s.setSnapPoint(null);
 
-      // アンチモード
-      if (s.mode === 'anti' && dragStart.current) {
-        const start = dragStart.current;
-        const dx = Math.abs(gridPos.x - start.x);
-        const dy = Math.abs(gridPos.y - start.y);
-        s.addAnti({
-          id: uuidv4(),
-          x: Math.min(start.x, gridPos.x), y: Math.min(start.y, gridPos.y),
-          width: s.selectedAntiWidth, lengthMm: s.selectedAntiLength,
-          direction: dx >= dy ? 'horizontal' : 'vertical',
-        });
-      }
+      // アンチモード: キャンバスドラッグでの配置は無効化（パレットD&Dのみ）
+
+      // 手摺ドラッグ移動完了は window イベントで処理（キャンバス外対応）
 
       // 範囲選択完了
       if (s.mode === 'select' && isLongPress && selectionRect) {
