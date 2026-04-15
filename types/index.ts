@@ -145,7 +145,9 @@ export type StartCorner = 'ne' | 'nw' | 'se' | 'sw';
 
 export type ScaffoldStartConfig = {
   corner: StartCorner;
-  /** 角に接する2面の離れ(mm) - face1は北/南面、face2は東/西面 */
+  /** 選択した頂点のインデックス（getBuildingEdgesClockwise の辺順） */
+  startVertexIndex?: number;
+  /** 角に接する2面の離れ(mm) - face1は水平面、face2は垂直面 */
   face1DistanceMm: number;
   face2DistanceMm: number;
   /** 角に接する2面の最初の手摺の長さ(mm) */

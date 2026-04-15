@@ -117,7 +117,9 @@ export default function DimensionLayer() {
     const pts = edges.map(e => e.p1);
 
     // コーナー頂点（巡回開始点）
-    const startIdx = findCornerVertexIndex(pts, corner);
+    const startIdx = scaffoldStart.startVertexIndex != null
+      ? scaffoldStart.startVertexIndex % n
+      : findCornerVertexIndex(pts, corner);
 
     // 分割ステップ: CW巡回で凸角を数え、凸角の半数に達した時点で分割
     // step 0..splitStep-1 = Path1（CW腕、forward: p1→p2）

@@ -1,136 +1,127 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { StartCorner, HandrailLengthMm } from '@/types';
+import { StartCorner, HandrailLengthMm, Point } from '@/types';
 import { mmToGrid } from '@/lib/konva/gridUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
+import { getBuildingEdgesClockwise, EdgeInfo } from '@/lib/konva/autoLayoutUtils';
 
-type Props = {
-  onClose: () => void;
-};
-
-const CORNERS: { id: StartCorner; label: string }[] = [
-  { id: 'nw', label: '北西' },
-  { id: 'ne', label: '北東' },
-  { id: 'sw', label: '南西' },
-  { id: 'se', label: '南東' },
-];
-
-/** 角に接する面のラベル */
-function faceLabels(corner: StartCorner): [string, string] {
-  switch (corner) {
-    case 'ne': return ['北面', '東面'];
-    case 'nw': return ['北面', '西面'];
-    case 'se': return ['南面', '東面'];
-    case 'sw': return ['南面', '西面'];
-  }
-}
+type Props = { onClose: () => void };
 
 const HANDRAIL_OPTIONS: HandrailLengthMm[] = [1800, 1200, 900];
+
+const FACE_LABEL: Record<string, string> = {
+  north: '北面', south: '南面', east: '東面', west: '西面',
+};
+
+/** 頂点の位置から最も近い StartCorner を推定 */
+function vertexToCorner(vtx: Point, center: Point): StartCorner {
+  const dx = vtx.x - center.x;
+  const dy = vtx.y - center.y;
+  if (dx >= 0 && dy <= 0) return 'ne';
+  if (dx < 0 && dy <= 0) return 'nw';
+  if (dx >= 0 && dy > 0) return 'se';
+  return 'sw';
+}
 
 export default function ScaffoldStartModal({ onClose }: Props) {
   const { setScaffoldStart, canvasData, addHandrail } = useCanvasStore();
 
-  const [corner, setCorner] = useState<StartCorner>('ne');
+  // 建物の辺情報を取得
+  const edgeInfo = useMemo(() => {
+    if (!canvasData.buildings.length) return null;
+    const building = canvasData.buildings[0];
+    const edges = getBuildingEdgesClockwise(building);
+    if (edges.length < 3) return null;
+    const pts = edges.map(e => e.p1);
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+    return { edges, pts, center: { x: cx, y: cy } };
+  }, [canvasData.buildings]);
+
+  const [selectedIdx, setSelectedIdx] = useState(0);
   const [face1Distance, setFace1Distance] = useState(900);
   const [face2Distance, setFace2Distance] = useState(900);
   const [face1Handrail, setFace1Handrail] = useState<HandrailLengthMm>(1800);
   const [face2Handrail, setFace2Handrail] = useState<HandrailLengthMm>(1800);
 
-  const [label1, label2] = faceLabels(corner);
+  // 選択頂点に隣接する2辺のラベル
+  const faceLabels = useMemo(() => {
+    if (!edgeInfo) return { label1: '面1', label2: '面2' };
+    const { edges } = edgeInfo;
+    const n = edges.length;
+    const edgeOut = edges[selectedIdx % n];
+    const edgeIn = edges[(selectedIdx - 1 + n) % n];
+    const outIsH = edgeOut.face === 'north' || edgeOut.face === 'south';
+    const face1 = outIsH ? edgeOut : edgeIn;
+    const face2 = outIsH ? edgeIn : edgeOut;
+    return {
+      label1: `${FACE_LABEL[face1.face] || face1.face}(${face1.label})`,
+      label2: `${FACE_LABEL[face2.face] || face2.face}(${face2.label})`,
+    };
+  }, [edgeInfo, selectedIdx]);
 
   const handleConfirm = () => {
-    // 設定を保存
+    if (!edgeInfo || !canvasData.buildings.length) { onClose(); return; }
+    const { edges, pts, center } = edgeInfo;
+    const n = edges.length;
+    const vtx = pts[selectedIdx % n];
+
+    // 隣接辺からface1(水平), face2(垂直)を決定
+    const edgeOut = edges[selectedIdx % n];
+    const edgeIn = edges[(selectedIdx - 1 + n) % n];
+    const outIsH = edgeOut.face === 'north' || edgeOut.face === 'south';
+    const face1Edge = outIsH ? edgeOut : edgeIn;
+    const face2Edge = outIsH ? edgeIn : edgeOut;
+
+    const computedCorner = vertexToCorner(vtx, center);
+
     setScaffoldStart({
-      corner,
+      corner: computedCorner,
+      startVertexIndex: selectedIdx % n,
       face1DistanceMm: face1Distance,
       face2DistanceMm: face2Distance,
       face1FirstHandrail: face1Handrail,
       face2FirstHandrail: face2Handrail,
     });
 
-    // 建物のバウンディングボックスを計算
-    if (canvasData.buildings.length === 0) { onClose(); return; }
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const b of canvasData.buildings) {
-      for (const p of b.points) {
-        if (p.x < minX) minX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y > maxY) maxY = p.y;
-      }
-    }
+    const d1 = mmToGrid(face1Distance);
+    const d2 = mmToGrid(face2Distance);
+    const len1 = mmToGrid(face1Handrail);
+    const len2 = mmToGrid(face2Handrail);
 
-    const d1 = mmToGrid(face1Distance); // face1: 北面 or 南面の離れ(グリッド)
-    const d2 = mmToGrid(face2Distance); // face2: 東面 or 西面の離れ(グリッド)
-    const len1 = mmToGrid(face1Handrail); // face1の手摺長さ(グリッド)
-    const len2 = mmToGrid(face2Handrail); // face2の手摺長さ(グリッド)
+    // 足場オフセット方向
+    const f1Sign = face1Edge.face === 'north' ? -1 : 1;
+    const f2Sign = face2Edge.face === 'west' ? -1 : 1;
+    const cx = vtx.x + f2Sign * d2;
+    const cy = vtx.y + f1Sign * d1;
 
-    // 角の位置に応じて scaffold の角点と手摺の配置を計算
-    // face1 = 北/南面(horizontal), face2 = 東/西面(vertical)
-    let h1x: number, h1y: number; // face1(横方向)手摺の始点
-    let h2x: number, h2y: number; // face2(縦方向)手摺の始点
+    // face1(水平)手摺方向: 辺の進行方向に合わせる
+    const f1StartsAtVtx = face1Edge.p1.x === vtx.x && face1Edge.p1.y === vtx.y;
+    const f1dx = f1StartsAtVtx
+      ? face1Edge.p2.x - face1Edge.p1.x
+      : face1Edge.p1.x - face1Edge.p2.x;
+    const h1x = f1dx > 0 ? cx : cx - len1;
+    const h1y = cy;
 
-    switch (corner) {
-      case 'ne': {
-        // scaffold角点: (maxX + d2, minY - d1)
-        // 北面手摺: 角点から西へ → start = (cornerX - len1, cornerY)
-        // 東面手摺: 角点から南へ → start = (cornerX, cornerY)
-        const cx = maxX + d2;
-        const cy = minY - d1;
-        h1x = cx - len1; h1y = cy;
-        h2x = cx;         h2y = cy;
-        break;
-      }
-      case 'nw': {
-        // scaffold角点: (minX - d2, minY - d1)
-        // 北面手摺: 角点から東へ → start = (cornerX, cornerY)
-        // 西面手摺: 角点から南へ → start = (cornerX, cornerY)
-        const cx = minX - d2;
-        const cy = minY - d1;
-        h1x = cx;  h1y = cy;
-        h2x = cx;  h2y = cy;
-        break;
-      }
-      case 'se': {
-        // scaffold角点: (maxX + d2, maxY + d1)
-        // 南面手摺: 角点から西へ → start = (cornerX - len1, cornerY)
-        // 東面手摺: 角点から北へ → start = (cornerX, cornerY - len2)
-        const cx = maxX + d2;
-        const cy = maxY + d1;
-        h1x = cx - len1; h1y = cy;
-        h2x = cx;         h2y = cy - len2;
-        break;
-      }
-      case 'sw': {
-        // scaffold角点: (minX - d2, maxY + d1)
-        // 南面手摺: 角点から東へ → start = (cornerX, cornerY)
-        // 西面手摺: 角点から北へ → start = (cornerX, cornerY - len2)
-        const cx = minX - d2;
-        const cy = maxY + d1;
-        h1x = cx;  h1y = cy;
-        h2x = cx;  h2y = cy - len2;
-        break;
-      }
-    }
+    // face2(垂直)手摺方向
+    const f2StartsAtVtx = face2Edge.p1.x === vtx.x && face2Edge.p1.y === vtx.y;
+    const f2dy = f2StartsAtVtx
+      ? face2Edge.p2.y - face2Edge.p1.y
+      : face2Edge.p1.y - face2Edge.p2.y;
+    const h2x = cx;
+    const h2y = f2dy > 0 ? cy : cy - len2;
 
-    // 手摺を2本配置
     addHandrail({
-      id: uuidv4(),
-      x: h1x,
-      y: h1y,
-      lengthMm: face1Handrail,
-      direction: 'horizontal',
+      id: uuidv4(), x: h1x, y: h1y,
+      lengthMm: face1Handrail, direction: 'horizontal',
       color: getHandrailColor(face1Handrail),
     });
     addHandrail({
-      id: uuidv4(),
-      x: h2x,
-      y: h2y,
-      lengthMm: face2Handrail,
-      direction: 'vertical',
+      id: uuidv4(), x: h2x, y: h2y,
+      lengthMm: face2Handrail, direction: 'vertical',
       color: getHandrailColor(face2Handrail),
     });
 
@@ -138,27 +129,29 @@ export default function ScaffoldStartModal({ onClose }: Props) {
   };
 
   return (
-    <div
-      className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 modal-overlay" onClick={onClose} />
       <div
-        className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-y-auto"
-        onClick={(e) => e.stopPropagation()}
+        className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-y-auto"
       >
         {/* ヘッダー */}
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between">
           <h2 className="font-bold text-lg">足場開始設定</h2>
-          <button onClick={onClose} className="text-dimension hover:text-canvas px-2">
-            ✕
-          </button>
+          <button type="button" onClick={onClose} className="text-dimension hover:text-canvas px-2">✕</button>
         </div>
 
         <div className="p-4 space-y-6">
-          {/* スタート角の選択 */}
+          {/* スタート頂点の選択 */}
           <div>
-            <label className="block text-sm text-dimension mb-2">スタート角</label>
-            <CornerSelector value={corner} onChange={setCorner} />
+            <label className="block text-sm text-dimension mb-2">スタート角を選択</label>
+            {edgeInfo && (
+              <VertexSelector
+                edges={edgeInfo.edges}
+                pts={edgeInfo.pts}
+                selectedIndex={selectedIdx}
+                onChange={setSelectedIdx}
+              />
+            )}
           </div>
 
           {/* 各面の離れ */}
@@ -166,26 +159,18 @@ export default function ScaffoldStartModal({ onClose }: Props) {
             <label className="block text-sm text-dimension mb-2">各面の離れ (mm)</label>
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <span className="text-sm w-16 shrink-0">{label1}</span>
-                <input
-                  type="number"
-                  value={face1Distance}
+                <span className="text-sm w-20 shrink-0">{faceLabels.label1}</span>
+                <input type="number" value={face1Distance}
                   onChange={(e) => setFace1Distance(Math.max(0, Number(e.target.value)))}
                   className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
-                  min={0}
-                  step={10}
-                />
+                  min={0} step={10} />
               </div>
               <div className="flex items-center gap-3">
-                <span className="text-sm w-16 shrink-0">{label2}</span>
-                <input
-                  type="number"
-                  value={face2Distance}
+                <span className="text-sm w-20 shrink-0">{faceLabels.label2}</span>
+                <input type="number" value={face2Distance}
                   onChange={(e) => setFace2Distance(Math.max(0, Number(e.target.value)))}
                   className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
-                  min={0}
-                  step={10}
-                />
+                  min={0} step={10} />
               </div>
             </div>
           </div>
@@ -195,38 +180,28 @@ export default function ScaffoldStartModal({ onClose }: Props) {
             <label className="block text-sm text-dimension mb-2">最初の手摺の長さ</label>
             <div className="space-y-3">
               <div>
-                <span className="text-xs text-dimension">{label1}</span>
+                <span className="text-xs text-dimension">{faceLabels.label1}</span>
                 <div className="flex gap-2 mt-1">
                   {HANDRAIL_OPTIONS.map((len) => (
-                    <button
-                      key={`f1-${len}`}
-                      onClick={() => setFace1Handrail(len)}
+                    <button key={`f1-${len}`} type="button" onClick={() => setFace1Handrail(len)}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                         face1Handrail === len
                           ? 'border-accent bg-accent/15 text-accent'
                           : 'border-dark-border text-dimension hover:border-accent/50'
-                      }`}
-                    >
-                      {len}
-                    </button>
+                      }`}>{len}</button>
                   ))}
                 </div>
               </div>
               <div>
-                <span className="text-xs text-dimension">{label2}</span>
+                <span className="text-xs text-dimension">{faceLabels.label2}</span>
                 <div className="flex gap-2 mt-1">
                   {HANDRAIL_OPTIONS.map((len) => (
-                    <button
-                      key={`f2-${len}`}
-                      onClick={() => setFace2Handrail(len)}
+                    <button key={`f2-${len}`} type="button" onClick={() => setFace2Handrail(len)}
                       className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
                         face2Handrail === len
                           ? 'border-accent bg-accent/15 text-accent'
                           : 'border-dark-border text-dimension hover:border-accent/50'
-                      }`}
-                    >
-                      {len}
-                    </button>
+                      }`}>{len}</button>
                   ))}
                 </div>
               </div>
@@ -234,10 +209,8 @@ export default function ScaffoldStartModal({ onClose }: Props) {
           </div>
 
           {/* 確定ボタン */}
-          <button
-            onClick={handleConfirm}
-            className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg"
-          >
+          <button type="button" onClick={handleConfirm}
+            className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg">
             足場開始
           </button>
         </div>
@@ -246,50 +219,82 @@ export default function ScaffoldStartModal({ onClose }: Props) {
   );
 }
 
-/** 4角選択 - 建物の俯瞰図で角をタップ */
-function CornerSelector({
-  value,
-  onChange,
+/** 建物ポリゴンの頂点選択UI */
+function VertexSelector({
+  edges, pts, selectedIndex, onChange,
 }: {
-  value: StartCorner;
-  onChange: (c: StartCorner) => void;
+  edges: EdgeInfo[];
+  pts: Point[];
+  selectedIndex: number;
+  onChange: (idx: number) => void;
 }) {
-  // 方角ラベルとコーナー位置のマッピング
-  const corners: { id: StartCorner; label: string; posClass: string }[] = [
-    { id: 'nw', label: '北西', posClass: 'top-0 left-0' },
-    { id: 'ne', label: '北東', posClass: 'top-0 right-0' },
-    { id: 'sw', label: '南西', posClass: 'bottom-0 left-0' },
-    { id: 'se', label: '南東', posClass: 'bottom-0 right-0' },
-  ];
+  // バウンディングボックス
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x; if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x; if (p.y > maxY) maxY = p.y;
+  }
+
+  const W = 240, H = 180, PAD = 28;
+  const rangeX = maxX - minX || 1;
+  const rangeY = maxY - minY || 1;
+  const scale = Math.min((W - PAD * 2) / rangeX, (H - PAD * 2) / rangeY);
+  const ox = (W - rangeX * scale) / 2;
+  const oy = (H - rangeY * scale) / 2;
+  const tx = (x: number) => (x - minX) * scale + ox;
+  const ty = (y: number) => (y - minY) * scale + oy;
+
+  const polyStr = pts.map(p => `${tx(p.x)},${ty(p.y)}`).join(' ');
 
   return (
     <div className="flex justify-center">
-      <div className="relative w-48 h-36">
-        {/* 方角ラベル */}
-        <span className="absolute -top-5 left-1/2 -translate-x-1/2 text-xs text-dimension">北</span>
-        <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs text-dimension">南</span>
-        <span className="absolute top-1/2 -left-6 -translate-y-1/2 text-xs text-dimension">西</span>
-        <span className="absolute top-1/2 -right-6 -translate-y-1/2 text-xs text-dimension">東</span>
+      <svg width={W} height={H} className="bg-dark-bg rounded-lg border border-dark-border">
+        {/* 方角 */}
+        <text x={W / 2} y={12} textAnchor="middle" fontSize={10} fill="#666">北</text>
+        <text x={W / 2} y={H - 3} textAnchor="middle" fontSize={10} fill="#666">南</text>
+        <text x={8} y={H / 2 + 3} textAnchor="middle" fontSize={10} fill="#666">西</text>
+        <text x={W - 8} y={H / 2 + 3} textAnchor="middle" fontSize={10} fill="#666">東</text>
 
-        {/* 建物の形 */}
-        <div className="absolute inset-3 bg-[#3d3d3a] border-2 border-[#1a1a18] rounded-sm" />
+        {/* 建物ポリゴン */}
+        <polygon points={polyStr} fill="#3d3d3a" stroke="#666" strokeWidth={1.5} />
 
-        {/* 角ボタン */}
-        {corners.map((c) => (
-          <button
-            key={c.id}
-            onClick={() => onChange(c.id)}
-            className={`absolute ${c.posClass} w-10 h-10 flex items-center justify-center rounded-full transition-all z-10 ${
-              value === c.id
-                ? 'bg-accent text-white scale-110 shadow-lg shadow-accent/30'
-                : 'bg-dark-bg border border-dark-border text-dimension hover:border-accent/50'
-            }`}
-            title={c.label}
-          >
-            <span className="text-xs font-bold">{c.label.slice(0, 1)}{c.label.slice(1)}</span>
-          </button>
-        ))}
-      </div>
+        {/* 辺ラベル（辺の中点に表示） */}
+        {edges.map((e, i) => {
+          const mx = (tx(e.p1.x) + tx(e.p2.x)) / 2;
+          const my = (tx(e.p1.y) + tx(e.p2.y)) / 2;
+          // 辺の中点のY座標を正しく計算
+          const myy = (ty(e.p1.y) + ty(e.p2.y)) / 2;
+          return (
+            <text key={`el-${i}`} x={mx} y={myy} textAnchor="middle"
+              fontSize={9} fill="#888" dominantBaseline="central">
+              {e.label}
+            </text>
+          );
+        })}
+
+        {/* 頂点ドット（クリック可能） */}
+        {pts.map((p, i) => {
+          const isSelected = i === selectedIndex;
+          const sx = tx(p.x);
+          const sy = ty(p.y);
+          return (
+            <g key={i} onClick={() => onChange(i)} style={{ cursor: 'pointer' }}>
+              {/* タップ領域を広げる透明円 */}
+              <circle cx={sx} cy={sy} r={16} fill="transparent" />
+              <circle cx={sx} cy={sy} r={isSelected ? 10 : 6}
+                fill={isSelected ? '#378ADD' : '#555'}
+                stroke={isSelected ? '#fff' : '#999'}
+                strokeWidth={isSelected ? 2 : 1} />
+              {isSelected && (
+                <text x={sx} y={sy - 14} textAnchor="middle"
+                  fontSize={10} fontWeight="bold" fill="#378ADD">
+                  START
+                </text>
+              )}
+            </g>
+          );
+        })}
+      </svg>
     </div>
   );
 }
