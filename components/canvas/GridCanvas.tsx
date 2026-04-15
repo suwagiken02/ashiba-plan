@@ -463,6 +463,24 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
         const ph = area.heightGrid * gridPx;
         const px = centerGrid.x * gridPx + panX - pw / 2;
         const py = centerGrid.y * gridPx + panY - ph / 2;
+
+        // デバッグ: 建物の最初の頂点のスクリーン座標も出力
+        const bldPt0 = canvasData.buildings[0]?.points[0];
+        console.log('[PrintArea]', {
+          widthGrid: area.widthGrid,
+          heightGrid: area.heightGrid,
+          INITIAL_GRID_PX,
+          zoom,
+          gridPx,
+          pw, ph,
+          panX, panY,
+          centerX: centerGrid.x,
+          centerY: centerGrid.y,
+          rectX: px, rectY: py,
+          bldPt0Grid: bldPt0 ? `(${bldPt0.x},${bldPt0.y})` : 'none',
+          bldPt0Screen: bldPt0 ? `(${bldPt0.x * gridPx + panX}, ${bldPt0.y * gridPx + panY})` : 'none',
+        });
+
         return (
           <Layer>
             <Rect x={px} y={py} width={pw} height={ph}
