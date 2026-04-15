@@ -74,6 +74,7 @@ export default function PartSelector() {
     selectedAntiLength, setSelectedAntiLength,
     addHandrail, addAnti, addPost, addObstacle,
     canvasData, setHandrailPreview, setSnapPoint,
+    isDarkMode,
   } = useCanvasStore();
   const [expanded, setExpanded] = useState(true);
   const [toolbarDrag, setToolbarDrag] = useState<ToolbarDrag | null>(null);
@@ -467,7 +468,7 @@ export default function PartSelector() {
   return (
     <>
       {/* ===== モバイル（sm未満）: 画面下部固定バー ===== */}
-      <div ref={mobilePanelRef} data-palette-panel className="sm:hidden fixed bottom-16 left-0 right-0 z-50 bg-dark-surface/95 border-t border-dark-border">
+      <div ref={mobilePanelRef} data-palette-panel className={`sm:hidden fixed bottom-16 left-0 right-0 z-50 border-t ${isDarkMode ? 'bg-gray-300 border-gray-400' : 'bg-dark-surface/95 border-dark-border'}`}>
         {isTabMode && (
           <>
             {/* タブ */}
@@ -541,7 +542,7 @@ export default function PartSelector() {
           left: pos.x, top: pos.y,
           width: panelSize.w, height: expanded ? panelSize.h : 'auto',
         }}
-        className="hidden sm:flex fixed z-50 opacity-95 flex-col bg-dark-surface border border-dark-border rounded-xl shadow-2xl"
+        className={`hidden sm:flex fixed z-50 opacity-95 flex-col rounded-xl shadow-2xl border ${isDarkMode ? 'bg-gray-300 border-gray-400 text-gray-800' : 'bg-dark-surface border-dark-border text-canvas'}`}
       >
         {/* ヘッダー（ドラッグハンドル） */}
         <div

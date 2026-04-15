@@ -103,6 +103,10 @@ type CanvasStore = {
   setMeasureCursor: (p: { x: number; y: number } | null) => void;
   setMeasureResultMm: (mm: number | null) => void;
 
+  // Dark mode
+  isDarkMode: boolean;
+  toggleDarkMode: () => void;
+
   // Zoom & Pan
   zoom: number;
   panX: number;
@@ -207,6 +211,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setMeasurePoint1: (p) => set({ measurePoint1: p }),
   setMeasureCursor: (p) => set({ measureCursor: p }),
   setMeasureResultMm: (mm) => set({ measureResultMm: mm }),
+
+  isDarkMode: false,
+  toggleDarkMode: () => {
+    const next = !get().isDarkMode;
+    set({ isDarkMode: next });
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('dark-mode', next);
+    }
+  },
 
   zoom: 1.0,
   panX: 0,

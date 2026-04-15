@@ -20,6 +20,26 @@ body {
   color: #f5f4f0;
 }
 
+:root {
+  --color-canvas-bg: #f5f4f0;
+  --color-dark-bg: #1a1a18;
+  --color-dark-surface: #2c2c2a;
+  --color-dark-border: #3d3d3a;
+  --color-grid-minor: #e5e4e0;
+  --color-grid-major: #d0cfcb;
+  --color-building-fill: #3d3d3a;
+}
+
+body.dark-mode {
+  --color-canvas-bg: #0a0a0a;
+  --color-dark-bg: #e8e8e6;
+  --color-dark-surface: #d0d0ce;
+  --color-dark-border: #b0b0ae;
+  --color-grid-minor: rgba(0, 255, 65, 0.15);
+  --color-grid-major: rgba(0, 255, 65, 0.35);
+  --color-building-fill: #555555;
+}
+
 /* Konva touch-action 設定 */
 .konvajs-content {
   touch-action: none !important;

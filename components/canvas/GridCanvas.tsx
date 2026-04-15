@@ -28,7 +28,11 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode } = useCanvasStore();
+
+  const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
+  const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
+  const colorGridMajor = isDarkMode ? 'rgba(0,255,65,0.35)' : '#d0cfcb';
   const { handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, selectionRect } = useCanvasInteraction();
 
   // ピンチズーム用
@@ -66,7 +70,7 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
         <Line
           key={`v${i}`}
           points={[x, 0, x, height]}
-          stroke={isMajor ? '#d0cfcb' : '#e5e4e0'}
+          stroke={isMajor ? colorGridMajor : colorGridMinor}
           strokeWidth={isMajor ? 0.5 : 0.25}
           listening={false}
         />
@@ -79,14 +83,14 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
         <Line
           key={`h${j}`}
           points={[0, y, width, y]}
-          stroke={isMajor ? '#d0cfcb' : '#e5e4e0'}
+          stroke={isMajor ? colorGridMajor : colorGridMinor}
           strokeWidth={isMajor ? 0.5 : 0.25}
           listening={false}
         />
       );
     }
     return lines;
-  }, [zoom, panX, panY, width, height]);
+  }, [zoom, panX, panY, width, height, colorGridMajor, colorGridMinor]);
 
   // グリッドガイド（500mm/1000mmライン）
   const gridGuideLines = useCallback(() => {
@@ -325,7 +329,7 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
           y={0}
           width={width}
           height={height}
-          fill="#f5f4f0"
+          fill={colorCanvasBg}
         />
       </Layer>
 

@@ -50,6 +50,8 @@ export default function EditorPage() {
     toggleShowDimensions,
     showGridGuide,
     toggleShowGridGuide,
+    isDarkMode,
+    toggleDarkMode,
     selectedIds,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -230,6 +232,15 @@ export default function EditorPage() {
               : saveStatus === 'error'
               ? 'エラー'
               : '保存'}
+          </button>
+
+          {/* ダークモード */}
+          <button
+            onClick={toggleDarkMode}
+            className="px-2 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
+            title={isDarkMode ? 'ライトモード' : 'ダークモード'}
+          >
+            {isDarkMode ? '☀️' : '🌙'}
           </button>
 
           {/* 出力 */}
