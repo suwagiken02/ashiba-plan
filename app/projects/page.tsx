@@ -243,7 +243,7 @@ export default function ProjectsPage() {
             className="absolute inset-0 modal-overlay"
             onClick={() => setShowNewModal(false)}
           />
-          {/* コンテンツ（overlayの上にrelativeで配置） */}
+          {/* コンテンツ（overlayの上にrelativeで配置、formタグ不使用） */}
           <div
             className="relative bg-dark-surface border border-dark-border rounded-2xl p-6 w-full max-w-sm"
           >
@@ -255,6 +255,7 @@ export default function ProjectsPage() {
                   type="text"
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createProject(); } }}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
                   placeholder="○○邸 足場工事"
                   autoFocus
@@ -266,6 +267,7 @@ export default function ProjectsPage() {
                   type="text"
                   value={newAddress}
                   onChange={(e) => setNewAddress(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createProject(); } }}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
                   placeholder="東京都..."
                 />
@@ -281,7 +283,7 @@ export default function ProjectsPage() {
               </button>
               <button
                 type="button"
-                onClick={() => { alert('作成ボタン押下'); createProject(); }}
+                onClick={createProject}
                 disabled={!newName.trim() || creating}
                 className="flex-1 py-3 bg-accent text-white font-bold rounded-lg disabled:opacity-50"
               >
