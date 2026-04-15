@@ -18,6 +18,7 @@ import MemoLayer from './MemoLayer';
 import CompassWidget from './CompassWidget';
 import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
+import { getPrintAreaGrid } from '@/lib/export/pdfExport';
 
 type Props = {
   width: number;
@@ -27,7 +28,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter } = useCanvasStore();
   const { handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, selectionRect } = useCanvasInteraction();
 
   // ピンチズーム用
@@ -433,6 +434,51 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
           })()}
         </Layer>
       )}
+
+      {/* 印刷枠ガイド（ドラッグ移動可能） */}
+      {showPrintArea && (() => {
+        const area = getPrintAreaGrid(printPaperSize, printScale);
+        if (!area) return null;
+        const gridPx = INITIAL_GRID_PX * zoom;
+        // 中心座標（グリッド単位）
+        let centerGrid: { x: number; y: number };
+        if (printAreaCenter) {
+          centerGrid = printAreaCenter;
+        } else {
+          // デフォルト: 建物中心
+          if (canvasData.buildings.length > 0) {
+            let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+            for (const b of canvasData.buildings)
+              for (const p of b.points) {
+                if (p.x < bMinX) bMinX = p.x; if (p.y < bMinY) bMinY = p.y;
+                if (p.x > bMaxX) bMaxX = p.x; if (p.y > bMaxY) bMaxY = p.y;
+              }
+            centerGrid = { x: (bMinX + bMaxX) / 2, y: (bMinY + bMaxY) / 2 };
+          } else {
+            centerGrid = { x: (width / 2 - panX) / gridPx, y: (height / 2 - panY) / gridPx };
+          }
+        }
+        const pw = area.widthGrid * gridPx;
+        const ph = area.heightGrid * gridPx;
+        const px = centerGrid.x * gridPx + panX - pw / 2;
+        const py = centerGrid.y * gridPx + panY - ph / 2;
+        return (
+          <Layer>
+            <Rect x={px} y={py} width={pw} height={ph}
+              stroke="#EF4444" strokeWidth={1.5} dash={[8, 4]}
+              draggable
+              onDragEnd={(e) => {
+                const newCenterX = (e.target.x() + pw / 2 - panX) / gridPx;
+                const newCenterY = (e.target.y() + ph / 2 - panY) / gridPx;
+                setPrintAreaCenter({ x: Math.round(newCenterX), y: Math.round(newCenterY) });
+              }}
+            />
+            <Text x={px + 4} y={py + 4}
+              text={`印刷範囲 ${printPaperSize.replace('_', ' ')} S=${printScale}`}
+              fontSize={11} fill="#EF4444" listening={false} />
+          </Layer>
+        );
+      })()}
 
       {/* 頂点タップ建物入力プレビュー */}
       {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0 && (

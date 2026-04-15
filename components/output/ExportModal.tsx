@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { PaperSize, ScaleOption } from '@/types';
+import { useCanvasStore } from '@/stores/canvasStore';
 
 type Props = {
   onClose: () => void;
@@ -24,22 +25,31 @@ const SCALES: { id: ScaleOption; label: string }[] = [
   { id: '1/50', label: '1/50' },
   { id: '1/100', label: '1/100' },
   { id: '1/200', label: '1/200' },
-  { id: 'auto', label: '自動フィット' },
+  { id: '1/300', label: '1/300' },
+  { id: 'auto', label: '自動' },
 ];
 
 export default function ExportModal({ onClose, onExport, siteName }: Props) {
+  const { setPrintPaperSize, setPrintScale, printPaperSize, printScale: storeScale } = useCanvasStore();
   const [format, setFormat] = useState<'pdf' | 'png' | 'dxf'>('pdf');
-  const [paperSize, setPaperSize] = useState<PaperSize>('A4_landscape');
-  const [scale, setScale] = useState<ScaleOption>('1/100');
+  const [paperSize, setPaperSize] = useState<PaperSize>(printPaperSize);
+  const [scale, setScale] = useState<ScaleOption>(storeScale);
+
+  // 用紙・縮尺変更をストアに同期
+  const handlePaperChange = (p: PaperSize) => {
+    setPaperSize(p);
+    setPrintPaperSize(p);
+  };
+  const handleScaleChange = (s: ScaleOption) => {
+    setScale(s);
+    setPrintScale(s);
+  };
 
   return (
-    <div
-      className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50"
-      onClick={onClose}
-    >
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
+      <div className="absolute inset-0 modal-overlay" onClick={onClose} />
       <div
-        className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
-        onClick={(e) => e.stopPropagation()}
+        className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
       >
         <div className="px-4 py-3 border-b border-dark-border flex items-center justify-between">
           <h2 className="font-bold text-lg">出力</h2>
@@ -73,7 +83,7 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
                 {PAPER_SIZES.map((p) => (
                   <button
                     key={p.id}
-                    onClick={() => setPaperSize(p.id)}
+                    onClick={() => handlePaperChange(p.id)}
                     className={`py-2 rounded-lg text-sm ${
                       paperSize === p.id ? 'bg-accent text-white' : 'bg-dark-bg text-canvas border border-dark-border'
                     }`}
@@ -93,7 +103,7 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
                 {SCALES.map((s) => (
                   <button
                     key={s.id}
-                    onClick={() => setScale(s.id)}
+                    onClick={() => handleScaleChange(s.id)}
                     className={`flex-1 py-2 rounded-lg text-sm ${
                       scale === s.id ? 'bg-accent text-white' : 'bg-dark-bg text-canvas border border-dark-border'
                     }`}
@@ -106,7 +116,15 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
           )}
 
           <button
-            onClick={() => onExport({ format, paperSize, scale })}
+            type="button"
+            onClick={async () => {
+              try {
+                await onExport({ format, paperSize, scale });
+              } catch (e) {
+                console.error('[Export] error:', e);
+                alert(`出力エラー: ${e instanceof Error ? e.message : String(e)}`);
+              }
+            }}
             className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg"
           >
             出力する

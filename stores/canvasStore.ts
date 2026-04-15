@@ -83,6 +83,15 @@ type CanvasStore = {
   toggleShowDimensions: () => void;
   showGridGuide: boolean;
   toggleShowGridGuide: () => void;
+  showPrintArea: boolean;
+  toggleShowPrintArea: () => void;
+  printPaperSize: import('@/types').PaperSize;
+  printScale: import('@/types').ScaleOption;
+  setPrintPaperSize: (s: import('@/types').PaperSize) => void;
+  setPrintScale: (s: import('@/types').ScaleOption) => void;
+  /** 印刷枠の中心位置（グリッド座標、null=建物中心に自動配置） */
+  printAreaCenter: { x: number; y: number } | null;
+  setPrintAreaCenter: (p: { x: number; y: number } | null) => void;
 
   // Measurement
   isMeasuring: boolean;
@@ -173,6 +182,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   toggleShowDimensions: () => set({ showDimensions: !get().showDimensions }),
   showGridGuide: false,
   toggleShowGridGuide: () => set({ showGridGuide: !get().showGridGuide }),
+  showPrintArea: false,
+  toggleShowPrintArea: () => set({ showPrintArea: !get().showPrintArea }),
+  printPaperSize: 'A4_landscape' as import('@/types').PaperSize,
+  printScale: '1/100' as import('@/types').ScaleOption,
+  setPrintPaperSize: (s) => set({ printPaperSize: s }),
+  setPrintScale: (s) => set({ printScale: s }),
+  printAreaCenter: null,
+  setPrintAreaCenter: (p) => set({ printAreaCenter: p }),
 
   isMeasuring: false,
   measurePoint1: null,

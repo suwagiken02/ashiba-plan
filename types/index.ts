@@ -158,7 +158,7 @@ export type ScaffoldStartConfig = {
 
 // === 出力設定 ===
 export type PaperSize = 'A4_portrait' | 'A4_landscape' | 'A3_portrait' | 'A3_landscape';
-export type ScaleOption = '1/50' | '1/100' | '1/200' | 'auto';
+export type ScaleOption = '1/50' | '1/100' | '1/200' | '1/300' | 'auto';
 
 export type ExportSettings = {
   format: 'pdf' | 'png' | 'dxf';
