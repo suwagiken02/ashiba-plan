@@ -439,9 +439,8 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
       {showPrintArea && (() => {
         const area = getPrintAreaGrid(printPaperSize, printScale);
         if (!area) return null;
-        // zoom を掛けない: Konva Stage の transform が自動適用される
-        const gp = INITIAL_GRID_PX;
-        const gpz = INITIAL_GRID_PX * zoom; // pan座標変換用のみ
+        // 建物と同じ座標変換: gridCoord * INITIAL_GRID_PX * zoom + pan
+        const gridPx = INITIAL_GRID_PX * zoom;
         // 中心座標（グリッド単位）
         let centerGrid: { x: number; y: number };
         if (printAreaCenter) {
@@ -456,31 +455,27 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
               }
             centerGrid = { x: (bMinX + bMaxX) / 2, y: (bMinY + bMaxY) / 2 };
           } else {
-            centerGrid = { x: (width / 2 - panX) / gpz, y: (height / 2 - panY) / gpz };
+            centerGrid = { x: (width / 2 - panX) / gridPx, y: (height / 2 - panY) / gridPx };
           }
         }
-        // サイズ: グリッド数 × GRID_PX（zoom なし）
-        const pw = area.widthGrid * gp;
-        const ph = area.heightGrid * gp;
-        // 位置: グリッド座標 → スクリーン座標（zoom + pan 適用）
-        const px = centerGrid.x * gpz + panX - pw * zoom / 2;
-        const py = centerGrid.y * gpz + panY - ph * zoom / 2;
-        // 実際の描画サイズ: zoom 適用
-        const dpw = pw * zoom;
-        const dph = ph * zoom;
+        // サイズ・位置: 建物と同じ座標変換（gridCoord * gridPx + pan）
+        const pw = area.widthGrid * gridPx;
+        const ph = area.heightGrid * gridPx;
+        const px = centerGrid.x * gridPx + panX - pw / 2;
+        const py = centerGrid.y * gridPx + panY - ph / 2;
         return (
           <Layer>
-            <Rect x={px} y={py} width={dpw} height={dph}
+            <Rect x={px} y={py} width={pw} height={ph}
               stroke="#EF4444" strokeWidth={1.5} dash={[8, 4]}
               draggable
               onDragEnd={(e) => {
-                const newCenterX = (e.target.x() + dpw / 2 - panX) / gpz;
-                const newCenterY = (e.target.y() + dph / 2 - panY) / gpz;
+                const newCenterX = (e.target.x() + pw / 2 - panX) / gridPx;
+                const newCenterY = (e.target.y() + ph / 2 - panY) / gridPx;
                 setPrintAreaCenter({ x: Math.round(newCenterX), y: Math.round(newCenterY) });
               }}
             />
             <Text x={px + 4} y={py + 4}
-              text={`${printPaperSize.replace('_', ' ')} S=${printScale} (${area.widthGrid}×${area.heightGrid}grid)`}
+              text={`${printPaperSize.replace('_', ' ')} S=${printScale}`}
               fontSize={11} fill="#EF4444" listening={false} />
           </Layer>
         );
