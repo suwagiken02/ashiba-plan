@@ -30,30 +30,75 @@ const SCALES: { id: ScaleOption; label: string }[] = [
 ];
 
 export default function ExportModal({ onClose, onExport, siteName }: Props) {
-  const { setPrintPaperSize, setPrintScale, printPaperSize, printScale: storeScale } = useCanvasStore();
+  const { setPrintPaperSize, setPrintScale, showPrintArea, toggleShowPrintArea, setPrintAreaCenter } = useCanvasStore();
+  const [step, setStep] = useState<'settings' | 'range'>('settings');
   const [format, setFormat] = useState<'pdf' | 'png' | 'dxf'>('pdf');
-  const [paperSize, setPaperSize] = useState<PaperSize>(printPaperSize);
-  const [scale, setScale] = useState<ScaleOption>(storeScale);
+  const [paperSize, setPaperSize] = useState<PaperSize>('A4_landscape');
+  const [scale, setScale] = useState<ScaleOption>('1/100');
 
-  // 用紙・縮尺変更をストアに同期
-  const handlePaperChange = (p: PaperSize) => {
-    setPaperSize(p);
-    setPrintPaperSize(p);
-  };
-  const handleScaleChange = (s: ScaleOption) => {
-    setScale(s);
-    setPrintScale(s);
+  // ステップ1 → ステップ2: 印刷枠を表示してモーダルを隠す
+  const handleConfirmSettings = () => {
+    if (format !== 'pdf') {
+      // PNG/DXFは範囲指定不要 → そのまま出力
+      onExport({ format, paperSize, scale });
+      return;
+    }
+    // PDF: 印刷枠を表示してステップ2へ
+    setPrintPaperSize(paperSize);
+    setPrintScale(scale);
+    if (!showPrintArea) toggleShowPrintArea();
+    setStep('range');
   };
 
+  // ステップ2: 出力実行
+  const handleExport = async () => {
+    try {
+      await onExport({ format, paperSize, scale });
+    } catch (e) {
+      console.error('[Export] error:', e);
+      alert(`出力エラー: ${e instanceof Error ? e.message : String(e)}`);
+    }
+    // 印刷枠を非表示
+    if (useCanvasStore.getState().showPrintArea) useCanvasStore.getState().toggleShowPrintArea();
+    setPrintAreaCenter(null);
+  };
+
+  // キャンセル
+  const handleClose = () => {
+    if (useCanvasStore.getState().showPrintArea) useCanvasStore.getState().toggleShowPrintArea();
+    setPrintAreaCenter(null);
+    onClose();
+  };
+
+  // ステップ2: 範囲指定中（モーダルは下部に小さく表示）
+  if (step === 'range') {
+    return (
+      <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3">
+        <span className="text-sm text-canvas">印刷枠をドラッグして範囲を調整</span>
+        <button type="button" onClick={handleExport}
+          className="px-4 py-2 bg-accent text-white font-bold rounded-lg text-sm">
+          PDF出力
+        </button>
+        <button type="button" onClick={() => { setStep('settings'); if (useCanvasStore.getState().showPrintArea) useCanvasStore.getState().toggleShowPrintArea(); }}
+          className="px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-xs text-dimension">
+          戻る
+        </button>
+        <button type="button" onClick={handleClose}
+          className="px-2 py-2 text-dimension hover:text-canvas text-sm">
+          ✕
+        </button>
+      </div>
+    );
+  }
+
+  // ステップ1: 設定モーダル
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-      <div className="absolute inset-0 modal-overlay" onClick={onClose} />
-      <div
-        className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md"
-      >
+      <div className="absolute inset-0 modal-overlay" onClick={handleClose} />
+      <div className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md">
         <div className="px-4 py-3 border-b border-dark-border flex items-center justify-between">
-          <h2 className="font-bold text-lg">出力</h2>
-          <button onClick={onClose} className="text-dimension hover:text-canvas px-2">✕</button>
+          <h2 className="font-bold text-lg">出力設定</h2>
+          <button type="button" onClick={handleClose} className="text-dimension hover:text-canvas px-2">✕</button>
         </div>
 
         <div className="p-4 space-y-4">
@@ -62,15 +107,10 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
             <p className="text-xs text-dimension mb-2">出力形式</p>
             <div className="flex gap-2">
               {(['pdf', 'png', 'dxf'] as const).map((f) => (
-                <button
-                  key={f}
-                  onClick={() => setFormat(f)}
+                <button key={f} type="button" onClick={() => setFormat(f)}
                   className={`flex-1 py-3 rounded-lg text-sm font-bold uppercase ${
                     format === f ? 'bg-accent text-white' : 'bg-dark-bg text-canvas border border-dark-border'
-                  }`}
-                >
-                  {f}
-                </button>
+                  }`}>{f}</button>
               ))}
             </div>
           </div>
@@ -81,15 +121,10 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
               <p className="text-xs text-dimension mb-2">用紙サイズ</p>
               <div className="grid grid-cols-2 gap-2">
                 {PAPER_SIZES.map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => handlePaperChange(p.id)}
+                  <button key={p.id} type="button" onClick={() => setPaperSize(p.id)}
                     className={`py-2 rounded-lg text-sm ${
                       paperSize === p.id ? 'bg-accent text-white' : 'bg-dark-bg text-canvas border border-dark-border'
-                    }`}
-                  >
-                    {p.label}
-                  </button>
+                    }`}>{p.label}</button>
                 ))}
               </div>
             </div>
@@ -99,35 +134,20 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
           {format !== 'png' && (
             <div>
               <p className="text-xs text-dimension mb-2">縮尺</p>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
                 {SCALES.map((s) => (
-                  <button
-                    key={s.id}
-                    onClick={() => handleScaleChange(s.id)}
-                    className={`flex-1 py-2 rounded-lg text-sm ${
+                  <button key={s.id} type="button" onClick={() => setScale(s.id)}
+                    className={`flex-1 min-w-[48px] py-2 rounded-lg text-sm ${
                       scale === s.id ? 'bg-accent text-white' : 'bg-dark-bg text-canvas border border-dark-border'
-                    }`}
-                  >
-                    {s.label}
-                  </button>
+                    }`}>{s.label}</button>
                 ))}
               </div>
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={async () => {
-              try {
-                await onExport({ format, paperSize, scale });
-              } catch (e) {
-                console.error('[Export] error:', e);
-                alert(`出力エラー: ${e instanceof Error ? e.message : String(e)}`);
-              }
-            }}
-            className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg"
-          >
-            出力する
+          <button type="button" onClick={handleConfirmSettings}
+            className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg">
+            {format === 'pdf' ? '範囲を指定する →' : '出力する'}
           </button>
         </div>
       </div>

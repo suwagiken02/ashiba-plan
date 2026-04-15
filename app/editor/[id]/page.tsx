@@ -50,8 +50,6 @@ export default function EditorPage() {
     toggleShowDimensions,
     showGridGuide,
     toggleShowGridGuide,
-    showPrintArea,
-    toggleShowPrintArea,
     selectedIds,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -227,35 +225,12 @@ export default function EditorPage() {
           </button>
 
           {/* 出力 */}
-          {!showPrintArea ? (
-            <button
-              onClick={() => {
-                // 印刷枠を表示（ドラッグで範囲を調整）
-                if (!showPrintArea) toggleShowPrintArea();
-              }}
-              className="px-3 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
-            >
-              出力
-            </button>
-          ) : (
-            <div className="flex gap-1">
-              <button
-                onClick={() => setShowExportModal(true)}
-                className="px-3 py-1 bg-accent text-white rounded-lg text-sm font-bold"
-              >
-                出力設定へ
-              </button>
-              <button
-                onClick={() => {
-                  toggleShowPrintArea();
-                  useCanvasStore.getState().setPrintAreaCenter(null);
-                }}
-                className="px-2 py-1 bg-dark-bg border border-dark-border rounded-lg text-xs text-dimension"
-              >
-                ✕
-              </button>
-            </div>
-          )}
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="px-3 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
+          >
+            出力
+          </button>
         </div>
       </header>
 
@@ -351,24 +326,6 @@ export default function EditorPage() {
             </svg>
           </button>
 
-          {/* 印刷枠ガイドトグル */}
-          <button
-            onClick={toggleShowPrintArea}
-            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
-              showPrintArea
-                ? 'bg-accent border-accent text-white'
-                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
-            }`}
-            title={showPrintArea ? '印刷枠を非表示' : '印刷枠を表示'}
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="2" y="2" width="14" height="14" strokeDasharray="3 2" />
-              <line x1="5" y1="6" x2="13" y2="6" />
-              <line x1="5" y1="9" x2="11" y2="9" />
-              <line x1="5" y1="12" x2="13" y2="12" />
-            </svg>
-          </button>
-
           {/* 足場開始ボタン（建物配置済み＆足場未設定時に表示） */}
           {canvasData.buildings.length > 0 && !canvasData.scaffoldStart && (
             <button
@@ -438,17 +395,10 @@ export default function EditorPage() {
       )}
       {showExportModal && (
         <ExportModal
-          onClose={() => {
-            setShowExportModal(false);
-            // 印刷枠を非表示
-            if (useCanvasStore.getState().showPrintArea) useCanvasStore.getState().toggleShowPrintArea();
-            useCanvasStore.getState().setPrintAreaCenter(null);
-          }}
+          onClose={() => setShowExportModal(false)}
           onExport={async (settings) => {
             await handleExport(settings);
-            // 出力完了後に印刷枠を非表示
-            if (useCanvasStore.getState().showPrintArea) useCanvasStore.getState().toggleShowPrintArea();
-            useCanvasStore.getState().setPrintAreaCenter(null);
+            setShowExportModal(false);
           }}
           siteName={siteName}
         />

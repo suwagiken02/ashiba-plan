@@ -34,13 +34,12 @@ export function getPrintAreaGrid(
   const paper = PAPER_MM[paperSize];
   const factor = SCALE_FACTORS[scale];
   if (!paper || !factor) return null;
-  const marginMm = 15;
-  const titleBlockMm = 30;
-  const drawableW = paper.width - marginMm * 2;
-  const drawableH = paper.height - marginMm * 2 - titleBlockMm;
+  // 用紙全体のサイズをグリッド単位で返す（余白は含めない簡易計算）
+  // 1mm on paper = factor mm real, 1 grid = 10mm real
+  // → 1mm on paper = factor/10 grids
   return {
-    widthGrid: (drawableW * factor) / 10,
-    heightGrid: (drawableH * factor) / 10,
+    widthGrid: (paper.width * factor) / 10,
+    heightGrid: (paper.height * factor) / 10,
   };
 }
 
