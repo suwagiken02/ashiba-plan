@@ -124,7 +124,8 @@ export type BuildingTemplateId =
   | 'l_ne' | 'l_nw' | 'l_se' | 'l_sw'
   | 'convex_s' | 'convex_n' | 'convex_e' | 'convex_w'
   | 'u_s' | 'u_n'
-  | 't_cross';
+  | 't_cross'
+  | 'circle';
 
 export type TemplateDimension = {
   key: string;

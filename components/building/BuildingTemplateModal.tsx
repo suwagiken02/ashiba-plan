@@ -23,6 +23,7 @@ const SHAPE_PATHS: Record<BuildingTemplateId, string> = {
   u_s: 'M2,2 H22 V22 H16 V14 H8 V22 H2 Z',
   u_n: 'M2,2 H8 V10 H16 V2 H22 V22 H2 Z',
   t_cross: 'M8,2 H16 V8 H22 V16 H16 V22 H8 V16 H2 V8 H8 Z',
+  circle: 'M12,2 A10,10 0 1,1 12,22 A10,10 0 1,1 12,2 Z',
 };
 
 /** 全辺のdimKeyを返す（edgeIndex順） */
@@ -75,6 +76,7 @@ function getKeyEdgeMap(id: BuildingTemplateId): Record<string, number> {
     case 'u_s': return { tw: 0, th: 1, ow: 4, od: 3 };
     case 'u_n': return { tw: 5, th: 6, ow: 2, od: 3 };
     case 't_cross': return { vw: 0, vh: 6, hw: 3, hh: 4 };
+    case 'circle': return { diameter: 0 };
     default: return {};
   }
 }
@@ -124,6 +126,15 @@ function PreviewSVG({ templateId, dims, focusedKey }: {
   const centroidX = svgPts.reduce((s, p) => s + p.x, 0) / edgeCount;
   const centroidY = svgPts.reduce((s, p) => s + p.y, 0) / edgeCount;
   const edgeKeyMap = getEdgeKeyMap(templateId);
+
+  // 円形は辺ラベル不要
+  if (templateId === 'circle') {
+    return (
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} className="mx-auto block">
+        <path d={pathD} fill="#3d3d3a" stroke="#1a1a18" strokeWidth={2} />
+      </svg>
+    );
+  }
 
   const labels: { cx: number; cy: number; letter: string; highlighted: boolean; hasDimKey: boolean }[] = [];
   for (let i = 0; i < edgeCount; i++) {
@@ -242,6 +253,7 @@ export default function BuildingTemplateModal({ onClose }: Props) {
 
   // 派生辺かどうかの判定
   const isRect = selectedTemplate === 'rect';
+  const isCircle = selectedTemplate === 'circle';
   const independentKeys = template ? new Set(template.dimensions.map(d => d.key)) : new Set<string>();
   const edgeKeyMap = getEdgeKeyMap(selectedTemplate);
 
@@ -249,8 +261,8 @@ export default function BuildingTemplateModal({ onClose }: Props) {
   const rawPts = template ? template.buildPoints(dims) : [];
   const edgeCount = rawPts.length;
   const hasDerived = Object.keys(edgeKeyMap).length < edgeCount;
-  // rect は独自の連動ロジック。他テンプレートは派生辺あり
-  const showAutoCalcCheckbox = isRect || hasDerived;
+  // rect は独自の連動ロジック。他テンプレートは派生辺あり。円形は不要
+  const showAutoCalcCheckbox = !isCircle && (isRect || hasDerived);
 
   // 各辺の行データを構築
   const buildRows = () => {
@@ -367,34 +379,53 @@ export default function BuildingTemplateModal({ onClose }: Props) {
 
             {/* Dimension inputs */}
             <div className="space-y-2 mt-2">
-              {buildRows().map(row => (
-                <div key={row.letter} className="flex items-center gap-2">
-                  <span className={`shrink-0 px-1.5 h-6 flex items-center justify-center rounded text-xs font-bold ${
-                    row.editable && focusedDimKey === row.dimKey ? 'bg-accent text-white'
-                    : row.editable ? 'bg-dark-bg text-dimension'
-                    : 'bg-dark-bg/50 text-dimension/50'
-                  }`}>{row.letter}<span className="font-normal text-[10px] ml-0.5">({unit})</span></span>
-                  {row.editable ? (
-                    <input type="number" value={mmToDisplay(row.value)}
-                      onChange={e => {
-                        const num = parseFloat(e.target.value);
-                        if (!isNaN(num) && num > 0 && row.dimKey) updateDim(row.dimKey, displayToMm(num));
-                      }}
-                      onFocus={() => setFocusedDimKey(row.dimKey)}
-                      onBlur={() => setFocusedDimKey(null)}
-                      className={`flex-1 px-3 py-2 bg-dark-bg border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none ${
-                        focusedDimKey === row.dimKey ? 'border-accent' : 'border-dark-border'
-                      }`}
-                      step={unit === 'm' ? 0.1 : 100} min={unit === 'm' ? 0.1 : 100}
-                    />
-                  ) : (
-                    <div className="flex-1 px-3 py-2 bg-dark-bg/60 border border-dark-border/50 rounded-lg text-dimension/70 text-right font-mono text-sm">
-                      {mmToDisplay(row.value)}
-                    </div>
-                  )}
+              {isCircle ? (
+                /* 円形: 直径のみ */
+                <div className="flex items-center gap-2">
+                  <span className="shrink-0 px-1.5 h-6 flex items-center justify-center rounded text-xs font-bold bg-dark-bg text-dimension">
+                    直径<span className="font-normal text-[10px] ml-0.5">({unit})</span>
+                  </span>
+                  <input type="number" value={mmToDisplay(dims.diameter ?? 6000)}
+                    onChange={e => {
+                      const num = parseFloat(e.target.value);
+                      if (!isNaN(num) && num > 0) updateDim('diameter', displayToMm(num));
+                    }}
+                    className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none focus:border-accent"
+                    step={unit === 'm' ? 0.1 : 100} min={unit === 'm' ? 0.1 : 100}
+                  />
                   <span className="text-dimension text-xs w-6">{unit}</span>
                 </div>
-              ))}
+              ) : (
+                /* 多角形: 各辺の入力 */
+                buildRows().map(row => (
+                  <div key={row.letter} className="flex items-center gap-2">
+                    <span className={`shrink-0 px-1.5 h-6 flex items-center justify-center rounded text-xs font-bold ${
+                      row.editable && focusedDimKey === row.dimKey ? 'bg-accent text-white'
+                      : row.editable ? 'bg-dark-bg text-dimension'
+                      : 'bg-dark-bg/50 text-dimension/50'
+                    }`}>{row.letter}<span className="font-normal text-[10px] ml-0.5">({unit})</span></span>
+                    {row.editable ? (
+                      <input type="number" value={mmToDisplay(row.value)}
+                        onChange={e => {
+                          const num = parseFloat(e.target.value);
+                          if (!isNaN(num) && num > 0 && row.dimKey) updateDim(row.dimKey, displayToMm(num));
+                        }}
+                        onFocus={() => setFocusedDimKey(row.dimKey)}
+                        onBlur={() => setFocusedDimKey(null)}
+                        className={`flex-1 px-3 py-2 bg-dark-bg border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none ${
+                          focusedDimKey === row.dimKey ? 'border-accent' : 'border-dark-border'
+                        }`}
+                        step={unit === 'm' ? 0.1 : 100} min={unit === 'm' ? 0.1 : 100}
+                      />
+                    ) : (
+                      <div className="flex-1 px-3 py-2 bg-dark-bg/60 border border-dark-border/50 rounded-lg text-dimension/70 text-right font-mono text-sm">
+                        {mmToDisplay(row.value)}
+                      </div>
+                    )}
+                    <span className="text-dimension text-xs w-6">{unit}</span>
+                  </div>
+                ))
+              )}
             </div>
 
             {/* Roof config */}

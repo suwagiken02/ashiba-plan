@@ -340,6 +340,28 @@ export const BUILDING_TEMPLATES: BuildingTemplate[] = [
       ];
     },
   },
+  // --- 円形 ---
+  {
+    id: 'circle',
+    name: '円形',
+    icon: '●',
+    dimensions: [
+      { key: 'diameter', label: '直径(mm)', defaultMm: 6000 },
+    ],
+    buildPoints: (d) => {
+      const r = mmToGrid(d.diameter) / 2;
+      const n = 36; // 36角形（10度刻み）
+      const pts: Point[] = [];
+      for (let i = 0; i < n; i++) {
+        const angle = (2 * Math.PI * i) / n - Math.PI / 2; // 上から開始
+        pts.push({
+          x: Math.round(r + r * Math.cos(angle)),
+          y: Math.round(r + r * Math.sin(angle)),
+        });
+      }
+      return pts;
+    },
+  },
 ];
 
 /** テンプレートIDからテンプレートを取得 */
