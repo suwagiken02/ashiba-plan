@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Layer, Line, Circle, Rect, Text } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -10,7 +10,11 @@ import { getHandrailColor } from '@/lib/konva/handrailColors';
 import { HandrailLengthMm } from '@/types';
 
 export default function ScaffoldLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode, highlightIds } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode, highlightIds, isReorderMode, reorderHandrails } = useCanvasStore();
+  const [dragReorderPreview, setDragReorderPreview] = useState<{
+    lineIds: string[];
+    newOrder: string[];
+  } | null>(null);
   const gridPx = INITIAL_GRID_PX * zoom;
 
   return (
@@ -89,14 +93,48 @@ export default function ScaffoldLayer() {
               listening={true}
               id={h.id}
               draggable={mode === 'select'}
-              onTouchStart={(e) => console.log('[TouchStart]', e)}
-              onTouchEnd={(e) => console.log('[TouchEnd]', e)}
               onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragMove={(e) => {
+                if (!isReorderMode) return;
+                const s = useCanvasStore.getState();
+                const isHoriz = h.direction === 'horizontal';
+                const TOL = 3;
+                const lineHandrails = s.canvasData.handrails.filter(other =>
+                  isHoriz ? Math.abs(other.y - h.y) < TOL : Math.abs(other.x - h.x) < TOL
+                );
+                if (lineHandrails.length < 2) return;
+
+                const dragOffset = isHoriz ? e.target.x() / (INITIAL_GRID_PX * s.zoom) : e.target.y() / (INITIAL_GRID_PX * s.zoom);
+                const dragPos = isHoriz ? h.x + dragOffset : h.y + dragOffset;
+
+                const others = lineHandrails
+                  .filter(o => o.id !== h.id)
+                  .sort((a, b) => isHoriz ? a.x - b.x : a.y - b.y);
+
+                let insertIdx = others.length;
+                for (let i = 0; i < others.length; i++) {
+                  const mid = isHoriz
+                    ? others[i].x + mmToGrid(others[i].lengthMm) / 2
+                    : others[i].y + mmToGrid(others[i].lengthMm) / 2;
+                  if (dragPos < mid) { insertIdx = i; break; }
+                }
+
+                const newOrder = [...others.map(o => o.id)];
+                newOrder.splice(insertIdx, 0, h.id);
+                setDragReorderPreview({ lineIds: lineHandrails.map(o => o.id), newOrder });
+              }}
               onDragEnd={(e) => {
-                console.log('[DragEnd]', { isDuplicateMode, dx: Math.round(e.target.x() / gridPx), dy: Math.round(e.target.y() / gridPx) });
+                const s = useCanvasStore.getState();
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
                 e.target.x(0); e.target.y(0);
+
+                if (isReorderMode && dragReorderPreview) {
+                  reorderHandrails(dragReorderPreview.lineIds, dragReorderPreview.newOrder);
+                  setDragReorderPreview(null);
+                  return;
+                }
+
                 if (dx !== 0 || dy !== 0) {
                   if (isDuplicateMode) {
                     useCanvasStore.getState().addHandrail({ ...h, id: uuidv4(), x: h.x + dx, y: h.y + dy });
@@ -144,6 +182,40 @@ export default function ScaffoldLayer() {
           </React.Fragment>
         );
       })}
+
+      {/* 並び替えプレビュー */}
+      {dragReorderPreview && canvasData.handrails
+        .filter(hr => dragReorderPreview.lineIds.includes(hr.id))
+        .map((hr, i) => {
+          const newIdx = dragReorderPreview.newOrder.indexOf(hr.id);
+          if (newIdx === -1) return null;
+          const isHoriz = hr.direction === 'horizontal';
+          const sorted = canvasData.handrails
+            .filter(o => dragReorderPreview.lineIds.includes(o.id))
+            .sort((a, b) => isHoriz ? a.x - b.x : a.y - b.y);
+          const targetHr = sorted[newIdx];
+          if (!targetHr) return null;
+          const newX = isHoriz ? targetHr.x : hr.x;
+          const newY = isHoriz ? hr.y : targetHr.y;
+          const [s, e] = getHandrailEndpoints({ ...hr, x: newX, y: newY });
+          return (
+            <Line
+              key={`reorder-preview-${hr.id}`}
+              points={[
+                s.x * gridPx + panX,
+                s.y * gridPx + panY,
+                e.x * gridPx + panX,
+                e.y * gridPx + panY,
+              ]}
+              stroke="#3B82F6"
+              strokeWidth={2}
+              dash={[6, 4]}
+              opacity={0.7}
+              listening={false}
+            />
+          );
+        })
+      }
 
       {/* 支柱 */}
       {canvasData.posts.map((p) => {

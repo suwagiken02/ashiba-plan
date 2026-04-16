@@ -123,6 +123,7 @@ type CanvasStore = {
   // 手摺入れ替えモード
   isReorderMode: boolean;
   toggleReorderMode: () => void;
+  reorderHandrails: (lineIds: string[], newOrder: string[]) => void;
 
   // 2F仮配置
   building2FDraft: {
@@ -265,6 +266,21 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   isReorderMode: false,
   toggleReorderMode: () => set({ isReorderMode: !get().isReorderMode }),
+  reorderHandrails: (lineIds, newOrder) => {
+    const { canvasData, pushHistory } = get();
+    const lineGroup = canvasData.handrails.filter(h => lineIds.includes(h.id));
+    const others = canvasData.handrails.filter(h => !lineIds.includes(h.id));
+    const sorted = [...lineGroup].sort((a, b) =>
+      a.direction === 'horizontal' ? a.x - b.x : a.y - b.y
+    );
+    const positions = sorted.map(h => ({ x: h.x, y: h.y }));
+    const reordered = newOrder.map((id, i) => {
+      const handrail = lineGroup.find(h => h.id === id)!;
+      return { ...handrail, x: positions[i].x, y: positions[i].y };
+    });
+    pushHistory();
+    set({ canvasData: { ...canvasData, handrails: [...others, ...reordered] }, isDirty: true });
+  },
 
   building2FDraft: null,
   setBuilding2FDraft: (draft) => set({ building2FDraft: draft }),
