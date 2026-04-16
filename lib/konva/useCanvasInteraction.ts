@@ -85,13 +85,22 @@ export function useCanvasInteraction() {
   /** window レベルのドラッグ追跡用（キャンバス外でも動作） */
   const stageRef = useRef<Konva.Stage | null>(null);
 
-  // キャンバス外でのドラッグ追跡: window の pointermove/pointerup を使用
+  // キャンバス外でのドラッグ追跡: window の pointer/touch イベントを使用
   useEffect(() => {
-    const onWindowMove = (e: PointerEvent) => {
+    const getClientPos = (e: PointerEvent | TouchEvent): { clientX: number; clientY: number } => {
+      if ('touches' in e) {
+        const t = (e as TouchEvent).touches[0] || (e as TouchEvent).changedTouches[0];
+        return { clientX: t?.clientX ?? 0, clientY: t?.clientY ?? 0 };
+      }
+      return { clientX: (e as PointerEvent).clientX, clientY: (e as PointerEvent).clientY };
+    };
+
+    const onWindowMove = (e: PointerEvent | TouchEvent) => {
       if (!movingElementId.current || !dragStart.current || !stageRef.current) return;
+      const { clientX, clientY } = getClientPos(e);
       const s = useCanvasStore.getState();
       const rect = stageRef.current.container().getBoundingClientRect();
-      const gridPos = screenToGrid(e.clientX - rect.left, e.clientY - rect.top, s.panX, s.panY, s.zoom);
+      const gridPos = screenToGrid(clientX - rect.left, clientY - rect.top, s.panX, s.panY, s.zoom);
 
       const dx = gridPos.x - dragStart.current.x;
       const dy = gridPos.y - dragStart.current.y;
@@ -105,12 +114,13 @@ export function useCanvasInteraction() {
       }
     };
 
-    const onWindowUp = (e: PointerEvent) => {
+    const onWindowUp = (e: PointerEvent | TouchEvent) => {
       if (!movingElementId.current) return;
+      const { clientX, clientY } = getClientPos(e);
       const s = useCanvasStore.getState();
 
       if (isDragging.current) {
-        if (isDropOnPalette(e.clientX, e.clientY)) {
+        if (isDropOnPalette(clientX, clientY)) {
           // パレット上にドロップ → 削除
           s.removeElement(movingElementId.current!);
           s.setSelectedIds([]);
@@ -149,9 +159,13 @@ export function useCanvasInteraction() {
 
     window.addEventListener('pointermove', onWindowMove);
     window.addEventListener('pointerup', onWindowUp);
+    window.addEventListener('touchmove', onWindowMove as EventListener);
+    window.addEventListener('touchend', onWindowUp as EventListener);
     return () => {
       window.removeEventListener('pointermove', onWindowMove);
       window.removeEventListener('pointerup', onWindowUp);
+      window.removeEventListener('touchmove', onWindowMove as EventListener);
+      window.removeEventListener('touchend', onWindowUp as EventListener);
     };
   }, []);
 
