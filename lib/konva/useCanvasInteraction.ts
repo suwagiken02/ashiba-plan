@@ -195,7 +195,7 @@ export function useCanvasInteraction() {
 
       // 全モード共通: クリック位置に既存手摺があれば移動モード
       const hitHandrail = findHandrailAtPos(rawPos, s.canvasData.handrails);
-      if (hitHandrail) {
+      if (hitHandrail && s.mode !== 'post') {
         stageRef.current = stage; // window イベントで座標変換に使用
         movingElementId.current = hitHandrail.id;
         movingHandrail.current = { ...hitHandrail };
@@ -218,7 +218,28 @@ export function useCanvasInteraction() {
         longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
       }
 
-      // post モード: クリック配置は無効化（パレットからのD&Dのみ）
+      // post モード: クリックで支柱配置
+      if (s.mode === 'post') {
+        const snapRadius = 10;
+        let snapX = rawPos.x;
+        let snapY = rawPos.y;
+        let bestDist = snapRadius;
+        for (const h of s.canvasData.handrails) {
+          const endpoints = h.direction === 'horizontal'
+            ? [{ x: h.x, y: h.y }, { x: h.x + Math.round(h.lengthMm / 10), y: h.y }]
+            : [{ x: h.x, y: h.y }, { x: h.x, y: h.y + Math.round(h.lengthMm / 10) }];
+          for (const p of endpoints) {
+            const d = Math.hypot(p.x - rawPos.x, p.y - rawPos.y);
+            if (d < bestDist) {
+              bestDist = d;
+              snapX = p.x;
+              snapY = p.y;
+            }
+          }
+        }
+        s.addPost({ id: uuidv4(), x: snapX, y: snapY });
+        return;
+      }
       // memo モード: プロンプトでの配置は残す
       if (s.mode === 'memo') {
         const text = prompt('メモを入力:');
