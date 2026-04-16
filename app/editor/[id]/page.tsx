@@ -456,12 +456,6 @@ export default function EditorPage() {
           >
             キャンセル
           </button>
-          <button
-            onClick={() => removeLastVertexPoint()}
-            className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
-          >
-            ← 戻る
-          </button>
           {vertexPoints.length >= 3 && (
             <button
               onClick={() => {

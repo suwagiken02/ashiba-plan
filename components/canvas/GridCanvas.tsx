@@ -275,7 +275,13 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
       // Ctrl+Z / Ctrl+Shift+Z
       if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
-        useCanvasStore.getState().undo();
+        const s = useCanvasStore.getState();
+        // 頂点タップ中はundoではなく最後の頂点を削除
+        if (s.mode === 'building' && s.buildingInputMethod === 'vertex' && s.vertexPoints.length > 0) {
+          s.removeLastVertexPoint();
+        } else {
+          s.undo();
+        }
       }
       if (e.ctrlKey && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
