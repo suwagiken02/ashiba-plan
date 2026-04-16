@@ -359,14 +359,42 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
           if (!pointer) return;
           const gridX = Math.round((pointer.x - s.panX) / (INITIAL_GRID_PX * s.zoom));
           const gridY = Math.round((pointer.y - s.panY) / (INITIAL_GRID_PX * s.zoom));
-          // 1Fの頂点に強スナップ
           let snapX = gridX, snapY = gridY;
-          const STRONG_SNAP = 10;
+          const STRONG_SNAP = 15;  // 頂点スナップ
+          const WEAK_SNAP = 8;     // 辺スナップ
+          let bestDist = Infinity;
+
           for (const b of s.canvasData.buildings.filter(b => !b.floor || b.floor === 1)) {
+            // 頂点への強スナップ
             for (const p of b.points) {
-              if (Math.hypot(p.x - gridX, p.y - gridY) < STRONG_SNAP) {
+              const d = Math.hypot(p.x - gridX, p.y - gridY);
+              if (d < STRONG_SNAP && d < bestDist) {
+                bestDist = d;
                 snapX = p.x; snapY = p.y;
-                break;
+              }
+            }
+
+            // 辺への弱スナップ（頂点スナップが優先）
+            if (bestDist >= STRONG_SNAP) {
+              const n = b.points.length;
+              for (let i = 0; i < n; i++) {
+                const p1 = b.points[i];
+                const p2 = b.points[(i + 1) % n];
+                const dx = p2.x - p1.x, dy = p2.y - p1.y;
+                const len2 = dx * dx + dy * dy;
+                if (len2 < 0.01) continue;
+                const t = Math.max(0, Math.min(1, ((gridX - p1.x) * dx + (gridY - p1.y) * dy) / len2));
+                const projX = p1.x + t * dx;
+                const projY = p1.y + t * dy;
+                const d = Math.hypot(gridX - projX, gridY - projY);
+                if (d < WEAK_SNAP && d < bestDist) {
+                  bestDist = d;
+                  if (Math.abs(dy) < Math.abs(dx)) {
+                    snapX = gridX; snapY = Math.round(projY);
+                  } else {
+                    snapX = Math.round(projX); snapY = gridY;
+                  }
+                }
               }
             }
           }
