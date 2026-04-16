@@ -36,6 +36,8 @@ export type BuildingShape = {
   fill: string;
   roof?: RoofConfig;
   floor?: 1 | 2;
+  templateId?: string;
+  templateDims?: Record<string, number>;
 };
 
 // === 屋根の出幅 ===

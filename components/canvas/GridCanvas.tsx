@@ -343,6 +343,8 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
             fill: building2FDraft.fill,
             floor: 2,
             roof: building2FDraft.roof,
+            templateId: building2FDraft.templateId,
+            templateDims: building2FDraft.templateDims,
           });
           useCanvasStore.getState().clearBuilding2FDraft();
           setDraft2FPos(null);

@@ -126,6 +126,8 @@ type CanvasStore = {
     floor: 2;
     fill: string;
     roof?: import('@/types').RoofConfig;
+    templateId?: string;
+    templateDims?: Record<string, number>;
   } | null;
   setBuilding2FDraft: (draft: CanvasStore['building2FDraft']) => void;
   clearBuilding2FDraft: () => void;

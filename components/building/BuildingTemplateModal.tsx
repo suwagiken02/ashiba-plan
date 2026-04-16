@@ -227,19 +227,13 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
     const tpl = BUILDING_TEMPLATES.find(t => t.id === id);
     if (tpl) {
       const defaultDims: Record<string, number> = {};
-      tpl.dimensions.forEach((d, i) => {
-        // 2F作成時は1Fの対応する辺の長さをデフォルト値に
-        if (floor === 2 && floor1Building) {
-          const pts = floor1Building.points;
-          const n = pts.length;
-          if (i < n) {
-            const p1 = pts[i];
-            const p2 = pts[(i + 1) % n];
-            const lenMm = Math.round(Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2) * 10);
-            defaultDims[d.key] = lenMm;
-          } else {
-            defaultDims[d.key] = d.defaultMm;
-          }
+
+      // 2F作成時かつ1F建物と同じテンプレートの場合のみ1Fの寸法を引き継ぐ
+      const shouldInherit = floor === 2 && floor1Building && id === floor1Building.templateId;
+
+      tpl.dimensions.forEach(d => {
+        if (shouldInherit && floor1Building?.templateDims?.[d.key] !== undefined) {
+          defaultDims[d.key] = floor1Building.templateDims[d.key]!;
         } else {
           defaultDims[d.key] = d.defaultMm;
         }
@@ -286,13 +280,15 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
         floor: 2,
         fill: '#5a5a7a',
         roof,
+        templateId: selectedTemplate,
+        templateDims: { ...dims },
       });
       onClose();
       return;
     }
 
     // 1F建物は即配置
-    addBuilding({ id: uuidv4(), type: 'polygon', points, fill: '#3d3d3a', floor: 1, roof });
+    addBuilding({ id: uuidv4(), type: 'polygon', points, fill: '#3d3d3a', floor: 1, roof, templateId: selectedTemplate, templateDims: { ...dims } });
     requestAnimationFrame(() => {
       zoomToFitBuildings(window.innerWidth, window.innerHeight - 120);
     });
