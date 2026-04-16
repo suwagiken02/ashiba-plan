@@ -26,10 +26,15 @@ function getEdgeOverhangs(building: BuildingShape, roof: RoofConfig): number[] {
   const n = pts.length;
   const overhangs: number[] = new Array(n).fill(0);
 
-  // 巻き方向で法線の符号を決定（凹凸ポリゴンでも正確）
   const cw = isClockwise(pts);
 
   for (let i = 0; i < n; i++) {
+    // edgeOverhangsMmが設定されている場合は辺ごとの値を使用
+    if (roof.edgeOverhangsMm && roof.edgeOverhangsMm[i] !== undefined) {
+      overhangs[i] = roof.edgeOverhangsMm[i] > 0 ? mmToGrid(roof.edgeOverhangsMm[i]) : 0;
+      continue;
+    }
+
     const p1 = pts[i];
     const p2 = pts[(i + 1) % n];
     const dx = p2.x - p1.x;
@@ -37,13 +42,9 @@ function getEdgeOverhangs(building: BuildingShape, roof: RoofConfig): number[] {
     const len = Math.sqrt(dx * dx + dy * dy);
     if (len < 1) continue;
 
-    // 外向き法線（巻き方向に基づく確実な計算）
-    // CW: outward = (dy/len, -dx/len)
-    // CCW: outward = (-dy/len, dx/len)
     const nx = cw ? dy / len : -dy / len;
     const ny = cw ? -dx / len : dx / len;
 
-    // 方位判定
     let face: 'north' | 'south' | 'east' | 'west';
     if (Math.abs(ny) > Math.abs(nx)) {
       face = ny < 0 ? 'north' : 'south';
@@ -51,7 +52,6 @@ function getEdgeOverhangs(building: BuildingShape, roof: RoofConfig): number[] {
       face = nx > 0 ? 'east' : 'west';
     }
 
-    // 出幅mm取得
     const getFaceMm = (): number => {
       if (roof.northMm !== null) {
         return { north: roof.northMm!, south: roof.southMm!, east: roof.eastMm!, west: roof.westMm! }[face];
