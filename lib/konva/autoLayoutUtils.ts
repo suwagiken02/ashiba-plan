@@ -159,7 +159,8 @@ export function findBestEndCombinations(effectiveMm: number): LayoutCombination[
   const seen = new Set<string>();
 
   const addResult = (rails: HandrailLengthMm[], rem: number) => {
-    const key = rails.join(',') + '|' + rem;
+    const sorted = [...rails].sort((a, b) => b - a);
+    const key = sorted.join(',') + '|' + rem;
     if (seen.has(key)) return;
     seen.add(key);
     results.push({ rails, remainder: rem, count: rails.length });
@@ -210,10 +211,26 @@ export function findBestEndCombinations(effectiveMm: number): LayoutCombination[
     if (s1 > leftover) continue;
     const rest = leftover - s1;
     for (const s2 of FILLER_SIZES) {
-      if (s2 > s1) continue; // 降順で重複防止
+      if (s2 > s1) continue;
       const rem = rest - s2;
       addResult([...base1800, s1, s2], rem);
-      if (rem <= 0) break;
+      if (rem === 0) break; // ぴったりならbreak、マイナスでも次を試す
+    }
+  }
+
+  // ── パターンG: 端数を3本で賄う組み合わせ ──
+  for (const s1 of FILLER_SIZES) {
+    if (s1 > leftover) continue;
+    const rest1 = leftover - s1;
+    for (const s2 of FILLER_SIZES) {
+      if (s2 > rest1) continue;
+      const rest2 = rest1 - s2;
+      for (const s3 of FILLER_SIZES) {
+        const rem = rest2 - s3;
+        addResult([...base1800, s1, s2, s3], rem);
+        if (rem <= 0) break;
+      }
+      if (rest2 <= 0) break;
     }
   }
 
@@ -276,13 +293,11 @@ export function computeAutoLayout(
   const distGrids: number[] = [];
   for (let i = 0; i < n; i++) {
     const e = edges[i];
-    console.log(`[scaffold] ${e.label}: p1=(${e.p1.x},${e.p1.y}) n=(${e.nx.toFixed(1)},${e.ny.toFixed(1)}) face=${e.face} dir=${e.handrailDir}`);
     const dist = distances[edges[i].index] ?? 900;
     const dg = mmToGrid(dist);
     distGrids.push(dg);
     const sc = calcScaffoldCoord(edges[i], dg);
     scaffoldCoords.push(sc);
-    console.log(`[scaffold] ${e.label}: dist=${dist}mm distGrid=${dg} → scaffoldCoord=${sc}`);
   }
 
   // 2パス目: cursorStart/cursorEnd と effectiveMm を計算
@@ -316,7 +331,6 @@ export function computeAutoLayout(
       cursorStart = edge.handrailDir === 'horizontal' ? edge.p1.x : edge.p1.y;
     }
 
-    console.log(`[layout] ${edge.label}: startCorner=${startConvex ? '凸' : '凹'} prevEdge=${prevEdge.label}(${prevEdge.handrailDir}) prevScaffold=${prevScaffold} → cursorStart=${cursorStart}`);
 
     // --- cursorEnd ---
     // 凸コーナー: p2 + 次の面の離れ分飛び出し
@@ -329,7 +343,6 @@ export function computeAutoLayout(
       if (endConvex) {
         cursorEnd = edge.p2.x + sign * mmToGrid(nextDist);
       } else if (nextEdge.handrailDir !== edge.handrailDir) {
-        // 凹コーナー＋方向転換 → 次の面のscaffoldCoordで止まる
         cursorEnd = nextScaffold;
       } else {
         cursorEnd = edge.p2.x;
@@ -345,7 +358,6 @@ export function computeAutoLayout(
       }
     }
 
-    console.log(`[layout] ${edge.label}: endCorner=${endConvex ? '凸' : '凹'} nextScaffold=${nextScaffold} → cursorEnd=${cursorEnd}`);
 
     const effectiveMm = Math.abs(cursorEnd - cursorStart) * 10;
     const candidates = findBestEndCombinations(Math.max(0, effectiveMm));
@@ -380,7 +392,6 @@ export function placeHandrailsForEdge(
 
   const results: { x: number; y: number; lengthMm: HandrailLengthMm; direction: 'horizontal' | 'vertical' }[] = [];
 
-  console.log(`[place] ${edge.label}: face=${edge.face} handrailDir=${edge.handrailDir} scaffold=${layout.scaffoldCoord} cursor=${layout.cursorStart}→${layout.cursorEnd} effective=${layout.effectiveMm}mm`);
 
   if (edge.handrailDir === 'horizontal') {
     const scaffoldY = layout.scaffoldCoord;
@@ -390,7 +401,6 @@ export function placeHandrailsForEdge(
     for (const railMm of rails) {
       const railGrid = mmToGrid(railMm);
       const x = sign > 0 ? cursor : cursor - railGrid;
-      console.log(`[place]   ${edge.label}: ${railMm}mm → (${x},${scaffoldY}) horizontal`);
       results.push({ x, y: scaffoldY, lengthMm: railMm, direction: 'horizontal' });
       cursor += sign * railGrid;
     }
@@ -402,7 +412,6 @@ export function placeHandrailsForEdge(
     for (const railMm of rails) {
       const railGrid = mmToGrid(railMm);
       const y = sign > 0 ? cursor : cursor - railGrid;
-      console.log(`[place]   ${edge.label}: ${railMm}mm → (${scaffoldX},${y}) vertical`);
       results.push({ x: scaffoldX, y, lengthMm: railMm, direction: 'vertical' });
       cursor += sign * railGrid;
     }
