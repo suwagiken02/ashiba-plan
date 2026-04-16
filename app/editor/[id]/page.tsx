@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { useParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -56,6 +57,11 @@ export default function EditorPage() {
     showKidare,
     toggleShowKidare,
     selectedIds,
+    vertexPoints,
+    clearVertexPoints,
+    addBuilding,
+    setMode,
+    buildingInputMethod,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
@@ -436,6 +442,38 @@ export default function EditorPage() {
 
       {/* モードツールバー */}
       <ModeToolbar />
+
+      {/* 頂点タップ確定ボタン */}
+      {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length >= 3 && (
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3">
+          <button
+            onClick={() => {
+              clearVertexPoints();
+              setMode('select');
+            }}
+            className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={() => {
+              if (vertexPoints.length >= 3) {
+                addBuilding({
+                  id: uuidv4(),
+                  type: 'polygon',
+                  points: [...vertexPoints],
+                  fill: '#3d3d3a',
+                });
+                clearVertexPoints();
+                setMode('select');
+              }
+            }}
+            className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
+          >
+            作図確定（{vertexPoints.length}点）
+          </button>
+        </div>
+      )}
 
       {/* モーダル */}
       {showBuildingModal && (
