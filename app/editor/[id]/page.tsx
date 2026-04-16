@@ -442,7 +442,11 @@ export default function EditorPage() {
         <BuildingTemplateModal onClose={() => setShowBuildingModal(false)} />
       )}
       {showBuilding2FModal && (
-        <BuildingTemplateModal floor={2} onClose={() => setShowBuilding2FModal(false)} />
+        <BuildingTemplateModal
+          floor={2}
+          floor1Building={canvasData.buildings.find(b => !b.floor || b.floor === 1)}
+          onClose={() => setShowBuilding2FModal(false)}
+        />
       )}
       {showExportModal && (
         <ExportModal

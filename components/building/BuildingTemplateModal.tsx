@@ -7,7 +7,7 @@ import { BUILDING_TEMPLATES, buildFromTemplate } from '@/lib/konva/buildingBuild
 import { BuildingTemplateId, BuildingInputMethod, RoofType, RoofConfig, Point } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '@/lib/konva/gridUtils';
 
-type Props = { onClose: () => void; floor?: 1 | 2 };
+type Props = { onClose: () => void; floor?: 1 | 2; floor1Building?: import('@/types').BuildingShape };
 
 // --- SVG shape icons ---
 const SHAPE_PATHS: Record<BuildingTemplateId, string> = {
@@ -173,7 +173,7 @@ function PreviewSVG({ templateId, dims, focusedKey }: {
   );
 }
 
-export default function BuildingTemplateModal({ onClose, floor }: Props) {
+export default function BuildingTemplateModal({ onClose, floor, floor1Building }: Props) {
   const { addBuilding, buildingInputMethod, setBuildingInputMethod, zoomToFitBuildings } = useCanvasStore();
   const [selectedTemplate, setSelectedTemplate] = useState<BuildingTemplateId>('rect');
   const [dims, setDims] = useState<Record<string, number>>({});
@@ -227,7 +227,23 @@ export default function BuildingTemplateModal({ onClose, floor }: Props) {
     const tpl = BUILDING_TEMPLATES.find(t => t.id === id);
     if (tpl) {
       const defaultDims: Record<string, number> = {};
-      tpl.dimensions.forEach(d => { defaultDims[d.key] = d.defaultMm; });
+      tpl.dimensions.forEach((d, i) => {
+        // 2F作成時は1Fの対応する辺の長さをデフォルト値に
+        if (floor === 2 && floor1Building) {
+          const pts = floor1Building.points;
+          const n = pts.length;
+          if (i < n) {
+            const p1 = pts[i];
+            const p2 = pts[(i + 1) % n];
+            const lenMm = Math.round(Math.sqrt((p2.x - p1.x) ** 2 + (p2.y - p1.y) ** 2) * 10);
+            defaultDims[d.key] = lenMm;
+          } else {
+            defaultDims[d.key] = d.defaultMm;
+          }
+        } else {
+          defaultDims[d.key] = d.defaultMm;
+        }
+      });
       setDims(defaultDims);
     }
     setFocusedDimKey(null);
