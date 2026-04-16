@@ -16,11 +16,12 @@ import {
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き） */
-function PreviewSVG({ points, edges, focusedIndex, conflictHandrails }: {
+function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeIndex }: {
   points: Point[];
   edges: EdgeInfo[];
   focusedIndex: number | null;
   conflictHandrails?: { x: number; y: number; lengthMm: number; direction: 'horizontal' | 'vertical' | number }[];
+  blinkEdgeIndex?: number;
 }) {
   if (points.length < 3) return null;
 
@@ -59,6 +60,14 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails }: {
               stroke="#FF6B35" strokeWidth={4} strokeLinecap="round"
               className="conflict-rail"
             />
+          );
+        })}
+        {blinkEdgeIndex !== undefined && edges.filter(e => e.index === blinkEdgeIndex).map(edge => {
+          const s1 = toSvg(edge.p1);
+          const s2 = toSvg(edge.p2);
+          return (
+            <line key={`blink-${edge.index}`} x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
+              stroke="#FF6B35" strokeWidth={6} strokeLinecap="round" className="conflict-rail" />
           );
         })}
         {edges.map(edge => {
@@ -157,6 +166,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [showLockedAlert, setShowLockedAlert] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
+  const [distanceSuggestions, setDistanceSuggestions] = useState<{
+    edgeIndex: number;
+    edgeLabel: string;
+    currentDist: number;
+    suggestions: number[];
+  }[]>([]);
+  const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -165,13 +181,83 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setResult(null);
   };
 
+  // 端数0になる離れを探す
+  const findDistSuggestions = (edgeIdx: number, currentDist: number): number[] => {
+    if (!building) return [];
+    const suggestions: number[] = [];
+    for (let delta = 10; delta <= 500; delta += 10) {
+      for (const candidate of [currentDist - delta, currentDist + delta]) {
+        if (candidate <= 0) continue;
+        const testDist = { ...distances, [edgeIdx]: candidate };
+        const testRes = computeAutoLayout(building, testDist, scaffoldStart);
+        const testLayout = testRes.edgeLayouts.find(el => el.edge.index === edgeIdx);
+        if (testLayout && testLayout.candidates[0]?.remainder === 0) {
+          if (!suggestions.includes(candidate)) suggestions.push(candidate);
+          if (suggestions.length >= 3) return suggestions;
+        }
+      }
+    }
+    return suggestions;
+  };
+
   const handleCalc = () => {
     if (!building) return;
     const res = computeAutoLayout(building, distances, scaffoldStart);
+
+    // 端数が残る面を検出（固定面は除く）
+    const problemEdges = res.edgeLayouts.filter(el =>
+      !el.locked &&
+      el.candidates[0]?.remainder !== 0 &&
+      !lockedEdgeIndices.has(el.edge.index)
+    );
+
+    if (problemEdges.length > 0) {
+      const suggestions = problemEdges.map(el => ({
+        edgeIndex: el.edge.index,
+        edgeLabel: el.edge.label,
+        currentDist: distances[el.edge.index] ?? 900,
+        suggestions: findDistSuggestions(el.edge.index, distances[el.edge.index] ?? 900),
+      })).filter(s => s.suggestions.length > 0);
+
+      if (suggestions.length > 0) {
+        setDistanceSuggestions(suggestions);
+        setCurrentSuggestionIdx(0);
+        setResult(res); // 現在の結果も表示
+        return;
+      }
+    }
+
+    setDistanceSuggestions([]);
     setResult(res);
     const sel: Record<number, number> = {};
     res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
     setSelections(sel);
+  };
+
+  const handleSuggestionAccept = (newDist: number) => {
+    const suggestion = distanceSuggestions[currentSuggestionIdx];
+    const newDistances = { ...distances, [suggestion.edgeIndex]: newDist };
+    setDistances(newDistances);
+    proceedToNextSuggestion(newDistances);
+  };
+
+  const handleSuggestionSkip = () => {
+    proceedToNextSuggestion(distances);
+  };
+
+  const proceedToNextSuggestion = (currentDistances: Record<number, number>) => {
+    const nextIdx = currentSuggestionIdx + 1;
+    if (nextIdx < distanceSuggestions.length) {
+      setCurrentSuggestionIdx(nextIdx);
+    } else {
+      setDistanceSuggestions([]);
+      if (!building) return;
+      const res = computeAutoLayout(building, currentDistances, scaffoldStart);
+      setResult(res);
+      const sel: Record<number, number> = {};
+      res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
+      setSelections(sel);
+    }
   };
 
   const handlePlace = () => {
@@ -438,6 +524,56 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           </div>
         </div>
       )}
+
+      {distanceSuggestions.length > 0 && currentSuggestionIdx < distanceSuggestions.length && (() => {
+        const suggestion = distanceSuggestions[currentSuggestionIdx];
+        const currentRemainder = result?.edgeLayouts.find(el => el.edge.index === suggestion.edgeIndex)?.candidates[0]?.remainder;
+        return (
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/30" />
+            <div className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg z-10">
+              <div className="px-4 py-3 border-b border-dark-border">
+                <p className="font-bold text-sm">離れの調整提案</p>
+                <p className="text-xs text-dimension mt-0.5">{currentSuggestionIdx + 1} / {distanceSuggestions.length} 面</p>
+              </div>
+
+              <div className="px-4 pt-3">
+                <PreviewSVG
+                  points={building!.points}
+                  edges={edges}
+                  focusedIndex={suggestion.edgeIndex}
+                  blinkEdgeIndex={suggestion.edgeIndex}
+                />
+              </div>
+
+              <div className="px-4 py-3 space-y-3">
+                <p className="text-sm">
+                  <span className="font-bold">{suggestion.edgeLabel}面</span>（現在の離れ: {suggestion.currentDist}mm）で
+                  <span className="text-yellow-400 font-bold"> 端数{currentRemainder ?? '?'}mm </span>が発生しています。
+                </p>
+                <p className="text-xs text-dimension">以下の離れに変更すると端数0になります：</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestion.suggestions.map((dist) => (
+                    <button key={dist} onClick={() => handleSuggestionAccept(dist)}
+                      className="px-4 py-2 bg-accent/15 border border-accent text-accent font-bold rounded-xl text-sm hover:bg-accent/25 transition-colors"
+                    >
+                      {dist}mm
+                      <span className="text-[10px] ml-1 opacity-70">({dist > suggestion.currentDist ? '+' : ''}{dist - suggestion.currentDist})</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={handleSuggestionSkip}
+                    className="flex-1 py-2.5 border border-dark-border text-dimension rounded-xl text-sm"
+                  >
+                    変更せず次へ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {showLockedAlert && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center px-6">
