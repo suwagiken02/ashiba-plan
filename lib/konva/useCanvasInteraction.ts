@@ -81,6 +81,7 @@ export function useCanvasInteraction() {
   const movingElementId = useRef<string | null>(null);
   const movingHandrail = useRef<Handrail | null>(null);
   const isDuplicating = useRef(false);
+  const isDuplicateMode = useRef(false); // 複製ボタンON/OFFの状態
   /** window レベルのドラッグ追跡用（キャンバス外でも動作） */
   const stageRef = useRef<Konva.Stage | null>(null);
 
@@ -194,65 +195,75 @@ export function useCanvasInteraction() {
         return;
       }
 
-      // 全モード共通: クリック位置に既存手摺があれば移動モード（または複製）
+      // 全モード共通: クリック位置に既存要素があれば選択 or 移動
       const hitHandrail = findHandrailAtPos(rawPos, s.canvasData.handrails);
-      if (hitHandrail && s.mode !== 'post') {
-        stageRef.current = stage;
-        // PC: Altキー押下 → 複製モード
-        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
-        isDuplicating.current = isAlt;
-        if (isAlt) {
-          // 複製: 新しいIDで同じ手摺を追加し、新しい方をドラッグ
-          const newHandrail = { ...hitHandrail, id: uuidv4() };
-          s.addHandrail(newHandrail);
-          movingElementId.current = newHandrail.id;
-          movingHandrail.current = newHandrail;
-        } else {
-          movingElementId.current = hitHandrail.id;
-          movingHandrail.current = { ...hitHandrail };
-        }
-        dragStart.current = rawPos;
-        isDragging.current = false;
-        s.setSelectedIds([movingElementId.current!]);
-        return;
-      }
-
-      // 支柱の複製・移動
       const hitPost = s.canvasData.posts.find(p => Math.hypot(p.x - rawPos.x, p.y - rawPos.y) < HIT_TOL);
-      if (hitPost && s.mode !== 'post') {
-        stageRef.current = stage;
-        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
-        isDuplicating.current = isAlt;
-        if (isAlt) {
-          const newPost = { ...hitPost, id: uuidv4() };
-          s.addPost(newPost);
-          movingElementId.current = newPost.id;
-        } else {
-          movingElementId.current = hitPost.id;
-        }
-        dragStart.current = rawPos;
-        isDragging.current = false;
-        s.setSelectedIds([movingElementId.current!]);
-        return;
-      }
-
-      // アンチの複製・移動
       const hitAnti = s.canvasData.antis.find(a => {
         const w = a.direction === 'horizontal' ? a.lengthMm / 10 : a.width / 10;
         const h = a.direction === 'horizontal' ? a.width / 10 : a.lengthMm / 10;
         return rawPos.x >= a.x - HIT_TOL && rawPos.x <= a.x + w + HIT_TOL &&
                rawPos.y >= a.y - HIT_TOL && rawPos.y <= a.y + h + HIT_TOL;
       });
-      if (hitAnti && s.mode !== 'post') {
+      const hitElement = hitHandrail || hitPost || hitAnti;
+
+      if (hitElement && s.mode !== 'post') {
+        const isTouchEvent = 'touches' in e.evt;
+        const isAlt = !isTouchEvent && 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
+        const shouldDuplicate = isAlt || isDuplicateMode.current;
+
+        if (isTouchEvent) {
+          // スマホ: まず選択、長押しで移動開始
+          s.setSelectedIds([hitElement.id]);
+          stageRef.current = stage;
+          longPressTimer.current = setTimeout(() => {
+            const currentS = useCanvasStore.getState();
+            const isDup = isDuplicateMode.current;
+            if (isDup && hitHandrail) {
+              const newH = { ...hitHandrail, id: uuidv4() };
+              currentS.addHandrail(newH);
+              movingElementId.current = newH.id;
+              movingHandrail.current = newH;
+            } else if (isDup && hitPost) {
+              const newP = { ...hitPost, id: uuidv4() };
+              currentS.addPost(newP);
+              movingElementId.current = newP.id;
+            } else if (isDup && hitAnti) {
+              const newA = { ...hitAnti, id: uuidv4() };
+              currentS.addAnti(newA);
+              movingElementId.current = newA.id;
+            } else {
+              movingElementId.current = hitElement.id;
+              if (hitHandrail) movingHandrail.current = { ...hitHandrail };
+            }
+            isDuplicating.current = isDup;
+            dragStart.current = rawPos;
+            isDragging.current = false;
+            currentS.setSelectedIds([movingElementId.current!]);
+          }, 300);
+          return;
+        }
+
+        // PC: 即座に移動（Alt押下時は複製）
         stageRef.current = stage;
-        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
-        isDuplicating.current = isAlt;
-        if (isAlt) {
-          const newAnti = { ...hitAnti, id: uuidv4() };
-          s.addAnti(newAnti);
-          movingElementId.current = newAnti.id;
+        isDuplicating.current = shouldDuplicate;
+        if (shouldDuplicate) {
+          if (hitHandrail) {
+            const newH = { ...hitHandrail, id: uuidv4() };
+            s.addHandrail(newH);
+            movingElementId.current = newH.id;
+            movingHandrail.current = newH;
+          } else if (hitPost) {
+            const newP = { ...hitPost, id: uuidv4() };
+            s.addPost(newP);
+            movingElementId.current = newP.id;
+          } else if (hitAnti) {
+            const newA = { ...hitAnti, id: uuidv4() };
+            s.addAnti(newA);
+            movingElementId.current = newA.id;
+          }
         } else {
-          movingElementId.current = hitAnti.id;
+          movingElementId.current = hitElement.id;
+          if (hitHandrail) movingHandrail.current = { ...hitHandrail };
         }
         dragStart.current = rawPos;
         isDragging.current = false;
@@ -475,5 +486,6 @@ export function useCanvasInteraction() {
     handleStageMouseMove,
     handleStageMouseUp,
     selectionRect,
+    isDuplicateMode,
   };
 }
