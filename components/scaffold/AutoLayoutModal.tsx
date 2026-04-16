@@ -178,9 +178,20 @@ export default function AutoLayoutModal({ onClose }: Props) {
     }
 
     if (allHandrails.length > 0) {
-      // 既存の手摺を全て削除してから自動割付結果を配置
-      const existingIds = canvasData.handrails.map(h => h.id);
-      if (existingIds.length > 0) removeElements(existingIds);
+      // 自動割付の手摺と重なる既存手摺だけ削除
+      const TOL = 3; // グリッド許容差
+      const overlappingIds = canvasData.handrails
+        .filter(existing =>
+          allHandrails.some(newH =>
+            Math.abs(existing.x - newH.x) < TOL &&
+            Math.abs(existing.y - newH.y) < TOL &&
+            existing.direction === newH.direction &&
+            existing.lengthMm === newH.lengthMm
+          )
+        )
+        .map(h => h.id);
+
+      if (overlappingIds.length > 0) removeElements(overlappingIds);
       addHandrails(allHandrails);
     }
     onClose();

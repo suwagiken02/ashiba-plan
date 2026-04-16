@@ -359,8 +359,8 @@ export default function EditorPage() {
             </svg>
           </button>
 
-          {/* 足場開始ボタン（建物配置済み＆足場未設定時に表示） */}
-          {canvasData.buildings.length > 0 && !canvasData.scaffoldStart && (
+          {/* 足場開始ボタン（建物配置済みなら常に表示） */}
+          {canvasData.buildings.length > 0 && (
             <button
               onClick={() => setShowScaffoldStartModal(true)}
               className="px-4 py-2 bg-accent text-white font-bold rounded-xl text-sm shadow-lg hover:bg-accent/90 transition-colors"
@@ -379,8 +379,8 @@ export default function EditorPage() {
             </button>
           )}
 
-          {/* 自動割付ボタン（建物＆足場開始設定済み時に表示） */}
-          {canvasData.buildings.length > 0 && canvasData.scaffoldStart && (
+          {/* 自動割付ボタン（建物配置済みなら常に表示） */}
+          {canvasData.buildings.length > 0 && (
             <button
               onClick={() => setShowAutoLayoutModal(true)}
               className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
