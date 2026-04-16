@@ -11,6 +11,7 @@ import {
   placeHandrailsForEdge,
   AutoLayoutResult,
   EdgeInfo,
+  EdgeLayout,
 } from '@/lib/konva/autoLayoutUtils';
 
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
@@ -182,22 +183,20 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   };
 
   // 端数0になる離れを探す
-  const findDistSuggestions = (edgeIdx: number, currentDist: number): number[] => {
-    if (!building) return [];
+  const findDistanceSuggestions = (el: EdgeLayout, currentDist: number): number[] => {
+    const remainder = el.candidates[0]?.remainder ?? 0;
+    if (remainder === 0) return [];
+
     const suggestions: number[] = [];
-    for (let delta = 10; delta <= 500; delta += 10) {
-      for (const candidate of [currentDist - delta, currentDist + delta]) {
-        if (candidate <= 0) continue;
-        const testDist = { ...distances, [edgeIdx]: candidate };
-        const testRes = computeAutoLayout(building, testDist, scaffoldStart);
-        const testLayout = testRes.edgeLayouts.find(el => el.edge.index === edgeIdx);
-        if (testLayout && testLayout.candidates[0]?.remainder === 0) {
-          if (!suggestions.includes(candidate)) suggestions.push(candidate);
-          if (suggestions.length >= 3) return suggestions;
-        }
-      }
-    }
-    return suggestions;
+
+    // 端数がremainder mm → 離れをremainder mm調整で解消
+    const adjust1 = currentDist + remainder;
+    const adjust2 = currentDist - remainder;
+
+    if (adjust1 > 0 && adjust1 !== currentDist) suggestions.push(adjust1);
+    if (adjust2 > 0 && adjust2 !== currentDist && !suggestions.includes(adjust2)) suggestions.push(adjust2);
+
+    return suggestions.slice(0, 2);
   };
 
   const handleCalc = () => {
@@ -211,13 +210,26 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       !lockedEdgeIndices.has(el.edge.index)
     );
 
+    console.log('[handleCalc] problemEdges:', problemEdges.map(el => ({
+      label: el.edge.label,
+      remainder: el.candidates[0]?.remainder,
+      locked: el.locked,
+      lockedByIndex: lockedEdgeIndices.has(el.edge.index),
+    })));
+
     if (problemEdges.length > 0) {
       const suggestions = problemEdges.map(el => ({
         edgeIndex: el.edge.index,
         edgeLabel: el.edge.label,
         currentDist: distances[el.edge.index] ?? 900,
-        suggestions: findDistSuggestions(el.edge.index, distances[el.edge.index] ?? 900),
+        suggestions: findDistanceSuggestions(el, distances[el.edge.index] ?? 900),
       })).filter(s => s.suggestions.length > 0);
+
+      console.log('[handleCalc] suggestions:', suggestions.map(s => ({
+        label: s.edgeLabel,
+        currentDist: s.currentDist,
+        suggestions: s.suggestions,
+      })));
 
       if (suggestions.length > 0) {
         setDistanceSuggestions(suggestions);
@@ -343,7 +355,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={showConflictConfirm ? undefined : onClose}>
+    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || distanceSuggestions.length > 0) ? undefined : onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between z-10">
           <h2 className="font-bold text-lg">自動割付</h2>
