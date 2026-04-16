@@ -432,7 +432,7 @@ export default function EditorPage() {
         <UdekiModal onClose={() => setShowUdekiModal(false)} />
       )}
       {showAutoLayoutModal && (
-        <AutoLayoutModal onClose={() => setShowAutoLayoutModal(false)} />
+        <AutoLayoutModal onClose={() => setShowAutoLayoutModal(false)} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />
       )}
       {showRoofModal && selectedIds.length === 1 && (() => {
         const bld = canvasData.buildings.find(b => b.id === selectedIds[0]);

@@ -13,7 +13,7 @@ import {
   EdgeInfo,
 } from '@/lib/konva/autoLayoutUtils';
 
-type Props = { onClose: () => void };
+type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き） */
 function PreviewSVG({ points, edges, focusedIndex, conflictHandrails }: {
@@ -107,7 +107,7 @@ function formatRailsSummary(rails: HandrailLengthMm[]): string {
   return entries.map(([len, cnt]) => `${len}×${cnt}`).join(' + ');
 }
 
-export default function AutoLayoutModal({ onClose }: Props) {
+export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props) {
   const { canvasData, addHandrails, removeElements } = useCanvasStore();
   const building = canvasData.buildings[0];
   const scaffoldStart = canvasData.scaffoldStart;
@@ -154,6 +154,7 @@ export default function AutoLayoutModal({ onClose }: Props) {
   const [selections, setSelections] = useState<Record<number, number>>({});
   const [focusedEdgeIndex, setFocusedEdgeIndex] = useState<number | null>(null);
   const [showConflictConfirm, setShowConflictConfirm] = useState(false);
+  const [showLockedAlert, setShowLockedAlert] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
 
@@ -280,20 +281,32 @@ export default function AutoLayoutModal({ onClose }: Props) {
                     {edge.label}
                   </span>
                   <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
-                  <input
-                    type="number"
-                    value={getDistance(edge.index)}
-                    onChange={e => setDistance(edge.index, Math.max(0, Number(e.target.value)))}
-                    onFocus={() => setFocusedEdgeIndex(edge.index)}
-                    onBlur={() => setFocusedEdgeIndex(null)}
-                    disabled={lockedEdgeIndices.has(edge.index)}
-                    className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
-                      lockedEdgeIndices.has(edge.index)
-                        ? 'border-dark-border opacity-50 cursor-not-allowed'
-                        : focusedEdgeIndex === edge.index ? 'border-accent' : 'border-dark-border'
-                    }`}
-                    min={0} step={10}
-                  />
+                  {lockedEdgeIndices.has(edge.index) ? (
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        value={getDistance(edge.index)}
+                        disabled
+                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-2 py-1.5 text-sm font-mono opacity-50 cursor-not-allowed"
+                      />
+                      <div
+                        className="absolute inset-0 cursor-not-allowed"
+                        onClick={() => setShowLockedAlert(true)}
+                      />
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      value={getDistance(edge.index)}
+                      onChange={e => setDistance(edge.index, Math.max(0, Number(e.target.value)))}
+                      onFocus={() => setFocusedEdgeIndex(edge.index)}
+                      onBlur={() => setFocusedEdgeIndex(null)}
+                      className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
+                        focusedEdgeIndex === edge.index ? 'border-accent' : 'border-dark-border'
+                      }`}
+                      min={0} step={10}
+                    />
+                  )}
                   {lockedEdgeIndices.has(edge.index) && (
                     <span className="text-[10px] text-dimension bg-dark-bg px-1.5 py-0.5 rounded border border-dark-border shrink-0">固定</span>
                   )}
@@ -422,6 +435,37 @@ export default function AutoLayoutModal({ onClose }: Props) {
             >
               削除して配置
             </button>
+          </div>
+        </div>
+      )}
+
+      {showLockedAlert && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowLockedAlert(false)} />
+          <div className="relative bg-dark-surface border border-dark-border rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+            <p className="font-bold text-sm mb-2">変更できません</p>
+            <p className="text-xs text-dimension leading-relaxed mb-4">
+              この面の離れは足場開始設定で確定された数値です。<br />
+              変更する場合は「足場開始」ボタンから再設定してください。
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowLockedAlert(false)}
+                className="flex-1 py-2.5 border border-dark-border text-dimension font-bold rounded-xl text-sm"
+              >
+                OK
+              </button>
+              <button
+                onClick={() => {
+                  setShowLockedAlert(false);
+                  onClose();
+                  onOpenScaffoldStart();
+                }}
+                className="flex-1 py-2.5 bg-accent text-white font-bold rounded-xl text-sm"
+              >
+                再設定する
+              </button>
+            </div>
           </div>
         </div>
       )}
