@@ -16,10 +16,11 @@ import {
 type Props = { onClose: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き） */
-function PreviewSVG({ points, edges, focusedIndex }: {
+function PreviewSVG({ points, edges, focusedIndex, conflictHandrails }: {
   points: Point[];
   edges: EdgeInfo[];
   focusedIndex: number | null;
+  conflictHandrails?: { x: number; y: number; lengthMm: number; direction: 'horizontal' | 'vertical' | number }[];
 }) {
   if (points.length < 3) return null;
 
@@ -38,41 +39,56 @@ function PreviewSVG({ points, edges, focusedIndex }: {
   const svgPts = points.map(toSvg);
   const pathD = svgPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ' Z';
 
-  // 重心（ラベルを外側に出すための基準）
   const centroidX = svgPts.reduce((s, p) => s + p.x, 0) / svgPts.length;
   const centroidY = svgPts.reduce((s, p) => s + p.y, 0) / svgPts.length;
 
   return (
-    <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} className="mx-auto block">
-      <path d={pathD} fill="#3d3d3a" stroke="#1a1a18" strokeWidth={2} />
-      {edges.map(edge => {
-        const s1 = toSvg(edge.p1);
-        const s2 = toSvg(edge.p2);
-        const mx = (s1.x + s2.x) / 2;
-        const my = (s1.y + s2.y) / 2;
-        const isFocused = focusedIndex === edge.index;
+    <>
+      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} } .conflict-rail{animation:blink 0.8s ease-in-out infinite}`}</style>
+      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} className="mx-auto block">
+        <path d={pathD} fill="#3d3d3a" stroke="#1a1a18" strokeWidth={2} />
+        {conflictHandrails?.map((h, i) => {
+          const mmToG = (mm: number) => Math.round(mm / 10);
+          const s1 = toSvg({ x: h.x, y: h.y });
+          const s2 = h.direction === 'horizontal'
+            ? toSvg({ x: h.x + mmToG(h.lengthMm), y: h.y })
+            : toSvg({ x: h.x, y: h.y + mmToG(h.lengthMm) });
+          return (
+            <line key={`c${i}`}
+              x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
+              stroke="#FF6B35" strokeWidth={4} strokeLinecap="round"
+              className="conflict-rail"
+            />
+          );
+        })}
+        {edges.map(edge => {
+          const s1 = toSvg(edge.p1);
+          const s2 = toSvg(edge.p2);
+          const mx = (s1.x + s2.x) / 2;
+          const my = (s1.y + s2.y) / 2;
+          const isFocused = focusedIndex === edge.index;
 
-        // ラベルを辺の外側（法線方向）に配置
-        const labelDist = 14;
-        const lx = mx + edge.nx * labelDist;
-        const ly = my + edge.ny * labelDist;
+          const labelDist = 14;
+          const lx = mx + edge.nx * labelDist;
+          const ly = my + edge.ny * labelDist;
 
-        return (
-          <React.Fragment key={edge.index}>
-            {isFocused && (
-              <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
-                stroke="#378ADD" strokeWidth={4} strokeLinecap="round" />
-            )}
-            <text x={lx} y={ly}
-              textAnchor="middle" dominantBaseline="central"
-              fill={isFocused ? '#378ADD' : '#ccc'}
-              fontWeight={isFocused ? 'bold' : 'normal'}
-              fontSize={isFocused ? 14 : 12} fontFamily="monospace"
-            >{edge.label}</text>
-          </React.Fragment>
-        );
-      })}
-    </svg>
+          return (
+            <React.Fragment key={edge.index}>
+              {isFocused && (
+                <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
+                  stroke="#378ADD" strokeWidth={4} strokeLinecap="round" />
+              )}
+              <text x={lx} y={ly}
+                textAnchor="middle" dominantBaseline="central"
+                fill={isFocused ? '#378ADD' : '#ccc'}
+                fontWeight={isFocused ? 'bold' : 'normal'}
+                fontSize={isFocused ? 14 : 12} fontFamily="monospace"
+              >{edge.label}</text>
+            </React.Fragment>
+          );
+        })}
+      </svg>
+    </>
   );
 }
 
@@ -137,6 +153,9 @@ export default function AutoLayoutModal({ onClose }: Props) {
   const [result, setResult] = useState<AutoLayoutResult | null>(null);
   const [selections, setSelections] = useState<Record<number, number>>({});
   const [focusedEdgeIndex, setFocusedEdgeIndex] = useState<number | null>(null);
+  const [showConflictConfirm, setShowConflictConfirm] = useState(false);
+  const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
+  const [conflictIds, setConflictIds] = useState<string[]>([]);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -177,24 +196,52 @@ export default function AutoLayoutModal({ onClose }: Props) {
       }
     }
 
-    if (allHandrails.length > 0) {
-      // 自動割付の手摺と重なる既存手摺だけ削除
-      const TOL = 3; // グリッド許容差
-      const overlappingIds = canvasData.handrails
-        .filter(existing =>
-          allHandrails.some(newH =>
-            Math.abs(existing.x - newH.x) < TOL &&
-            Math.abs(existing.y - newH.y) < TOL &&
-            existing.direction === newH.direction &&
-            existing.lengthMm === newH.lengthMm
-          )
-        )
-        .map(h => h.id);
+    if (allHandrails.length === 0) return;
 
-      if (overlappingIds.length > 0) removeElements(overlappingIds);
-      addHandrails(allHandrails);
+    // 触れる既存手摺を検出
+    const mmToG = (mm: number) => Math.round(mm / 10);
+    const TOL = 2;
+    const overlappingIds = canvasData.handrails.filter(existing => {
+      return allHandrails.some(newH => {
+        if (existing.direction !== newH.direction) return false;
+        if (existing.direction === 'horizontal') {
+          if (Math.abs(existing.y - newH.y) > TOL) return false;
+          const e1 = existing.x, e2 = existing.x + mmToG(existing.lengthMm);
+          const n1 = newH.x, n2 = newH.x + mmToG(newH.lengthMm);
+          return e1 <= n2 + TOL && e2 >= n1 - TOL;
+        } else {
+          if (Math.abs(existing.x - newH.x) > TOL) return false;
+          const e1 = existing.y, e2 = existing.y + mmToG(existing.lengthMm);
+          const n1 = newH.y, n2 = newH.y + mmToG(newH.lengthMm);
+          return e1 <= n2 + TOL && e2 >= n1 - TOL;
+        }
+      });
+    }).map(h => h.id);
+
+    // 干渉する既存部材がある場合はカスタム確認ダイアログ
+    if (overlappingIds.length > 0) {
+      setConflictIds(overlappingIds);
+      setPendingHandrails(allHandrails);
+      useCanvasStore.getState().setHighlightIds(overlappingIds);
+      setShowConflictConfirm(true);
+      return;
     }
+
+    addHandrails(allHandrails);
     onClose();
+  };
+
+  const handleConflictOk = () => {
+    useCanvasStore.getState().setHighlightIds([]);
+    removeElements(conflictIds);
+    addHandrails(pendingHandrails);
+    setShowConflictConfirm(false);
+    onClose();
+  };
+
+  const handleConflictCancel = () => {
+    useCanvasStore.getState().setHighlightIds([]);
+    setShowConflictConfirm(false);
   };
 
   if (!building) {
@@ -209,7 +256,7 @@ export default function AutoLayoutModal({ onClose }: Props) {
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={onClose}>
+    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={showConflictConfirm ? undefined : onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between z-10">
           <h2 className="font-bold text-lg">自動割付</h2>
@@ -218,7 +265,8 @@ export default function AutoLayoutModal({ onClose }: Props) {
 
         <div className="p-4 space-y-4">
           {/* プレビューSVG */}
-          <PreviewSVG points={building.points} edges={edges} focusedIndex={focusedEdgeIndex} />
+          <PreviewSVG points={building.points} edges={edges} focusedIndex={focusedEdgeIndex}
+            conflictHandrails={showConflictConfirm ? canvasData.handrails.filter(h => conflictIds.includes(h.id)) : undefined} />
 
           {/* 各辺の離れ入力 */}
           <div>
@@ -354,6 +402,29 @@ export default function AutoLayoutModal({ onClose }: Props) {
           )}
         </div>
       </div>
+
+      {showConflictConfirm && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[90vw] max-w-sm bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4">
+          <p className="text-sm font-bold mb-1">干渉する既存部材があります</p>
+          <p className="text-xs text-dimension mb-4">
+            オレンジ色の部材（{conflictIds.length}本）が自動配置と干渉しています。削除して配置しますか？
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleConflictCancel}
+              className="flex-1 py-2 border border-dark-border rounded-xl text-sm text-dimension"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleConflictOk}
+              className="flex-1 py-2 bg-accent text-white font-bold rounded-xl text-sm"
+            >
+              削除して配置
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

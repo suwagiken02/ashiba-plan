@@ -10,7 +10,7 @@ import { getHandrailColor } from '@/lib/konva/handrailColors';
 import { HandrailLengthMm } from '@/types';
 
 export default function ScaffoldLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode, highlightIds } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
 
   return (
@@ -71,6 +71,7 @@ export default function ScaffoldLayer() {
       {canvasData.handrails.map((h) => {
         const [start, end] = getHandrailEndpoints(h);
         const isSelected = selectedIds.includes(h.id);
+        const isHighlighted = highlightIds.includes(h.id);
         const color = getHandrailColor(h.lengthMm as HandrailLengthMm);
 
         return (
@@ -82,8 +83,8 @@ export default function ScaffoldLayer() {
                 end.x * gridPx + panX,
                 end.y * gridPx + panY,
               ]}
-              stroke={isSelected ? '#FF6B35' : color}
-              strokeWidth={3}
+              stroke={isHighlighted ? '#FF6B35' : isSelected ? '#FF6B35' : color}
+              strokeWidth={isHighlighted ? 5 : 3}
               lineCap="round"
               listening={true}
               id={h.id}

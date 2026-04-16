@@ -111,6 +111,10 @@ type CanvasStore = {
   isDuplicateMode: boolean;
   toggleDuplicateMode: () => void;
 
+  // Highlight (点滅表示)
+  highlightIds: string[];
+  setHighlightIds: (ids: string[]) => void;
+
   // Zoom & Pan
   zoom: number;
   panX: number;
@@ -227,6 +231,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   isDuplicateMode: false,
   toggleDuplicateMode: () => set({ isDuplicateMode: !get().isDuplicateMode }),
+
+  highlightIds: [],
+  setHighlightIds: (ids) => set({ highlightIds: ids }),
 
   zoom: 1.0,
   panX: 0,
