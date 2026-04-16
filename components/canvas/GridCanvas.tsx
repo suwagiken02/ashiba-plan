@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useRef, useCallback, useEffect, useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Stage, Layer, Line, Rect, Circle, Text } from 'react-konva';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
@@ -29,7 +30,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -41,6 +42,7 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
   const lastCenter = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
   const isPinching = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
+  const [draft2FPos, setDraft2FPos] = useState<{ x: number; y: number } | null>(null);
   const panInitialized = useRef(false);
   const lastPanPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -328,10 +330,53 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
         handleTouchEnd();
         handleStageMouseUp(e);
       }}
-      onMouseDown={(e) => { handleMouseDown(e); handleStageMouseDown(e); }}
-      onMouseMove={(e) => { handleMouseMove(e); handleStageMouseMove(e); }}
+      onMouseDown={(e) => {
+        if (building2FDraft && draft2FPos) {
+          const finalPoints = building2FDraft.points.map(p => ({
+            x: p.x + draft2FPos.x,
+            y: p.y + draft2FPos.y,
+          }));
+          useCanvasStore.getState().addBuilding({
+            id: uuidv4(),
+            type: 'polygon',
+            points: finalPoints,
+            fill: building2FDraft.fill,
+            floor: 2,
+            roof: building2FDraft.roof,
+          });
+          useCanvasStore.getState().clearBuilding2FDraft();
+          setDraft2FPos(null);
+          return;
+        }
+        handleMouseDown(e); handleStageMouseDown(e);
+      }}
+      onMouseMove={(e) => {
+        if (building2FDraft) {
+          const stage = e.target.getStage();
+          if (!stage) return;
+          const s = useCanvasStore.getState();
+          const pointer = stage.getPointerPosition();
+          if (!pointer) return;
+          const gridX = Math.round((pointer.x - s.panX) / (INITIAL_GRID_PX * s.zoom));
+          const gridY = Math.round((pointer.y - s.panY) / (INITIAL_GRID_PX * s.zoom));
+          // 1Fの頂点に強スナップ
+          let snapX = gridX, snapY = gridY;
+          const STRONG_SNAP = 10;
+          for (const b of s.canvasData.buildings.filter(b => !b.floor || b.floor === 1)) {
+            for (const p of b.points) {
+              if (Math.hypot(p.x - gridX, p.y - gridY) < STRONG_SNAP) {
+                snapX = p.x; snapY = p.y;
+                break;
+              }
+            }
+          }
+          setDraft2FPos({ x: snapX, y: snapY });
+          return;
+        }
+        handleMouseMove(e); handleStageMouseMove(e);
+      }}
       onMouseUp={(e) => { handleMouseUp(e); handleStageMouseUp(e); }}
-      style={{ touchAction: 'none', cursor: isPanning ? 'grab' : 'default' }}
+      style={{ touchAction: 'none', cursor: building2FDraft ? 'crosshair' : isPanning ? 'grab' : 'default' }}
     >
       {/* キャンバス背景（ビューポート全体） */}
       <Layer listening={false}>
@@ -448,6 +493,30 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
                 <Rect x={sx} y={sy} width={w} height={h} fill={color} opacity={0.5} stroke={color} strokeWidth={1.5} cornerRadius={2} />
                 {label && <Text x={sx + 2} y={sy + 2} text={label} fontSize={Math.max(8, 9 * zoom)} fill="#333" />}
               </>
+            );
+          })()}
+        </Layer>
+      )}
+
+      {/* 2Fドラフトプレビュー */}
+      {building2FDraft && draft2FPos && (
+        <Layer listening={false}>
+          {(() => {
+            const gridPx = INITIAL_GRID_PX * zoom;
+            const pts = building2FDraft.points.map(p => ({
+              x: (p.x + draft2FPos.x) * gridPx + panX,
+              y: (p.y + draft2FPos.y) * gridPx + panY,
+            }));
+            const flatPts = pts.flatMap(p => [p.x, p.y]);
+            return (
+              <Line
+                points={flatPts}
+                closed
+                fill="rgba(90, 90, 122, 0.5)"
+                stroke="#8888aa"
+                strokeWidth={2}
+                dash={[6, 4]}
+              />
             );
           })()}
         </Layer>
