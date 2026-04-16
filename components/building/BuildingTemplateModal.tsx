@@ -185,6 +185,8 @@ export default function BuildingTemplateModal({ onClose }: Props) {
   const [kirizumaGable, setKirizumaGable] = useState<'ew' | 'ns'>('ew');
   const [autoCalc, setAutoCalc] = useState(true);
   const [unit, setUnit] = useState<'m' | 'mm'>('mm');
+  const [uniformRoof, setUniformRoof] = useState(true);
+  const [edgeOverhangs, setEdgeOverhangs] = useState<Record<number, number>>({});
 
   const template = BUILDING_TEMPLATES.find(t => t.id === selectedTemplate);
 
@@ -240,6 +242,7 @@ export default function BuildingTemplateModal({ onClose }: Props) {
       const roof: RoofConfig | undefined = roofType !== 'none' ? {
         roofType, uniformMm: roofOverhangMm,
         northMm: null, southMm: null, eastMm: null, westMm: null,
+        edgeOverhangsMm: uniformRoof ? undefined : edgeOverhangs,
         katanagareDirection: roofType === 'katanagare' ? katanagareDir : undefined,
         kirizumaGableFace: roofType === 'kirizuma' ? kirizumaGable : undefined,
       } : undefined;
@@ -466,12 +469,48 @@ export default function BuildingTemplateModal({ onClose }: Props) {
                 </div>
               )}
               {roofType !== 'none' && (
-                <div className="flex items-center gap-3">
-                  <span className="text-sm text-dimension shrink-0">出幅</span>
-                  <input type="number" value={mmToDisplay(roofOverhangMm)}
-                    onChange={e => setRoofOverhangMm(Math.max(0, displayToMm(Number(e.target.value))))}
-                    className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" min={0} step={unit === 'm' ? 0.05 : 50} />
-                  <span className="text-xs text-dimension">{unit}</span>
+                <div className="space-y-2 mt-2">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input type="checkbox" checked={uniformRoof}
+                      onChange={(e) => setUniformRoof(e.target.checked)}
+                      className="w-4 h-4 rounded border-dark-border accent-accent"
+                    />
+                    <span className="text-xs text-dimension">全面同じ出幅</span>
+                  </label>
+
+                  {uniformRoof ? (
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm text-dimension shrink-0">出幅</span>
+                      <input type="number" value={mmToDisplay(roofOverhangMm)}
+                        onChange={e => setRoofOverhangMm(Math.max(0, displayToMm(Number(e.target.value))))}
+                        className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
+                        min={0} step={unit === 'm' ? 0.05 : 50} />
+                      <span className="text-xs text-dimension">{unit}</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {buildRows().map(row => {
+                        const val = edgeOverhangs[row.edgeIdx] ?? roofOverhangMm;
+                        return (
+                          <div key={row.edgeIdx} className="flex items-center gap-2">
+                            <span className="shrink-0 px-1.5 h-6 flex items-center justify-center rounded text-xs font-bold bg-dark-bg text-dimension">
+                              {row.letter}
+                            </span>
+                            <input type="number" value={mmToDisplay(val)}
+                              onChange={e => {
+                                const num = parseFloat(e.target.value);
+                                if (!isNaN(num) && num >= 0) {
+                                  setEdgeOverhangs(prev => ({ ...prev, [row.edgeIdx]: displayToMm(num) }));
+                                }
+                              }}
+                              className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none focus:border-accent"
+                              min={0} step={unit === 'm' ? 0.05 : 50} />
+                            <span className="text-xs text-dimension w-6">{unit}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
