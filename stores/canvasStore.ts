@@ -76,6 +76,7 @@ type CanvasStore = {
   // 頂点タップモード
   vertexPoints: { x: number; y: number }[];
   addVertexPoint: (p: { x: number; y: number }) => void;
+  removeLastVertexPoint: () => void;
   clearVertexPoints: () => void;
 
   // Dimensions toggle
@@ -205,6 +206,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   vertexPoints: [],
   addVertexPoint: (p) => set((state) => ({ vertexPoints: [...state.vertexPoints, p] })),
+  removeLastVertexPoint: () => set((state) => ({
+    vertexPoints: state.vertexPoints.slice(0, -1)
+  })),
   clearVertexPoints: () => set({ vertexPoints: [] }),
 
   showDimensions: true,

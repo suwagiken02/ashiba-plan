@@ -59,6 +59,7 @@ export default function EditorPage() {
     selectedIds,
     vertexPoints,
     clearVertexPoints,
+    removeLastVertexPoint,
     addBuilding,
     setMode,
     buildingInputMethod,
@@ -444,7 +445,7 @@ export default function EditorPage() {
       <ModeToolbar />
 
       {/* 頂点タップ確定ボタン */}
-      {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length >= 3 && (
+      {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length >= 1 && (
         <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3">
           <button
             onClick={() => {
@@ -456,22 +457,23 @@ export default function EditorPage() {
             キャンセル
           </button>
           <button
-            onClick={() => {
-              if (vertexPoints.length >= 3) {
-                addBuilding({
-                  id: uuidv4(),
-                  type: 'polygon',
-                  points: [...vertexPoints],
-                  fill: '#3d3d3a',
-                });
+            onClick={() => removeLastVertexPoint()}
+            className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
+          >
+            ← 戻る
+          </button>
+          {vertexPoints.length >= 3 && (
+            <button
+              onClick={() => {
+                addBuilding({ id: uuidv4(), type: 'polygon', points: [...vertexPoints], fill: '#3d3d3a' });
                 clearVertexPoints();
                 setMode('select');
-              }
-            }}
-            className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
-          >
-            作図確定（{vertexPoints.length}点）
-          </button>
+              }}
+              className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
+            >
+              作図確定（{vertexPoints.length}点）
+            </button>
+          )}
         </div>
       )}
 
