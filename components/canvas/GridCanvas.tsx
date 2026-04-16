@@ -313,10 +313,20 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
       ref={stageRef}
       width={width}
       height={height}
+      listening={true}
       onWheel={handleWheel}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+      onTouchStart={(e) => {
+        handleTouchStart(e);
+        if (e.evt.touches.length === 1) handleStageMouseDown(e);
+      }}
+      onTouchMove={(e) => {
+        handleTouchMove(e);
+        if (e.evt.touches.length === 1) handleStageMouseMove(e);
+      }}
+      onTouchEnd={(e) => {
+        handleTouchEnd();
+        handleStageMouseUp(e);
+      }}
       onMouseDown={(e) => { handleMouseDown(e); handleStageMouseDown(e); }}
       onMouseMove={(e) => { handleMouseMove(e); handleStageMouseMove(e); }}
       onMouseUp={(e) => { handleMouseUp(e); handleStageMouseUp(e); }}

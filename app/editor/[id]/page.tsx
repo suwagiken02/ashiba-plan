@@ -51,6 +51,8 @@ export default function EditorPage() {
     toggleShowGridGuide,
     isDarkMode,
     toggleDarkMode,
+    isDuplicateMode,
+    toggleDuplicateMode,
     selectedIds,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -231,6 +233,19 @@ export default function EditorPage() {
               : saveStatus === 'error'
               ? 'エラー'
               : '保存'}
+          </button>
+
+          {/* 複製モード（スマホのみ表示） */}
+          <button
+            onClick={toggleDuplicateMode}
+            className={`sm:hidden px-2 py-1 border rounded-lg text-sm ${
+              isDuplicateMode
+                ? 'bg-accent border-accent text-white'
+                : 'bg-dark-bg border-dark-border text-dimension'
+            }`}
+            title={isDuplicateMode ? '複製モードOFF' : '複製モードON'}
+          >
+            {isDuplicateMode ? '複製ON' : '複製'}
           </button>
 
           {/* ダークモード */}

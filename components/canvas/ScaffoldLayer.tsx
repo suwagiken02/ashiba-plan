@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { Layer, Line, Circle, Rect, Text } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
@@ -9,7 +10,7 @@ import { getHandrailColor } from '@/lib/konva/handrailColors';
 import { HandrailLengthMm } from '@/types';
 
 export default function ScaffoldLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
 
   return (
@@ -40,7 +41,13 @@ export default function ScaffoldLayer() {
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
                 e.target.x(0); e.target.y(0);
-                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(anti.id, dx, dy);
+                if (dx !== 0 || dy !== 0) {
+                  if (isDuplicateMode) {
+                    useCanvasStore.getState().addAnti({ ...anti, id: uuidv4(), x: anti.x + dx, y: anti.y + dy });
+                  } else {
+                    useCanvasStore.getState().moveElement(anti.id, dx, dy);
+                  }
+                }
               }}
             />
             {/* 内側の破線（境界線） */}
@@ -78,15 +85,24 @@ export default function ScaffoldLayer() {
               stroke={isSelected ? '#FF6B35' : color}
               strokeWidth={3}
               lineCap="round"
-              listening={mode === 'select' || mode === 'erase'}
+              listening={true}
               id={h.id}
               draggable={mode === 'select'}
+              onTouchStart={(e) => console.log('[TouchStart]', e)}
+              onTouchEnd={(e) => console.log('[TouchEnd]', e)}
               onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
               onDragEnd={(e) => {
+                console.log('[DragEnd]', { isDuplicateMode, dx: Math.round(e.target.x() / gridPx), dy: Math.round(e.target.y() / gridPx) });
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
                 e.target.x(0); e.target.y(0);
-                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(h.id, dx, dy);
+                if (dx !== 0 || dy !== 0) {
+                  if (isDuplicateMode) {
+                    useCanvasStore.getState().addHandrail({ ...h, id: uuidv4(), x: h.x + dx, y: h.y + dy });
+                  } else {
+                    useCanvasStore.getState().moveElement(h.id, dx, dy);
+                  }
+                }
               }}
             />
             {/* 両端の●マーク */}
@@ -148,7 +164,13 @@ export default function ScaffoldLayer() {
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
                 e.target.x(0); e.target.y(0);
-                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(p.id, dx, dy);
+                if (dx !== 0 || dy !== 0) {
+                  if (isDuplicateMode) {
+                    useCanvasStore.getState().addPost({ ...p, id: uuidv4(), x: p.x + dx, y: p.y + dy });
+                  } else {
+                    useCanvasStore.getState().moveElement(p.id, dx, dy);
+                  }
+                }
               }}
             />
             <Circle

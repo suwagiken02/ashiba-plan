@@ -218,64 +218,45 @@ export function useCanvasInteraction() {
         return;
       }
 
-      // 全モード共通: クリック位置に既存要素があれば選択 or 移動
+      // 全モード共通: クリック位置に既存手摺があれば選択 or 移動
       const hitHandrail = findHandrailAtPos(rawPos, s.canvasData.handrails);
       const hitPost = s.canvasData.posts.find(p => Math.hypot(p.x - rawPos.x, p.y - rawPos.y) < HIT_TOL);
-      const hitAnti = s.canvasData.antis.find(a => {
-        const w = a.direction === 'horizontal' ? a.lengthMm / 10 : a.width / 10;
-        const h = a.direction === 'horizontal' ? a.width / 10 : a.lengthMm / 10;
-        return rawPos.x >= a.x - HIT_TOL && rawPos.x <= a.x + w + HIT_TOL &&
-               rawPos.y >= a.y - HIT_TOL && rawPos.y <= a.y + h + HIT_TOL;
-      });
+      const hitAnti = s.canvasData.antis.find(a => Math.hypot(a.x - rawPos.x, a.y - rawPos.y) < HIT_TOL);
       const hitElement = hitHandrail || hitPost || hitAnti;
 
       if (hitElement && s.mode !== 'post') {
         const isTouchEvent = 'touches' in e.evt;
-        const isAlt = !isTouchEvent && 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
-        const shouldDuplicate = isAlt || isDuplicateMode.current;
-
+        console.log('[MouseDown]', { isTouchEvent, mode: s.mode, hitElement: !!hitElement });
         if (isTouchEvent) {
-          // スマホ: まず選択、長押しで移動開始
-          s.setSelectedIds([hitElement.id]);
           stageRef.current = stage;
-          const capturedRawPos = { ...rawPos };
-          longPressTimer.current = setTimeout(() => {
-            const currentS = useCanvasStore.getState();
-            const isDup = isDuplicateMode.current;
-            if (isDup && hitHandrail) {
+          if (hitHandrail) {
+            if (s.isDuplicateMode) {
               const newH = { ...hitHandrail, id: uuidv4() };
-              currentS.addHandrail(newH);
+              s.addHandrail(newH);
+              movingHandrail.current = { ...hitHandrail };
               movingElementId.current = newH.id;
-              movingHandrail.current = newH;
-            } else if (isDup && hitPost) {
-              const newP = { ...hitPost, id: uuidv4() };
-              currentS.addPost(newP);
-              movingElementId.current = newP.id;
-            } else if (isDup && hitAnti) {
-              const newA = { ...hitAnti, id: uuidv4() };
-              currentS.addAnti(newA);
-              movingElementId.current = newA.id;
             } else {
-              movingElementId.current = hitElement.id;
-              if (hitHandrail) movingHandrail.current = { ...hitHandrail };
+              movingHandrail.current = { ...hitHandrail };
+              movingElementId.current = hitHandrail.id;
             }
-            isDuplicating.current = isDup;
-            dragStart.current = capturedRawPos;
-            isDragging.current = false;
-            currentS.setSelectedIds([movingElementId.current!]);
+          }
+          dragStart.current = rawPos;
+          isDragging.current = false;
+          // 即時選択 → 300ms後に選択色でフィードバック
+          s.setSelectedIds([]);
+          longPressTimer.current = setTimeout(() => {
+            s.setSelectedIds([movingElementId.current!]);
           }, 300);
           return;
         }
-
-        // PC: 即座に移動（Alt押下時は複製）
+        // PC: Alt+ドラッグで複製、通常は移動（window イベント方式）
         stageRef.current = stage;
-        isDuplicating.current = shouldDuplicate;
-        if (shouldDuplicate) {
+        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
+        if (isAlt) {
           if (hitHandrail) {
             const newH = { ...hitHandrail, id: uuidv4() };
             s.addHandrail(newH);
             movingElementId.current = newH.id;
-            movingHandrail.current = newH;
           } else if (hitPost) {
             const newP = { ...hitPost, id: uuidv4() };
             s.addPost(newP);
@@ -287,7 +268,6 @@ export function useCanvasInteraction() {
           }
         } else {
           movingElementId.current = hitElement.id;
-          if (hitHandrail) movingHandrail.current = { ...hitHandrail };
         }
         dragStart.current = rawPos;
         isDragging.current = false;

@@ -107,6 +107,10 @@ type CanvasStore = {
   isDarkMode: boolean;
   toggleDarkMode: () => void;
 
+  // Duplicate mode
+  isDuplicateMode: boolean;
+  toggleDuplicateMode: () => void;
+
   // Zoom & Pan
   zoom: number;
   panX: number;
@@ -220,6 +224,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       document.body.classList.toggle('dark-mode', next);
     }
   },
+
+  isDuplicateMode: false,
+  toggleDuplicateMode: () => set({ isDuplicateMode: !get().isDuplicateMode }),
 
   zoom: 1.0,
   panX: 0,
