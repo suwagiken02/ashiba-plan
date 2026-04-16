@@ -63,6 +63,7 @@ export default function EditorPage() {
     addBuilding,
     setMode,
     buildingInputMethod,
+    setBuildingInputMethod,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
@@ -460,6 +461,7 @@ export default function EditorPage() {
           <button
             onClick={() => {
               clearVertexPoints();
+              setBuildingInputMethod('template');
               setMode('select');
             }}
             className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
