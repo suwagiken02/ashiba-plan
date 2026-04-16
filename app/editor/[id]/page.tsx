@@ -53,6 +53,8 @@ export default function EditorPage() {
     toggleDarkMode,
     isDuplicateMode,
     toggleDuplicateMode,
+    showKidare,
+    toggleShowKidare,
     selectedIds,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
@@ -337,6 +339,19 @@ export default function EditorPage() {
               <line x1="13" y1="7" x2="16" y2="9" />
               <line x1="13" y1="11" x2="16" y2="9" />
             </svg>
+          </button>
+
+          {/* 離れ表示トグル */}
+          <button
+            onClick={toggleShowKidare}
+            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
+              showKidare
+                ? 'bg-accent border-accent text-white'
+                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
+            }`}
+            title={showKidare ? '離れを非表示' : '離れを表示'}
+          >
+            <span className="text-xs font-bold">離</span>
           </button>
 
           {/* グリッドガイドトグル */}

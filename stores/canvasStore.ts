@@ -115,6 +115,10 @@ type CanvasStore = {
   highlightIds: string[];
   setHighlightIds: (ids: string[]) => void;
 
+  // 離れ表示
+  showKidare: boolean;
+  toggleShowKidare: () => void;
+
   // Zoom & Pan
   zoom: number;
   panX: number;
@@ -234,6 +238,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   highlightIds: [],
   setHighlightIds: (ids) => set({ highlightIds: ids }),
+
+  showKidare: false,
+  toggleShowKidare: () => set({ showKidare: !get().showKidare }),
 
   zoom: 1.0,
   panX: 0,

@@ -15,6 +15,7 @@ import DimensionLayer from './DimensionLayer';
 import DimensionLineLayer from './DimensionLineLayer';
 import ObstacleLayer from './ObstacleLayer';
 import MemoLayer from './MemoLayer';
+import KidareLayer from './KidareLayer';
 import CompassWidget from './CompassWidget';
 import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
@@ -357,6 +358,9 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
 
       {/* 足場部材レイヤー（手摺・支柱・アンチ） */}
       <ScaffoldLayer />
+
+      {/* 離れ表示レイヤー */}
+      <KidareLayer />
 
       {/* 寸法線レイヤー（離れ寸法） */}
       <DimensionLayer />
