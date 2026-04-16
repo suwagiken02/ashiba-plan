@@ -24,6 +24,8 @@ export type RoofConfig = {
   katanagareDirection?: 'north' | 'south' | 'east' | 'west';
   /** 切妻の妻面方向 */
   kirizumaGableFace?: 'ew' | 'ns';
+  /** 辺ごとの出幅(mm)。L字など多辺ポリゴン用 */
+  edgeOverhangsMm?: Record<number, number>;
 };
 
 // === 建物外形 ===

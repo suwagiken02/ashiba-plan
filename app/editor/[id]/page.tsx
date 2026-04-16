@@ -454,6 +454,7 @@ export default function EditorPage() {
         return bld ? (
           <RoofSettingsModal
             buildingId={bld.id}
+            buildingPoints={bld.points}
             initialRoof={bld.roof}
             onClose={() => setShowRoofModal(false)}
           />
