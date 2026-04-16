@@ -270,51 +270,8 @@ export function useCanvasInteraction() {
       isDragging.current = false;
 
       // select モード: 長押し検出
-      // 長押し中に手摺・支柱・アンチに触れていたら複製モード
       if (s.mode === 'select') {
-        const isTouchEvent = 'touches' in e.evt;
-        if (isTouchEvent) {
-          longPressTimer.current = setTimeout(() => {
-            setIsLongPress(true);
-            // 長押し位置に手摺があれば複製開始
-            const hitH = findHandrailAtPos(rawPos, useCanvasStore.getState().canvasData.handrails);
-            if (hitH) {
-              const newHandrail = { ...hitH, id: uuidv4() };
-              useCanvasStore.getState().addHandrail(newHandrail);
-              stageRef.current = stage;
-              movingElementId.current = newHandrail.id;
-              movingHandrail.current = newHandrail;
-              dragStart.current = rawPos;
-              isDuplicating.current = true;
-              useCanvasStore.getState().setSelectedIds([newHandrail.id]);
-              return;
-            }
-            const hitP = useCanvasStore.getState().canvasData.posts.find(p => Math.hypot(p.x - rawPos.x, p.y - rawPos.y) < HIT_TOL);
-            if (hitP) {
-              const newPost = { ...hitP, id: uuidv4() };
-              useCanvasStore.getState().addPost(newPost);
-              stageRef.current = stage;
-              movingElementId.current = newPost.id;
-              dragStart.current = rawPos;
-              isDuplicating.current = true;
-              useCanvasStore.getState().setSelectedIds([newPost.id]);
-              return;
-            }
-            const hitA = useCanvasStore.getState().canvasData.antis.find(a => Math.hypot(a.x - rawPos.x, a.y - rawPos.y) < HIT_TOL);
-            if (hitA) {
-              const newAnti = { ...hitA, id: uuidv4() };
-              useCanvasStore.getState().addAnti(newAnti);
-              stageRef.current = stage;
-              movingElementId.current = newAnti.id;
-              dragStart.current = rawPos;
-              isDuplicating.current = true;
-              useCanvasStore.getState().setSelectedIds([newAnti.id]);
-              return;
-            }
-          }, 500);
-        } else {
-          longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
-        }
+        longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
       }
 
       // post モード: クリックで支柱配置
