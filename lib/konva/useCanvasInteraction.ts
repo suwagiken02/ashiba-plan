@@ -80,6 +80,7 @@ export function useCanvasInteraction() {
   /** ドラッグ移動中の手摺情報（全モード共通） */
   const movingElementId = useRef<string | null>(null);
   const movingHandrail = useRef<Handrail | null>(null);
+  const isDuplicating = useRef(false);
   /** window レベルのドラッグ追跡用（キャンバス外でも動作） */
   const stageRef = useRef<Konva.Stage | null>(null);
 
@@ -193,29 +194,127 @@ export function useCanvasInteraction() {
         return;
       }
 
-      // 全モード共通: クリック位置に既存手摺があれば移動モード
+      // 全モード共通: クリック位置に既存手摺があれば移動モード（または複製）
       const hitHandrail = findHandrailAtPos(rawPos, s.canvasData.handrails);
       if (hitHandrail && s.mode !== 'post') {
-        stageRef.current = stage; // window イベントで座標変換に使用
-        movingElementId.current = hitHandrail.id;
-        movingHandrail.current = { ...hitHandrail };
+        stageRef.current = stage;
+        // PC: Altキー押下 → 複製モード
+        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
+        isDuplicating.current = isAlt;
+        if (isAlt) {
+          // 複製: 新しいIDで同じ手摺を追加し、新しい方をドラッグ
+          const newHandrail = { ...hitHandrail, id: uuidv4() };
+          s.addHandrail(newHandrail);
+          movingElementId.current = newHandrail.id;
+          movingHandrail.current = newHandrail;
+        } else {
+          movingElementId.current = hitHandrail.id;
+          movingHandrail.current = { ...hitHandrail };
+        }
         dragStart.current = rawPos;
         isDragging.current = false;
-        s.setSelectedIds([hitHandrail.id]);
-        return; // 他のモード処理をスキップ
+        s.setSelectedIds([movingElementId.current!]);
+        return;
       }
 
-      // 手摺なし → 通常のモード処理
+      // 支柱の複製・移動
+      const hitPost = s.canvasData.posts.find(p => Math.hypot(p.x - rawPos.x, p.y - rawPos.y) < HIT_TOL);
+      if (hitPost && s.mode !== 'post') {
+        stageRef.current = stage;
+        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
+        isDuplicating.current = isAlt;
+        if (isAlt) {
+          const newPost = { ...hitPost, id: uuidv4() };
+          s.addPost(newPost);
+          movingElementId.current = newPost.id;
+        } else {
+          movingElementId.current = hitPost.id;
+        }
+        dragStart.current = rawPos;
+        isDragging.current = false;
+        s.setSelectedIds([movingElementId.current!]);
+        return;
+      }
+
+      // アンチの複製・移動
+      const hitAnti = s.canvasData.antis.find(a => {
+        const w = a.direction === 'horizontal' ? a.lengthMm / 10 : a.width / 10;
+        const h = a.direction === 'horizontal' ? a.width / 10 : a.lengthMm / 10;
+        return rawPos.x >= a.x - HIT_TOL && rawPos.x <= a.x + w + HIT_TOL &&
+               rawPos.y >= a.y - HIT_TOL && rawPos.y <= a.y + h + HIT_TOL;
+      });
+      if (hitAnti && s.mode !== 'post') {
+        stageRef.current = stage;
+        const isAlt = 'altKey' in e.evt && (e.evt as MouseEvent).altKey;
+        isDuplicating.current = isAlt;
+        if (isAlt) {
+          const newAnti = { ...hitAnti, id: uuidv4() };
+          s.addAnti(newAnti);
+          movingElementId.current = newAnti.id;
+        } else {
+          movingElementId.current = hitAnti.id;
+        }
+        dragStart.current = rawPos;
+        isDragging.current = false;
+        s.setSelectedIds([movingElementId.current!]);
+        return;
+      }
+
+      // ヒットなし → 通常のモード処理
       movingElementId.current = null;
       movingHandrail.current = null;
+      isDuplicating.current = false;
 
       const gridPos = applySnap(rawPos);
       dragStart.current = gridPos;
       isDragging.current = false;
 
       // select モード: 長押し検出
+      // 長押し中に手摺・支柱・アンチに触れていたら複製モード
       if (s.mode === 'select') {
-        longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
+        const isTouchEvent = 'touches' in e.evt;
+        if (isTouchEvent) {
+          longPressTimer.current = setTimeout(() => {
+            setIsLongPress(true);
+            // 長押し位置に手摺があれば複製開始
+            const hitH = findHandrailAtPos(rawPos, useCanvasStore.getState().canvasData.handrails);
+            if (hitH) {
+              const newHandrail = { ...hitH, id: uuidv4() };
+              useCanvasStore.getState().addHandrail(newHandrail);
+              stageRef.current = stage;
+              movingElementId.current = newHandrail.id;
+              movingHandrail.current = newHandrail;
+              dragStart.current = rawPos;
+              isDuplicating.current = true;
+              useCanvasStore.getState().setSelectedIds([newHandrail.id]);
+              return;
+            }
+            const hitP = useCanvasStore.getState().canvasData.posts.find(p => Math.hypot(p.x - rawPos.x, p.y - rawPos.y) < HIT_TOL);
+            if (hitP) {
+              const newPost = { ...hitP, id: uuidv4() };
+              useCanvasStore.getState().addPost(newPost);
+              stageRef.current = stage;
+              movingElementId.current = newPost.id;
+              dragStart.current = rawPos;
+              isDuplicating.current = true;
+              useCanvasStore.getState().setSelectedIds([newPost.id]);
+              return;
+            }
+            const hitA = useCanvasStore.getState().canvasData.antis.find(a => Math.hypot(a.x - rawPos.x, a.y - rawPos.y) < HIT_TOL);
+            if (hitA) {
+              const newAnti = { ...hitA, id: uuidv4() };
+              useCanvasStore.getState().addAnti(newAnti);
+              stageRef.current = stage;
+              movingElementId.current = newAnti.id;
+              dragStart.current = rawPos;
+              isDuplicating.current = true;
+              useCanvasStore.getState().setSelectedIds([newAnti.id]);
+              return;
+            }
+          }, 500);
+        } else {
+          longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
+        }
       }
 
       // post モード: クリックで支柱配置
