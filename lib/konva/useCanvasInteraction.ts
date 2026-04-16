@@ -96,7 +96,16 @@ export function useCanvasInteraction() {
     };
 
     const onWindowMove = (e: PointerEvent | TouchEvent) => {
-      if (!movingElementId.current || !dragStart.current || !stageRef.current) return;
+      if (!movingElementId.current || !stageRef.current) return;
+      // dragStartがnullでも、movingElementIdがあれば初期化して続行
+      if (!dragStart.current) {
+        const { clientX, clientY } = getClientPos(e);
+        const s = useCanvasStore.getState();
+        const rect = stageRef.current.container().getBoundingClientRect();
+        const gridPos = screenToGrid(clientX - rect.left, clientY - rect.top, s.panX, s.panY, s.zoom);
+        dragStart.current = gridPos;
+        return;
+      }
       const { clientX, clientY } = getClientPos(e);
       const s = useCanvasStore.getState();
       const rect = stageRef.current.container().getBoundingClientRect();
