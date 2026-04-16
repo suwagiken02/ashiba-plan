@@ -102,11 +102,35 @@ export default function AutoLayoutModal({ onClose }: Props) {
     [building]
   );
 
+  // スタート角に隣接する2辺（固定辺）
+  const lockedEdgeIndices = useMemo(() => {
+    if (!scaffoldStart || !building) return new Set<number>();
+    const edgeList = getBuildingEdgesClockwise(building);
+    const n = edgeList.length;
+    const startIdx = scaffoldStart.startVertexIndex ?? 0;
+    const outEdge = edgeList[startIdx % n];
+    const inEdge = edgeList[(startIdx - 1 + n) % n];
+    return new Set([outEdge.index, inEdge.index]);
+  }, [scaffoldStart, building]);
+
   // 各辺の離れ（mm）: edgeIndex → number
   const defaultDist = scaffoldStart?.face1DistanceMm ?? 900;
   const [distances, setDistances] = useState<Record<number, number>>(() => {
     const d: Record<number, number> = {};
-    edges.forEach(e => { d[e.index] = defaultDist; });
+    edges.forEach(e => {
+      if (scaffoldStart) {
+        const n = edges.length;
+        const startIdx = scaffoldStart.startVertexIndex ?? 0;
+        const outEdge = edges[startIdx % n];
+        const inEdge = edges[(startIdx - 1 + n) % n];
+        const outIsH = outEdge.face === 'north' || outEdge.face === 'south';
+        const face1Edge = outIsH ? outEdge : inEdge;
+        const face2Edge = outIsH ? inEdge : outEdge;
+        if (e.index === face1Edge.index) { d[e.index] = scaffoldStart.face1DistanceMm; return; }
+        if (e.index === face2Edge.index) { d[e.index] = scaffoldStart.face2DistanceMm; return; }
+      }
+      d[e.index] = defaultDist;
+    });
     return d;
   });
 
@@ -203,11 +227,17 @@ export default function AutoLayoutModal({ onClose }: Props) {
                     onChange={e => setDistance(edge.index, Math.max(0, Number(e.target.value)))}
                     onFocus={() => setFocusedEdgeIndex(edge.index)}
                     onBlur={() => setFocusedEdgeIndex(null)}
+                    disabled={lockedEdgeIndices.has(edge.index)}
                     className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
-                      focusedEdgeIndex === edge.index ? 'border-accent' : 'border-dark-border'
+                      lockedEdgeIndices.has(edge.index)
+                        ? 'border-dark-border opacity-50 cursor-not-allowed'
+                        : focusedEdgeIndex === edge.index ? 'border-accent' : 'border-dark-border'
                     }`}
                     min={0} step={10}
                   />
+                  {lockedEdgeIndices.has(edge.index) && (
+                    <span className="text-[10px] text-dimension bg-dark-bg px-1.5 py-0.5 rounded border border-dark-border shrink-0">固定</span>
+                  )}
                   <span className="text-[10px] text-dimension w-16 text-right shrink-0">{edge.lengthMm}mm</span>
                 </div>
               ))}
