@@ -30,7 +30,7 @@ export default function ScaffoldLayer() {
               fill={anti.width === 400 ? '#F59E0B' : '#FCD34D'}
               opacity={0.85}
               cornerRadius={2}
-              stroke={isSelected ? '#378ADD' : (anti.width === 400 ? '#B45309' : '#A16207')}
+              stroke={isSelected ? '#FF6B35' : (anti.width === 400 ? '#B45309' : '#A16207')}
               strokeWidth={isSelected ? 2 : 1.5}
               listening={mode === 'select' || mode === 'erase'}
               id={anti.id}
@@ -67,7 +67,7 @@ export default function ScaffoldLayer() {
                 end.x * gridPx + panX,
                 end.y * gridPx + panY,
               ]}
-              stroke={isSelected ? '#378ADD' : color}
+              stroke={isSelected ? '#FF6B35' : color}
               strokeWidth={3}
               lineCap="round"
               listening={mode === 'select' || mode === 'erase'}
@@ -122,7 +122,7 @@ export default function ScaffoldLayer() {
               y={p.y * gridPx + panY}
               radius={8}
               fill="#2c2c2a"
-              stroke={isSelected ? '#378ADD' : '#2c2c2a'}
+              stroke={isSelected ? '#FF6B35' : '#2c2c2a'}
               strokeWidth={isSelected ? 2 : 0}
               listening={mode === 'select' || mode === 'erase'}
               id={p.id}

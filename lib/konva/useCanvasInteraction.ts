@@ -215,6 +215,7 @@ export function useCanvasInteraction() {
           // スマホ: まず選択、長押しで移動開始
           s.setSelectedIds([hitElement.id]);
           stageRef.current = stage;
+          const capturedRawPos = { ...rawPos };
           longPressTimer.current = setTimeout(() => {
             const currentS = useCanvasStore.getState();
             const isDup = isDuplicateMode.current;
@@ -236,7 +237,7 @@ export function useCanvasInteraction() {
               if (hitHandrail) movingHandrail.current = { ...hitHandrail };
             }
             isDuplicating.current = isDup;
-            dragStart.current = rawPos;
+            dragStart.current = capturedRawPos;
             isDragging.current = false;
             currentS.setSelectedIds([movingElementId.current!]);
           }, 300);
