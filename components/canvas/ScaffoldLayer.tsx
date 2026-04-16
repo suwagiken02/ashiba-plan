@@ -34,6 +34,14 @@ export default function ScaffoldLayer() {
               strokeWidth={isSelected ? 2 : 1.5}
               listening={mode === 'select' || mode === 'erase'}
               id={anti.id}
+              draggable={mode === 'select'}
+              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragEnd={(e) => {
+                const dx = Math.round(e.target.x() / gridPx);
+                const dy = Math.round(e.target.y() / gridPx);
+                e.target.x(0); e.target.y(0);
+                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(anti.id, dx, dy);
+              }}
             />
             {/* 内側の破線（境界線） */}
             <Line
@@ -72,6 +80,14 @@ export default function ScaffoldLayer() {
               lineCap="round"
               listening={mode === 'select' || mode === 'erase'}
               id={h.id}
+              draggable={mode === 'select'}
+              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragEnd={(e) => {
+                const dx = Math.round(e.target.x() / gridPx);
+                const dy = Math.round(e.target.y() / gridPx);
+                e.target.x(0); e.target.y(0);
+                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(h.id, dx, dy);
+              }}
             />
             {/* 両端の●マーク */}
             <Circle
@@ -126,6 +142,14 @@ export default function ScaffoldLayer() {
               strokeWidth={isSelected ? 2 : 0}
               listening={mode === 'select' || mode === 'erase'}
               id={p.id}
+              draggable={mode === 'select'}
+              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragEnd={(e) => {
+                const dx = Math.round(e.target.x() / gridPx);
+                const dy = Math.round(e.target.y() / gridPx);
+                e.target.x(0); e.target.y(0);
+                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(p.id, dx, dy);
+              }}
             />
             <Circle
               x={p.x * gridPx + panX}
