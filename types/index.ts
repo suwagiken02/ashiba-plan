@@ -35,6 +35,7 @@ export type BuildingShape = {
   points: Point[];
   fill: string;
   roof?: RoofConfig;
+  floor?: 1 | 2;
 };
 
 // === 屋根の出幅 ===

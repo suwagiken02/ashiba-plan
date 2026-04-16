@@ -134,7 +134,7 @@ function lineIntersection(a1: Point, a2: Point, b1: Point, b2: Point): Point | n
 }
 
 export default function BuildingLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, isDarkMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
 
   return (
@@ -201,8 +201,8 @@ export default function BuildingLayer() {
 
         return (
           <Line key={building.id} points={flatPoints} closed
-            fill={building.fill}
-            stroke={isSelected ? '#378ADD' : '#1a1a18'}
+            fill={building.fill ?? (building.floor === 2 ? '#5a5a7a' : (isDarkMode ? '#555555' : '#3d3d3a'))}
+            stroke={isSelected ? '#FF6B35' : (building.floor === 2 ? '#4a4a6a' : (isDarkMode ? '#888888' : '#1a1a18'))}
             strokeWidth={isSelected ? 3 : 2}
             listening={mode === 'select' || mode === 'erase'}
             id={building.id}

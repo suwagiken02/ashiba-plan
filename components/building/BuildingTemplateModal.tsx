@@ -7,7 +7,7 @@ import { BUILDING_TEMPLATES, buildFromTemplate } from '@/lib/konva/buildingBuild
 import { BuildingTemplateId, BuildingInputMethod, RoofType, RoofConfig, Point } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '@/lib/konva/gridUtils';
 
-type Props = { onClose: () => void };
+type Props = { onClose: () => void; floor?: 1 | 2 };
 
 // --- SVG shape icons ---
 const SHAPE_PATHS: Record<BuildingTemplateId, string> = {
@@ -173,7 +173,7 @@ function PreviewSVG({ templateId, dims, focusedKey }: {
   );
 }
 
-export default function BuildingTemplateModal({ onClose }: Props) {
+export default function BuildingTemplateModal({ onClose, floor }: Props) {
   const { addBuilding, buildingInputMethod, setBuildingInputMethod, zoomToFitBuildings } = useCanvasStore();
   const [selectedTemplate, setSelectedTemplate] = useState<BuildingTemplateId>('rect');
   const [dims, setDims] = useState<Record<string, number>>({});
@@ -187,6 +187,7 @@ export default function BuildingTemplateModal({ onClose }: Props) {
   const [unit, setUnit] = useState<'m' | 'mm'>('mm');
   const [uniformRoof, setUniformRoof] = useState(true);
   const [edgeOverhangs, setEdgeOverhangs] = useState<Record<number, number>>({});
+  const [anchorPoint, setAnchorPoint] = useState<'tl' | 'tr' | 'bl' | 'br' | 'center'>('tl');
 
   const template = BUILDING_TEMPLATES.find(t => t.id === selectedTemplate);
 
@@ -246,7 +247,7 @@ export default function BuildingTemplateModal({ onClose }: Props) {
         katanagareDirection: roofType === 'katanagare' ? katanagareDir : undefined,
         kirizumaGableFace: roofType === 'kirizuma' ? kirizumaGable : undefined,
       } : undefined;
-      addBuilding({ id: uuidv4(), type: 'polygon', points, fill: '#3d3d3a', roof });
+      addBuilding({ id: uuidv4(), type: 'polygon', points, fill: floor === 2 ? '#5a5a7a' : '#3d3d3a', floor: floor ?? 1, roof });
       requestAnimationFrame(() => {
         zoomToFitBuildings(window.innerWidth, window.innerHeight - 120);
       });
@@ -309,7 +310,7 @@ export default function BuildingTemplateModal({ onClose }: Props) {
     <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-md max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between">
-          <h2 className="font-bold text-lg">建物入力</h2>
+          <h2 className="font-bold text-lg">{floor === 2 ? '2F建物入力' : '建物入力'}</h2>
           <button onClick={onClose} className="text-dimension hover:text-canvas px-2">✕</button>
         </div>
 
@@ -514,6 +515,26 @@ export default function BuildingTemplateModal({ onClose }: Props) {
                 </div>
               )}
             </div>
+
+            {floor === 2 && (
+              <div className="mt-3 pt-3 border-t border-dark-border">
+                <p className="text-sm text-dimension mb-2">基準点</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    ['tl', '左上'], ['', ''], ['tr', '右上'],
+                    ['', ''], ['center', '中央'], ['', ''],
+                    ['bl', '左下'], ['', ''], ['br', '右下'],
+                  ] as const).map(([id, label], idx) => (
+                    id ? (
+                      <button key={id} onClick={() => setAnchorPoint(id as typeof anchorPoint)}
+                        className={`py-1.5 rounded-lg text-xs border transition-colors ${
+                          anchorPoint === id ? 'border-accent bg-accent/15 text-accent' : 'border-dark-border text-dimension'
+                        }`}>{label}</button>
+                    ) : <div key={idx} />
+                  ))}
+                </div>
+              </div>
+            )}
 
             <button onClick={handleCreate} className="w-full mt-4 py-3 bg-accent text-white font-bold rounded-xl text-lg">
               配置する
