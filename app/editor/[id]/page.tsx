@@ -59,6 +59,7 @@ export default function EditorPage() {
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
+  const [showBuilding2FModal, setShowBuilding2FModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
   const [showScaffoldStartModal, setShowScaffoldStartModal] = useState(false);
   const [showRoofModal, setShowRoofModal] = useState(false);
@@ -384,6 +385,16 @@ export default function EditorPage() {
             </button>
           )}
 
+          {/* 2F追加ボタン（1F建物がある場合のみ表示） */}
+          {canvasData.buildings.some(b => !b.floor || b.floor === 1) && (
+            <button
+              onClick={() => setShowBuilding2FModal(true)}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold border border-dark-border text-dimension hover:text-canvas shadow-lg transition-colors"
+            >
+              2F追加
+            </button>
+          )}
+
           {/* 屋根設定ボタン（建物選択中のみ表示） */}
           {selectedIds.length === 1 && canvasData.buildings.some(b => b.id === selectedIds[0]) && (
             <button
@@ -429,6 +440,9 @@ export default function EditorPage() {
       {/* モーダル */}
       {showBuildingModal && (
         <BuildingTemplateModal onClose={() => setShowBuildingModal(false)} />
+      )}
+      {showBuilding2FModal && (
+        <BuildingTemplateModal floor={2} onClose={() => setShowBuilding2FModal(false)} />
       )}
       {showExportModal && (
         <ExportModal
