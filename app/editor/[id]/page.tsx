@@ -207,8 +207,18 @@ export default function EditorPage() {
         <div className="flex items-center gap-1">
           {/* アンドゥ/リドゥ */}
           <button
-            onClick={undo}
-            disabled={history.past.length === 0}
+            onClick={() => {
+              if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
+                removeLastVertexPoint();
+              } else {
+                undo();
+              }
+            }}
+            disabled={
+              mode === 'building' && buildingInputMethod === 'vertex'
+                ? vertexPoints.length === 0
+                : history.past.length === 0
+            }
             className="px-2 py-1 text-lg disabled:opacity-30 text-dimension hover:text-canvas"
             title="元に戻す"
           >
