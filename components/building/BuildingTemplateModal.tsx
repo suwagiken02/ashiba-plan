@@ -239,19 +239,47 @@ export default function BuildingTemplateModal({ onClose, floor }: Props) {
     const centerX = Math.round(DEFAULT_COLS / 2);
     const centerY = Math.round(DEFAULT_ROWS / 2);
     const points = buildFromTemplate(selectedTemplate, dims, centerX, centerY);
-    if (points.length > 0) {
-      const roof: RoofConfig | undefined = roofType !== 'none' ? {
-        roofType, uniformMm: roofOverhangMm,
-        northMm: null, southMm: null, eastMm: null, westMm: null,
-        edgeOverhangsMm: uniformRoof ? undefined : edgeOverhangs,
-        katanagareDirection: roofType === 'katanagare' ? katanagareDir : undefined,
-        kirizumaGableFace: roofType === 'kirizuma' ? kirizumaGable : undefined,
-      } : undefined;
-      addBuilding({ id: uuidv4(), type: 'polygon', points, fill: floor === 2 ? '#5a5a7a' : '#3d3d3a', floor: floor ?? 1, roof });
-      requestAnimationFrame(() => {
-        zoomToFitBuildings(window.innerWidth, window.innerHeight - 120);
+    if (points.length === 0) { onClose(); return; }
+
+    const roof: RoofConfig | undefined = roofType !== 'none' ? {
+      roofType, uniformMm: uniformRoof ? roofOverhangMm : 600,
+      northMm: null, southMm: null, eastMm: null, westMm: null,
+      edgeOverhangsMm: uniformRoof ? undefined : edgeOverhangs,
+      katanagareDirection: roofType === 'katanagare' ? katanagareDir : undefined,
+      kirizumaGableFace: roofType === 'kirizuma' ? kirizumaGable : undefined,
+    } : undefined;
+
+    // 2F建物は仮配置モードで配置
+    if (floor === 2) {
+      const xs = points.map(p => p.x);
+      const ys = points.map(p => p.y);
+      const minX = Math.min(...xs), maxX = Math.max(...xs);
+      const minY = Math.min(...ys), maxY = Math.max(...ys);
+      let anchorX = 0, anchorY = 0;
+      if (anchorPoint === 'tl') { anchorX = minX; anchorY = minY; }
+      else if (anchorPoint === 'tr') { anchorX = maxX; anchorY = minY; }
+      else if (anchorPoint === 'bl') { anchorX = minX; anchorY = maxY; }
+      else if (anchorPoint === 'br') { anchorX = maxX; anchorY = maxY; }
+      else { anchorX = (minX + maxX) / 2; anchorY = (minY + maxY) / 2; }
+
+      const normalizedPoints = points.map(p => ({ x: p.x - anchorX, y: p.y - anchorY }));
+
+      useCanvasStore.getState().setBuilding2FDraft({
+        points: normalizedPoints,
+        anchorPoint,
+        floor: 2,
+        fill: '#5a5a7a',
+        roof,
       });
+      onClose();
+      return;
     }
+
+    // 1F建物は即配置
+    addBuilding({ id: uuidv4(), type: 'polygon', points, fill: '#3d3d3a', floor: 1, roof });
+    requestAnimationFrame(() => {
+      zoomToFitBuildings(window.innerWidth, window.innerHeight - 120);
+    });
     onClose();
   };
 

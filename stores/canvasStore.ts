@@ -119,6 +119,17 @@ type CanvasStore = {
   showKidare: boolean;
   toggleShowKidare: () => void;
 
+  // 2F仮配置
+  building2FDraft: {
+    points: { x: number; y: number }[];
+    anchorPoint: string;
+    floor: 2;
+    fill: string;
+    roof?: import('@/types').RoofConfig;
+  } | null;
+  setBuilding2FDraft: (draft: CanvasStore['building2FDraft']) => void;
+  clearBuilding2FDraft: () => void;
+
   // Zoom & Pan
   zoom: number;
   panX: number;
@@ -241,6 +252,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   showKidare: false,
   toggleShowKidare: () => set({ showKidare: !get().showKidare }),
+
+  building2FDraft: null,
+  setBuilding2FDraft: (draft) => set({ building2FDraft: draft }),
+  clearBuilding2FDraft: () => set({ building2FDraft: null }),
 
   zoom: 1.0,
   panX: 0,
