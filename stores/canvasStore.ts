@@ -120,6 +120,10 @@ type CanvasStore = {
   showKidare: boolean;
   toggleShowKidare: () => void;
 
+  // 手摺入れ替えモード
+  isReorderMode: boolean;
+  toggleReorderMode: () => void;
+
   // 2F仮配置
   building2FDraft: {
     points: { x: number; y: number }[];
@@ -258,6 +262,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   showKidare: false,
   toggleShowKidare: () => set({ showKidare: !get().showKidare }),
+
+  isReorderMode: false,
+  toggleReorderMode: () => set({ isReorderMode: !get().isReorderMode }),
 
   building2FDraft: null,
   setBuilding2FDraft: (draft) => set({ building2FDraft: draft }),

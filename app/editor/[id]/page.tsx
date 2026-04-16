@@ -56,6 +56,8 @@ export default function EditorPage() {
     toggleDuplicateMode,
     showKidare,
     toggleShowKidare,
+    isReorderMode,
+    toggleReorderMode,
     selectedIds,
     vertexPoints,
     clearVertexPoints,
@@ -267,6 +269,19 @@ export default function EditorPage() {
             title={isDuplicateMode ? '複製モードOFF' : '複製モードON'}
           >
             {isDuplicateMode ? '複製ON' : '複製'}
+          </button>
+
+          {/* 手摺入れ替えモード */}
+          <button
+            onClick={toggleReorderMode}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
+              isReorderMode
+                ? 'bg-accent text-white border-accent'
+                : 'border-dark-border text-dimension'
+            }`}
+            title="手摺入れ替えモード"
+          >
+            入替
           </button>
 
           {/* ダークモード */}
