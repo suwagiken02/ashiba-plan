@@ -101,17 +101,26 @@ export const snapToHandrail = (
 export const snapHandrailPlacement = (
   startPos: Point,
   lengthMm: HandrailLengthMm,
-  direction: 'horizontal' | 'vertical',
+  direction: 'horizontal' | 'vertical' | number,
   handrails: Handrail[],
   snapRadiusGrid: number,
   antis?: Anti[]
 ): { snappedStart: Point; snapIndicator: Point } | null => {
   const lengthGrid = mmToGrid(lengthMm);
 
-  // 終点を計算
-  const endPos: Point = direction === 'horizontal'
-    ? { x: startPos.x + lengthGrid, y: startPos.y }
-    : { x: startPos.x, y: startPos.y + lengthGrid };
+  // 終点を計算（角度対応）
+  let endPos: Point;
+  if (direction === 'horizontal') {
+    endPos = { x: startPos.x + lengthGrid, y: startPos.y };
+  } else if (direction === 'vertical') {
+    endPos = { x: startPos.x, y: startPos.y + lengthGrid };
+  } else {
+    const rad = (direction as number) * (Math.PI / 180);
+    endPos = {
+      x: startPos.x + Math.round(lengthGrid * Math.cos(rad)),
+      y: startPos.y + Math.round(lengthGrid * Math.sin(rad)),
+    };
+  }
 
   // 始点スナップ
   const startSnap = snapToHandrail(startPos, handrails, snapRadiusGrid, antis);
@@ -132,9 +141,18 @@ export const snapHandrailPlacement = (
   }
 
   if (endSnap) {
-    const adjustedStart: Point = direction === 'horizontal'
-      ? { x: endSnap.x - lengthGrid, y: endSnap.y }
-      : { x: endSnap.x, y: endSnap.y - lengthGrid };
+    let adjustedStart: Point;
+    if (direction === 'horizontal') {
+      adjustedStart = { x: endSnap.x - lengthGrid, y: endSnap.y };
+    } else if (direction === 'vertical') {
+      adjustedStart = { x: endSnap.x, y: endSnap.y - lengthGrid };
+    } else {
+      const rad = (direction as number) * (Math.PI / 180);
+      adjustedStart = {
+        x: endSnap.x - Math.round(lengthGrid * Math.cos(rad)),
+        y: endSnap.y - Math.round(lengthGrid * Math.sin(rad)),
+      };
+    }
     return { snappedStart: adjustedStart, snapIndicator: endSnap };
   }
 

@@ -20,7 +20,7 @@ function getBlockSize(lengthMm: number) {
 type Face = 'north' | 'south' | 'east' | 'west';
 
 function detectFace(
-  handrails: { x: number; y: number; direction: 'horizontal' | 'vertical' }[],
+  handrails: { x: number; y: number; direction: 'horizontal' | 'vertical' | number }[],
   buildingPoints?: { x: number; y: number }[]
 ): Face {
   if (handrails.length === 0) return 'north';

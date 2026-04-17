@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { HandrailLengthMm, AntiWidth, ObstacleType } from '@/types';
+import { HandrailLengthMm, HandrailDirection, AntiWidth, ObstacleType } from '@/types';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
 import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
@@ -54,10 +54,34 @@ function MmInput({ value, onChange, min = 0 }: { value: number; onChange: (v: nu
 }
 
 type ToolbarDrag =
-  | { type: 'handrail'; lengthMm: number; direction: 'horizontal' | 'vertical'; currentX: number; currentY: number }
+  | { type: 'handrail'; lengthMm: number; direction: 'horizontal' | 'vertical' | number; currentX: number; currentY: number }
   | { type: 'anti'; lengthMm: number; direction: 'horizontal' | 'vertical'; antiWidth: AntiWidth; currentX: number; currentY: number }
   | { type: 'post'; currentX: number; currentY: number }
   | { type: 'obstacle'; obstacleType: ObstacleType; widthMm: number; heightMm: number; rotation: number; currentX: number; currentY: number };
+
+const ANGLE_PRESETS: { label: string; value: 'horizontal' | 'vertical' | number }[] = [
+  { label: '横', value: 'horizontal' as const },
+  { label: '縦', value: 'vertical' as const },
+  { label: '15°', value: 15 },
+  { label: '30°', value: 30 },
+  { label: '45°', value: 45 },
+  { label: '60°', value: 60 },
+  { label: '75°', value: 75 },
+];
+
+function getAnglePreviewPoints(angle: number | 'horizontal' | 'vertical') {
+  const W = 80, H = 80;
+  const cx = W / 2, cy = H / 2;
+  const len = 30;
+  let dx = len, dy = 0;
+  if (angle === 'vertical') { dx = 0; dy = len; }
+  else if (typeof angle === 'number') {
+    const rad = angle * Math.PI / 180;
+    dx = Math.cos(rad) * len;
+    dy = Math.sin(rad) * len;
+  }
+  return { W, H, cx, cy, dx, dy };
+}
 
 type PartTab = 'handrail' | 'post' | 'anti';
 const PART_TABS: { id: PartTab; label: string }[] = [
@@ -79,6 +103,7 @@ export default function PartSelector() {
   const [expanded, setExpanded] = useState(true);
   const [toolbarDrag, setToolbarDrag] = useState<ToolbarDrag | null>(null);
   const [direction, setDirection] = useState<'horizontal' | 'vertical'>('horizontal');
+  const [handrailAngle, setHandrailAngle] = useState<number | 'horizontal' | 'vertical'>('horizontal');
   const [trashHover, setTrashHover] = useState(false);
   const trashRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -143,10 +168,10 @@ export default function PartSelector() {
 
   // --- 手摺ドラッグ ---
   const handleHandrailDown = useCallback(
-    (lengthMm: HandrailLengthMm, dir: 'horizontal' | 'vertical', e: React.PointerEvent) => {
+    (lengthMm: HandrailLengthMm, angle: HandrailDirection, e: React.PointerEvent) => {
       e.preventDefault();
       setSelectedHandrailLength(lengthMm);
-      setToolbarDrag({ type: 'handrail', lengthMm, direction: dir, currentX: e.clientX, currentY: e.clientY });
+      setToolbarDrag({ type: 'handrail', lengthMm, direction: angle, currentX: e.clientX, currentY: e.clientY });
     }, [setSelectedHandrailLength]
   );
 
@@ -398,7 +423,7 @@ export default function PartSelector() {
             <span>{OBSTACLE_TYPES.find(o => o.id === toolbarDrag.obstacleType)?.label}</span>
           ) : (
             <>
-              <span>{toolbarDrag.direction === 'horizontal' ? '━' : '┃'}</span>
+              <span>{toolbarDrag.direction === 'horizontal' ? '━' : toolbarDrag.direction === 'vertical' ? '┃' : `${toolbarDrag.direction}°`}</span>
               <span>{toolbarDrag.type === 'anti' ? `${toolbarDrag.antiWidth}×` : ''}{toolbarDrag.lengthMm}</span>
             </>
           )}
@@ -424,10 +449,47 @@ export default function PartSelector() {
     </div>
   );
 
+  const ap = getAnglePreviewPoints(handrailAngle);
+  const angleSelector = (
+    <div className="space-y-1.5">
+      <div className="flex gap-1 flex-wrap">
+        {ANGLE_PRESETS.map((p) => (
+          <button key={String(p.value)} onClick={() => setHandrailAngle(p.value)}
+            className={`px-2 py-1 rounded text-xs font-bold transition-colors ${
+              handrailAngle === p.value ? 'bg-accent text-white' : 'bg-dark-bg text-dimension border border-dark-border'
+            }`}
+          >{p.label}</button>
+        ))}
+      </div>
+      <div className="flex items-center gap-2">
+        <svg
+          width={ap.W} height={ap.H}
+          className="bg-dark-bg rounded-lg border border-dark-border cursor-grab active:cursor-grabbing select-none"
+          style={{ touchAction: 'none' }}
+          onPointerDown={(e) => handleHandrailDown(selectedHandrailLength, handrailAngle, e)}
+        >
+          <line x1={ap.cx - ap.dx} y1={ap.cy - ap.dy} x2={ap.cx + ap.dx} y2={ap.cy + ap.dy}
+            stroke="#378ADD" strokeWidth={3} strokeLinecap="round" />
+          <circle cx={ap.cx - ap.dx} cy={ap.cy - ap.dy} r={3} fill="#378ADD" />
+          <circle cx={ap.cx + ap.dx} cy={ap.cy + ap.dy} r={3} fill="#378ADD" />
+        </svg>
+        <div className="flex items-center gap-1">
+          <input
+            type="number" min={0} max={360}
+            value={typeof handrailAngle === 'number' ? handrailAngle : handrailAngle === 'horizontal' ? 0 : 90}
+            onChange={(e) => setHandrailAngle(Number(e.target.value))}
+            className="w-16 bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs font-mono"
+          />
+          <span className="text-[10px] text-dimension">°</span>
+        </div>
+      </div>
+    </div>
+  );
+
   const handrailButtons = (
     <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
       {HANDRAIL_LENGTHS.map((l) => (
-        <button key={`hr-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, direction, e)}
+        <button key={`hr-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
           className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
         >{l}</button>
       ))}
@@ -485,10 +547,8 @@ export default function PartSelector() {
             <div className="px-3 py-2">
               {activeTab === 'handrail' && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-dimension">ドラッグで配置</p>
-                    {dirSwitch}
-                  </div>
+                  <p className="text-[10px] text-dimension">ドラッグで配置</p>
+                  {angleSelector}
                   {handrailButtons}
                 </div>
               )}
@@ -583,10 +643,8 @@ export default function PartSelector() {
                 <div className="flex-1 overflow-y-auto px-3 py-2">
                   {activeTab === 'handrail' && (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
-                        {dirSwitch}
-                      </div>
+                      <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
+                      {angleSelector}
                       {handrailButtons}
                     </div>
                   )}

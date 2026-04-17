@@ -460,8 +460,11 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
             const sx = handrailPreview.x * gridPx + panX;
             const sy = handrailPreview.y * gridPx + panY;
             const lenGrid = mmToGrid(handrailPreview.lengthMm);
-            const ex = handrailPreview.direction === 'horizontal' ? sx + lenGrid * gridPx : sx;
-            const ey = handrailPreview.direction === 'vertical' ? sy + lenGrid * gridPx : sy;
+            const dir = handrailPreview.direction;
+            let ex: number, ey: number;
+            if (dir === 'horizontal') { ex = sx + lenGrid * gridPx; ey = sy; }
+            else if (dir === 'vertical') { ex = sx; ey = sy + lenGrid * gridPx; }
+            else { const rad = dir * (Math.PI / 180); ex = sx + Math.round(lenGrid * Math.cos(rad)) * gridPx; ey = sy + Math.round(lenGrid * Math.sin(rad)) * gridPx; }
             return (
               <Line
                 points={[sx, sy, ex, ey]}

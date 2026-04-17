@@ -13,6 +13,7 @@ import {
   RoofOverhang,
   AntiWidth,
   HandrailLengthMm,
+  HandrailDirection,
   BuildingInputMethod,
   ScaffoldStartConfig,
 } from '@/types';
@@ -64,8 +65,8 @@ type CanvasStore = {
   setSelectedAntiLength: (l: number) => void;
 
   // Handrail drag preview & snap
-  handrailPreview: { x: number; y: number; lengthMm: number; direction: 'horizontal' | 'vertical' } | null;
-  setHandrailPreview: (p: { x: number; y: number; lengthMm: number; direction: 'horizontal' | 'vertical' } | null) => void;
+  handrailPreview: { x: number; y: number; lengthMm: number; direction: HandrailDirection } | null;
+  setHandrailPreview: (p: { x: number; y: number; lengthMm: number; direction: HandrailDirection } | null) => void;
   snapPoint: { x: number; y: number } | null;
   setSnapPoint: (p: { x: number; y: number } | null) => void;
 
