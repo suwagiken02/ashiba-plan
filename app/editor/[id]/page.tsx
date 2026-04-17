@@ -86,6 +86,8 @@ export default function EditorPage() {
     removeLastDirectionPoint,
     showDirectionInputModal,
     setShowDirectionInputModal,
+    showDirectionGuide,
+    toggleDirectionGuide,
     showCornerGuide,
     toggleShowCornerGuide,
     isMeasuring,
@@ -301,7 +303,26 @@ export default function EditorPage() {
               : '保存'}
           </button>
 
+          {/* 寸法計測（スマホのみ） */}
+          <button
+            onClick={toggleMeasuring}
+            className={`sm:hidden px-3 py-1 rounded-lg text-sm font-bold border transition-colors ${
+              isMeasuring
+                ? 'bg-accent text-white border-accent'
+                : 'bg-dark-bg border-dark-border text-dimension'
+            }`}
+            title="寸法計測"
+          >
+            📏
+          </button>
+
           {/* 出力 */}
+          {/* スマホ用計測結果表示 */}
+          {isMeasuring && measureResultMm !== null && (
+            <div className="sm:hidden fixed top-14 right-3 z-40 px-3 py-1.5 bg-accent text-white rounded-lg text-xs font-mono font-bold shadow-lg">
+              {measureResultMm}mm
+            </div>
+          )}
           <button
             onClick={() => setShowExportModal(true)}
             className="px-3 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
@@ -502,6 +523,14 @@ export default function EditorPage() {
             className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
           >
             キャンセル
+          </button>
+          <button
+            onClick={toggleDirectionGuide}
+            className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg border transition-colors ${
+              showDirectionGuide ? 'bg-orange-500 text-white border-orange-500' : 'bg-dark-surface border-dark-border text-dimension'
+            }`}
+          >
+            {showDirectionGuide ? 'ガイドON' : 'ガイドOFF'}
           </button>
           <button
             onClick={() => setShowDirectionInputModal(true)}
