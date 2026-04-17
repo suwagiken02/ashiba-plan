@@ -311,10 +311,13 @@ export function useCanvasInteraction() {
           s.setMeasurePoint1(snapped);
           s.setMeasurePoint2(null);
         } else if (!s.measurePoint2) {
-          const dx = (snapped.x - s.measurePoint1.x) * 10;
-          const dy = (snapped.y - s.measurePoint1.y) * 10;
+          const finalPos = { ...snapped };
+          if (s.measureAxisMode === 'x') finalPos.y = s.measurePoint1.y;
+          else if (s.measureAxisMode === 'y') finalPos.x = s.measurePoint1.x;
+          const dx = (finalPos.x - s.measurePoint1.x) * 10;
+          const dy = (finalPos.y - s.measurePoint1.y) * 10;
           s.setMeasureResultMm(Math.round(Math.sqrt(dx * dx + dy * dy)));
-          s.setMeasurePoint2(snapped);
+          s.setMeasurePoint2(finalPos);
           s.setMeasureCursor(null);
         } else {
           s.setMeasurePoint1(snapped);
@@ -512,7 +515,10 @@ export function useCanvasInteraction() {
       if (s.isMeasuring && s.measurePoint1) {
         const raw = toGrid(stage, clientPos);
         const snapped = snapMeasurePoint(raw, s);
-        s.setMeasureCursor(snapped);
+        const final = { ...snapped };
+        if (s.measureAxisMode === 'x') final.y = s.measurePoint1.y;
+        else if (s.measureAxisMode === 'y') final.x = s.measurePoint1.x;
+        s.setMeasureCursor(final);
         return;
       }
 

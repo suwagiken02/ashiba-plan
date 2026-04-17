@@ -116,6 +116,8 @@ type CanvasStore = {
   measureCursor: { x: number; y: number } | null;
   measureResultMm: number | null;
   measurePoint2: { x: number; y: number } | null;
+  measureAxisMode: 'free' | 'x' | 'y';
+  setMeasureAxisMode: (mode: 'free' | 'x' | 'y') => void;
   toggleMeasuring: () => void;
   setMeasurePoint1: (p: { x: number; y: number } | null) => void;
   setMeasurePoint2: (p: { x: number; y: number } | null) => void;
@@ -300,6 +302,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   measurePoint2: null,
   measureCursor: null,
   measureResultMm: null,
+  measureAxisMode: 'free',
+  setMeasureAxisMode: (mode) => set({ measureAxisMode: mode }),
   toggleMeasuring: () => {
     const { isMeasuring } = get();
     set({

@@ -93,6 +93,8 @@ export default function EditorPage() {
     isMeasuring,
     toggleMeasuring,
     measureResultMm,
+    measureAxisMode,
+    setMeasureAxisMode,
     measurePoint1,
     measurePoint2,
     setMeasurePoint1,
@@ -323,6 +325,19 @@ export default function EditorPage() {
               {measureResultMm}mm
             </div>
           )}
+          {/* スマホ用軸切替 */}
+          {isMeasuring && (
+            <div className="sm:hidden fixed top-14 left-3 z-40 flex gap-1 bg-dark-surface border border-dark-border rounded-lg p-0.5 shadow-lg">
+              {(['free', 'x', 'y'] as const).map(m => (
+                <button key={m}
+                  onClick={() => setMeasureAxisMode(m)}
+                  className={`px-2 py-1 rounded text-xs font-bold ${
+                    measureAxisMode === m ? 'bg-accent text-white' : 'text-dimension'
+                  }`}
+                >{m === 'free' ? '⇱' : m === 'x' ? '↔' : '↕'}</button>
+              ))}
+            </div>
+          )}
           <button
             onClick={() => setShowExportModal(true)}
             className="px-3 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
@@ -457,6 +472,18 @@ export default function EditorPage() {
           {isMeasuring && measureResultMm !== null && (
             <div className="px-2 py-1 bg-accent/20 border border-accent rounded-lg text-xs font-mono font-bold text-accent text-center">
               {measureResultMm}mm
+            </div>
+          )}
+          {isMeasuring && (
+            <div className="flex gap-1 bg-dark-surface border border-dark-border rounded-lg p-0.5">
+              {(['free', 'x', 'y'] as const).map(m => (
+                <button key={m}
+                  onClick={() => setMeasureAxisMode(m)}
+                  className={`flex-1 px-2 py-1 rounded text-[10px] font-bold ${
+                    measureAxisMode === m ? 'bg-accent text-white' : 'text-dimension'
+                  }`}
+                >{m === 'free' ? '⇱' : m === 'x' ? '↔' : '↕'}</button>
+              ))}
             </div>
           )}
 
