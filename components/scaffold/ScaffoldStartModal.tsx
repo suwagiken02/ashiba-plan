@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
+import NumInput from '@/components/ui/NumInput';
 import { StartCorner, HandrailLengthMm, Point } from '@/types';
 import { mmToGrid } from '@/lib/konva/gridUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
@@ -160,17 +161,13 @@ export default function ScaffoldStartModal({ onClose }: Props) {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm w-20 shrink-0">{faceLabels.label1}</span>
-                <input type="number" value={face1Distance}
-                  onChange={(e) => setFace1Distance(Math.max(0, Number(e.target.value)))}
-                  className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
-                  min={0} step={10} />
+                <NumInput value={face1Distance} onChange={setFace1Distance} min={0} step={10}
+                  className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm w-20 shrink-0">{faceLabels.label2}</span>
-                <input type="number" value={face2Distance}
-                  onChange={(e) => setFace2Distance(Math.max(0, Number(e.target.value)))}
-                  className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
-                  min={0} step={10} />
+                <NumInput value={face2Distance} onChange={setFace2Distance} min={0} step={10}
+                  className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
           </div>

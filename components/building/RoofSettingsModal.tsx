@@ -3,6 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { RoofType, RoofConfig, Point } from '@/types';
+import NumInput from '@/components/ui/NumInput';
 import { getBuildingEdgesClockwise } from '@/lib/konva/autoLayoutUtils';
 
 type Props = {
@@ -156,9 +157,7 @@ export default function RoofSettingsModal({ buildingId, buildingPoints, initialR
               {uniform ? (
                 <div>
                   <label className="block text-sm text-dimension mb-1">出幅 (mm)</label>
-                  <input type="number" value={uniformMm} onChange={(e) => setUniformMm(Math.max(0, Number(e.target.value)))}
-                    className="w-full bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" min={0} step={50}
-                  />
+                  <NumInput value={uniformMm} onChange={setUniformMm} min={0} step={50} />
                 </div>
               ) : isMultiEdge && edges ? (
                 /* 多辺ポリゴン: 辺ごとの入力 */
@@ -170,11 +169,11 @@ export default function RoofSettingsModal({ buildingId, buildingPoints, initialR
                         {edge.label}
                       </span>
                       <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
-                      <input type="number"
+                      <NumInput
                         value={edgeOverhangs[edge.index] ?? DEFAULT_OVERHANG}
-                        onChange={(e) => setEdgeOverhangs(prev => ({ ...prev, [edge.index]: Math.max(0, Number(e.target.value)) }))}
-                        className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
+                        onChange={(v) => setEdgeOverhangs(prev => ({ ...prev, [edge.index]: v }))}
                         min={0} step={50}
+                        className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
                       />
                     </div>
                   ))}
@@ -191,8 +190,8 @@ export default function RoofSettingsModal({ buildingId, buildingPoints, initialR
                   ].map((f) => (
                     <div key={f.label} className="flex items-center gap-3">
                       <span className="text-sm w-10 shrink-0">{f.label}</span>
-                      <input type="number" value={f.value} onChange={(e) => f.set(Math.max(0, Number(e.target.value)))}
-                        className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" min={0} step={50}
+                      <NumInput value={f.value} onChange={f.set} min={0} step={50}
+                        className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
                       />
                     </div>
                   ))}

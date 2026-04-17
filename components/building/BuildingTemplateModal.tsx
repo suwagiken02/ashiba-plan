@@ -6,6 +6,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { BUILDING_TEMPLATES, buildFromTemplate } from '@/lib/konva/buildingBuilder';
 import { BuildingTemplateId, BuildingInputMethod, RoofType, RoofConfig, Point } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '@/lib/konva/gridUtils';
+import NumInput from '@/components/ui/NumInput';
 
 type Props = { onClose: () => void; floor?: 1 | 2; floor1Building?: import('@/types').BuildingShape };
 
@@ -429,13 +430,10 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
                   <span className="shrink-0 px-1.5 h-6 flex items-center justify-center rounded text-xs font-bold bg-dark-bg text-dimension">
                     直径<span className="font-normal text-[10px] ml-0.5">({unit})</span>
                   </span>
-                  <input type="number" value={mmToDisplay(dims.diameter ?? 6000)}
-                    onChange={e => {
-                      const num = parseFloat(e.target.value);
-                      if (!isNaN(num) && num > 0) updateDim('diameter', displayToMm(num));
-                    }}
+                  <NumInput value={mmToDisplay(dims.diameter ?? 6000)}
+                    onChange={(v) => updateDim('diameter', displayToMm(v))}
+                    min={unit === 'm' ? 0.1 : 100} step={unit === 'm' ? 0.1 : 100}
                     className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none focus:border-accent"
-                    step={unit === 'm' ? 0.1 : 100} min={unit === 'm' ? 0.1 : 100}
                   />
                   <span className="text-dimension text-xs w-6">{unit}</span>
                 </div>
@@ -449,17 +447,14 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
                       : 'bg-dark-bg/50 text-dimension/50'
                     }`}>{row.letter}<span className="font-normal text-[10px] ml-0.5">({unit})</span></span>
                     {row.editable ? (
-                      <input type="number" value={mmToDisplay(row.value)}
-                        onChange={e => {
-                          const num = parseFloat(e.target.value);
-                          if (!isNaN(num) && num > 0 && row.dimKey) updateDim(row.dimKey, displayToMm(num));
-                        }}
+                      <NumInput value={mmToDisplay(row.value)}
+                        onChange={(v) => { if (row.dimKey) updateDim(row.dimKey, displayToMm(v)); }}
+                        min={unit === 'm' ? 0.1 : 100}
                         onFocus={() => setFocusedDimKey(row.dimKey)}
                         onBlur={() => setFocusedDimKey(null)}
                         className={`flex-1 px-3 py-2 bg-dark-bg border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none ${
                           focusedDimKey === row.dimKey ? 'border-accent' : 'border-dark-border'
                         }`}
-                        step={unit === 'm' ? 0.1 : 100} min={unit === 'm' ? 0.1 : 100}
                       />
                     ) : (
                       <div className="flex-1 px-3 py-2 bg-dark-bg/60 border border-dark-border/50 rounded-lg text-dimension/70 text-right font-mono text-sm">
@@ -522,10 +517,11 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
                   {uniformRoof ? (
                     <div className="flex items-center gap-3">
                       <span className="text-sm text-dimension shrink-0">出幅</span>
-                      <input type="number" value={mmToDisplay(roofOverhangMm)}
-                        onChange={e => setRoofOverhangMm(Math.max(0, displayToMm(Number(e.target.value))))}
+                      <NumInput value={mmToDisplay(roofOverhangMm)}
+                        onChange={(v) => setRoofOverhangMm(displayToMm(v))}
+                        min={0} step={unit === 'm' ? 0.05 : 50}
                         className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
-                        min={0} step={unit === 'm' ? 0.05 : 50} />
+                      />
                       <span className="text-xs text-dimension">{unit}</span>
                     </div>
                   ) : (
@@ -537,15 +533,11 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
                             <span className="shrink-0 px-1.5 h-6 flex items-center justify-center rounded text-xs font-bold bg-dark-bg text-dimension">
                               {row.letter}
                             </span>
-                            <input type="number" value={mmToDisplay(val)}
-                              onChange={e => {
-                                const num = parseFloat(e.target.value);
-                                if (!isNaN(num) && num >= 0) {
-                                  setEdgeOverhangs(prev => ({ ...prev, [row.edgeIdx]: displayToMm(num) }));
-                                }
-                              }}
+                            <NumInput value={mmToDisplay(val)}
+                              onChange={(v) => setEdgeOverhangs(prev => ({ ...prev, [row.edgeIdx]: displayToMm(v) }))}
+                              min={0} step={unit === 'm' ? 0.05 : 50}
                               className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none focus:border-accent"
-                              min={0} step={unit === 'm' ? 0.05 : 50} />
+                            />
                             <span className="text-xs text-dimension w-6">{unit}</span>
                           </div>
                         );

@@ -7,6 +7,7 @@ import { HandrailLengthMm, HandrailDirection, AntiWidth, ObstacleType } from '@/
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
 import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
+import NumInput from '@/components/ui/NumInput';
 
 const HANDRAIL_LENGTHS: HandrailLengthMm[] = [1800, 1200, 900, 600, 400, 300, 200];
 const ANTI_LENGTHS: number[] = [1800, 1200, 900, 600, 400];
@@ -473,10 +474,10 @@ export default function PartSelector() {
           <circle cx={ap.cx + ap.dx} cy={ap.cy + ap.dy} r={3} fill="#378ADD" />
         </svg>
         <div className="flex items-center gap-1">
-          <input
-            type="number" min={0} max={360}
+          <NumInput
             value={typeof handrailAngle === 'number' ? handrailAngle : handrailAngle === 'horizontal' ? 0 : 90}
-            onChange={(e) => setHandrailAngle(Number(e.target.value))}
+            onChange={(v) => setHandrailAngle(v)}
+            min={0}
             className="w-16 bg-dark-bg border border-dark-border rounded px-2 py-1 text-xs font-mono"
           />
           <span className="text-[10px] text-dimension">°</span>
