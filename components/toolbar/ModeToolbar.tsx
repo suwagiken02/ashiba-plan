@@ -35,7 +35,11 @@ export default function ModeToolbar() {
     } else if (id === 'auto') {
       useCanvasStore.getState().setShowAutoLayout(true);
     } else if (id === 'settings') {
-      useCanvasStore.getState().setShowSettings(true);
+      if (window.innerWidth < 640) {
+        useCanvasStore.getState().setShowSettings(true);
+      } else {
+        useCanvasStore.getState().toggleSettingsPanel();
+      }
     }
   };
 

@@ -73,6 +73,7 @@ export default function EditorPage() {
     setShowBuilding2FModal: setShowBuilding2FModalStore,
     showSettings,
     setShowSettings,
+    showSettingsPanel,
     showCornerGuide,
     toggleShowCornerGuide,
     selectedIds,
@@ -332,7 +333,7 @@ export default function EditorPage() {
         <CompassWidget />
 
         {/* 右上ボタン群 */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10">
+        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10" style={{ display: showSettingsPanel ? undefined : 'none' }}>
           {/* 全体表示ボタン */}
           {canvasData.buildings.length > 0 && (
             <button

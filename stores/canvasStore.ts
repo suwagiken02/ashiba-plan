@@ -132,6 +132,8 @@ type CanvasStore = {
   setShowBuilding2FModal: (show: boolean) => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  showSettingsPanel: boolean;
+  toggleSettingsPanel: () => void;
 
   // コーナーガイド・グリッド強弱
   showCornerGuide: boolean;
@@ -295,6 +297,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setShowBuilding2FModal: (show) => set({ showBuilding2FModal: show }),
   showSettings: false,
   setShowSettings: (show) => set({ showSettings: show }),
+  showSettingsPanel: true,
+  toggleSettingsPanel: () => set({ showSettingsPanel: !get().showSettingsPanel }),
 
   showCornerGuide: false,
   toggleShowCornerGuide: () => set({ showCornerGuide: !get().showCornerGuide }),
