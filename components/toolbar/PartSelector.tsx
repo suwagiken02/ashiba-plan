@@ -547,22 +547,59 @@ export default function PartSelector() {
             <div className="px-3 py-2">
               {activeTab === 'handrail' && (
                 <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[10px] text-dimension">ドラッグで配置</p>
-                    <button
-                      onClick={toggleReorderMode}
-                      className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                        isReorderMode
-                          ? 'bg-accent text-white border-accent'
-                          : 'border-dark-border text-dimension'
-                      }`}
-                      title="手摺入れ替えモード"
-                    >
+                  {/* スマホ用: プレビュー+角度操作 */}
+                  <div className="flex items-center gap-3 sm:hidden">
+                    <div className="shrink-0 relative">
+                      <svg
+                        width={ap.W} height={ap.H}
+                        className="bg-dark-bg rounded-lg border border-dark-border cursor-grab active:cursor-grabbing select-none"
+                        style={{ touchAction: 'none' }}
+                        onPointerDown={(e) => handleHandrailDown(selectedHandrailLength, handrailAngle, e)}
+                      >
+                        <line x1={ap.cx - ap.dx} y1={ap.cy - ap.dy} x2={ap.cx + ap.dx} y2={ap.cy + ap.dy}
+                          stroke="#378ADD" strokeWidth={3} strokeLinecap="round" />
+                        <circle cx={ap.cx - ap.dx} cy={ap.cy - ap.dy} r={3} fill="#378ADD" />
+                        <circle cx={ap.cx + ap.dx} cy={ap.cy + ap.dy} r={3} fill="#378ADD" />
+                      </svg>
+                      {typeof handrailAngle === 'number' && (
+                        <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] text-dimension font-mono">
+                          {handrailAngle}°
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex-1 grid grid-cols-3 gap-1">
+                      <button onClick={() => setHandrailAngle('horizontal')}
+                        className={`py-2 rounded-lg text-[11px] font-bold border ${handrailAngle === 'horizontal' ? 'bg-accent text-white border-accent' : 'bg-dark-bg border-dark-border text-canvas'}`}>
+                        横
+                      </button>
+                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c + 10); }}
+                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">+10°</button>
+                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c + 1); }}
+                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">+1°</button>
+                      <button onClick={() => setHandrailAngle('vertical')}
+                        className={`py-2 rounded-lg text-[11px] font-bold border ${handrailAngle === 'vertical' ? 'bg-accent text-white border-accent' : 'bg-dark-bg border-dark-border text-canvas'}`}>
+                        縦
+                      </button>
+                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c - 10); }}
+                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">-10°</button>
+                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c - 1); }}
+                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">-1°</button>
+                    </div>
+                  </div>
+                  {/* 長さプリセット + 入替ボタン */}
+                  <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
+                    {HANDRAIL_LENGTHS.map((l) => (
+                      <button key={`hr-m-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
+                        className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
+                      >{l}</button>
+                    ))}
+                    <button onClick={toggleReorderMode}
+                      className={`sm:hidden px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shrink-0 ${
+                        isReorderMode ? 'bg-accent text-white border-accent' : 'border-dark-border text-dimension'
+                      }`}>
                       {isReorderMode ? '入替中' : '入替'}
                     </button>
                   </div>
-                  {angleSelector}
-                  {handrailButtons}
                 </div>
               )}
               {activeTab === 'post' && (
