@@ -95,12 +95,18 @@ export type Anti = {
 };
 
 // === メモ ===
+export type MemoShape = 'rect' | 'cloud' | 'circle' | 'speech';
 export type Memo = {
   id: string;
   x: number;
   y: number;
   text: string;
-  style: 'plain' | 'callout';
+  style: string;
+  shape?: MemoShape;
+  angle?: number;
+  scale?: number;
+  scaleX?: number;
+  scaleY?: number;
   arrowTo?: Point;
 };
 

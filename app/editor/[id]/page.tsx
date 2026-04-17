@@ -18,6 +18,7 @@ import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
+import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
 
 // Konvaはクライアントサイドのみ
@@ -74,6 +75,9 @@ export default function EditorPage() {
     showSettings,
     setShowSettings,
     showSettingsPanel,
+    showPartSelector,
+    showMemoCreateModal,
+    setShowMemoCreateModal,
     showCornerGuide,
     toggleShowCornerGuide,
     isMeasuring,
@@ -455,7 +459,7 @@ export default function EditorPage() {
       </div>
 
       {/* 部材選択パネル */}
-      <PartSelector />
+      {showPartSelector && <PartSelector />}
 
       {/* モードツールバー */}
       <ModeToolbar />
@@ -531,6 +535,9 @@ export default function EditorPage() {
       )}
       {showSettings && (
         <SettingsPanel onClose={() => setShowSettings(false)} />
+      )}
+      {showMemoCreateModal && (
+        <MemoCreateModal onClose={() => setShowMemoCreateModal(false)} />
       )}
       {showRoofModal && selectedIds.length === 1 && (() => {
         const bld = canvasData.buildings.find(b => b.id === selectedIds[0]);

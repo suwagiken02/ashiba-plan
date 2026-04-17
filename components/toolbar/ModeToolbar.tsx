@@ -1,10 +1,11 @@
 'use client';
-import React from 'react';
+import React, { useState } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
 
 export default function ModeToolbar() {
-  const { mode, setMode, isMeasuring, toggleMeasuring } = useCanvasStore();
+  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector } = useCanvasStore();
+  const [showKutaiMenu, setShowKutaiMenu] = useState(false);
 
   // 躯体グループ（建物・障害物）
   const isKutaiMode = mode === 'building' || mode === 'obstacle';
@@ -24,12 +25,14 @@ export default function ModeToolbar() {
 
   const handleMainButton = (id: string) => {
     if (isMeasuring) toggleMeasuring();
-    if (id === 'select' || id === 'memo' || id === 'erase') {
+    if (id === 'select' || id === 'erase') {
       setMode(id as ModeType);
+    } else if (id === 'memo') {
+      useCanvasStore.getState().setShowMemoCreateModal(true);
     } else if (id === 'kutai') {
-      setMode(mode === 'obstacle' ? 'obstacle' : 'building');
+      setShowKutaiMenu(true);
     } else if (id === 'buzai') {
-      setMode(mode === 'post' ? 'post' : mode === 'anti' ? 'anti' : 'handrail');
+      useCanvasStore.getState().togglePartSelector();
     } else if (id === 'scaffold') {
       useCanvasStore.getState().setShowScaffoldStart(true);
     } else if (id === 'auto') {
@@ -46,7 +49,7 @@ export default function ModeToolbar() {
   const isActive = (id: string) => {
     if (id === 'select') return mode === 'select' && !isMeasuring;
     if (id === 'kutai') return isKutaiMode && !isMeasuring;
-    if (id === 'buzai') return isBuzaiMode && !isMeasuring;
+    if (id === 'buzai') return showPartSelector;
     if (id === 'memo') return mode === 'memo' && !isMeasuring;
     if (id === 'erase') return mode === 'erase' && !isMeasuring;
     return false;
@@ -54,39 +57,46 @@ export default function ModeToolbar() {
 
   return (
     <>
+      {/* 躯体選択メニュー */}
+      {showKutaiMenu && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowKutaiMenu(false)} />
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3">
+            <button
+              onClick={() => {
+                useCanvasStore.getState().setShowBuildingModal(true);
+                setShowKutaiMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">⌂</span>
+              <span className="text-sm font-bold">建物1F</span>
+            </button>
+            <button
+              onClick={() => {
+                useCanvasStore.getState().setShowBuilding2FModal(true);
+                setShowKutaiMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">⌂</span>
+              <span className="text-sm font-bold">建物2F</span>
+            </button>
+            <button
+              onClick={() => {
+                setMode('obstacle');
+                setShowKutaiMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">⬒</span>
+              <span className="text-sm font-bold">障害物</span>
+            </button>
+          </div>
+        </>
+      )}
+
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-dark-surface border-t border-dark-border safe-area-bottom">
-        {/* 躯体サブタブ */}
-        {isKutaiMode && (
-          <div className="flex border-b border-dark-border px-2 pt-1">
-            {[
-              { label: '建物1F', action: () => { useCanvasStore.getState().setShowBuildingModal(true); } },
-              { label: '建物2F', action: () => { useCanvasStore.getState().setShowBuilding2FModal(true); } },
-              { label: '障害物', action: () => setMode('obstacle') },
-            ].map((m, i) => (
-              <button key={i} onClick={m.action}
-                className={`px-4 py-1 text-xs rounded-t-lg mr-1 transition-colors ${
-                  m.label === '障害物' && mode === 'obstacle' ? 'bg-accent text-white' : 'text-dimension hover:text-canvas'
-                }`}>{m.label}</button>
-            ))}
-          </div>
-        )}
-
-        {/* 部材サブタブ */}
-        {isBuzaiMode && (
-          <div className="flex border-b border-dark-border px-2 pt-1">
-            {([
-              { id: 'handrail' as ModeType, label: '手摺' },
-              { id: 'post' as ModeType, label: '支柱' },
-              { id: 'anti' as ModeType, label: 'アンチ' },
-            ]).map(m => (
-              <button key={m.id} onClick={() => setMode(m.id)}
-                className={`px-4 py-1 text-xs rounded-t-lg mr-1 transition-colors ${
-                  mode === m.id ? 'bg-accent text-white' : 'text-dimension hover:text-canvas'
-                }`}>{m.label}</button>
-            ))}
-          </div>
-        )}
-
         {/* メインボタン */}
         <div className="flex justify-around items-center px-0.5 py-1">
           {mainButtons.map((m) => (

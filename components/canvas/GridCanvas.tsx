@@ -2,7 +2,7 @@
 
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Stage, Layer, Line, Rect, Circle, Text } from 'react-konva';
+import { Stage, Layer, Line, Rect, Circle, Text, Path, Group } from 'react-konva';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import {
@@ -30,7 +30,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -43,6 +43,7 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
   const isPinching = useRef(false);
   const [isPanning, setIsPanning] = useState(false);
   const [draft2FPos, setDraft2FPos] = useState<{ x: number; y: number } | null>(null);
+  const [memoCursorPos, setMemoCursorPos] = useState<{ x: number; y: number } | null>(null);
   const panInitialized = useRef(false);
   const lastPanPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
@@ -409,10 +410,21 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
           setDraft2FPos({ x: snapX, y: snapY });
           return;
         }
+        if (memoDraft) {
+          const stage = e.target.getStage();
+          if (!stage) return;
+          const s = useCanvasStore.getState();
+          const pointer = stage.getPointerPosition();
+          if (!pointer) return;
+          const gridX = Math.round((pointer.x - s.panX) / (INITIAL_GRID_PX * s.zoom));
+          const gridY = Math.round((pointer.y - s.panY) / (INITIAL_GRID_PX * s.zoom));
+          setMemoCursorPos({ x: gridX, y: gridY });
+          return;
+        }
         handleMouseMove(e); handleStageMouseMove(e);
       }}
       onMouseUp={(e) => { handleMouseUp(e); handleStageMouseUp(e); }}
-      style={{ touchAction: 'none', cursor: building2FDraft ? 'crosshair' : isPanning ? 'grab' : 'default' }}
+      style={{ touchAction: 'none', cursor: building2FDraft || memoDraft ? 'crosshair' : isPanning ? 'grab' : 'default' }}
     >
       {/* キャンバス背景（ビューポート全体） */}
       <Layer listening={false}>
@@ -556,6 +568,51 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
                 strokeWidth={2}
                 dash={[6, 4]}
               />
+            );
+          })()}
+        </Layer>
+      )}
+
+      {/* メモドラフトプレビュー */}
+      {memoDraft && memoCursorPos && (
+        <Layer listening={false}>
+          {(() => {
+            const gridPx = INITIAL_GRID_PX * zoom;
+            const sx = memoCursorPos.x * gridPx + panX;
+            const sy = memoCursorPos.y * gridPx + panY;
+            const scX = memoDraft.scaleX;
+            const scY = memoDraft.scaleY;
+            const fontSize = Math.max(10, 12 * zoom) * Math.min(scX, scY);
+            const lines = memoDraft.text.split('\n');
+            const maxLineLen = Math.max(...lines.map(l => l.length));
+            const w = Math.max(80, maxLineLen * fontSize * 0.6 + 24);
+            const h = Math.max(40, lines.length * (fontSize + 4) + 16);
+
+            const shapePaths: Record<string, string> = {
+              rect: `M8 0 H${w-8} Q${w} 0 ${w} 8 V${h-8} Q${w} ${h} ${w-8} ${h} H8 Q0 ${h} 0 ${h-8} V8 Q0 0 8 0 Z`,
+              cloud: (() => { const r = h/3; return `M${r} ${h/2} Q${r} 0 ${w/3} ${r} Q${w/2} 0 ${w*2/3} ${r} Q${w-r} 0 ${w-r} ${h/2} Q${w} ${h} ${w-r} ${h*3/4} Q${w*2/3} ${h} ${w/2} ${h*3/4} Q${w/3} ${h} ${r} ${h*3/4} Q0 ${h} ${r} ${h/2} Z`; })(),
+              circle: `M${w/2} 0 A${w/2} ${h/2} 0 1 1 ${w/2} ${h} A${w/2} ${h/2} 0 1 1 ${w/2} 0 Z`,
+              speech: `M8 0 H${w-8} Q${w} 0 ${w} 8 V${h-16} Q${w} ${h-8} ${w-8} ${h-8} H${w/2+10} L${w/2} ${h} L${w/2-4} ${h-8} H8 Q0 ${h-8} 0 ${h-16} V8 Q0 0 8 0 Z`,
+            };
+
+            return (
+              <Group x={sx} y={sy} rotation={memoDraft.angle} offsetX={w / 2} offsetY={h / 2} opacity={0.6}>
+                <Path
+                  data={shapePaths[memoDraft.shape] || shapePaths.rect}
+                  fill="rgba(55, 138, 221, 0.2)"
+                  stroke="#378ADD"
+                  strokeWidth={2}
+                  dash={[6, 4]}
+                />
+                <Text
+                  x={0} y={0} width={w} height={h}
+                  text={memoDraft.text}
+                  fontSize={fontSize}
+                  fill="#378ADD"
+                  align="center"
+                  verticalAlign="middle"
+                />
+              </Group>
             );
           })()}
         </Layer>

@@ -399,10 +399,25 @@ export function useCanvasInteraction() {
         s.addPost({ id: uuidv4(), x: snapX, y: snapY });
         return;
       }
-      // memo モード: プロンプトでの配置は残す
+      // memo モード
       if (s.mode === 'memo') {
-        const text = prompt('メモを入力:');
-        if (text) s.addMemo({ id: uuidv4(), x: rawPos.x, y: rawPos.y, text, style: 'plain' });
+        if (s.memoDraft) {
+          s.addMemo({
+            id: uuidv4(),
+            x: rawPos.x,
+            y: rawPos.y,
+            text: s.memoDraft.text,
+            style: s.memoDraft.shape,
+            shape: s.memoDraft.shape,
+            angle: s.memoDraft.angle,
+            scaleX: s.memoDraft.scaleX,
+            scaleY: s.memoDraft.scaleY,
+          });
+          s.clearMemoDraft();
+          s.setShowMemoCreateModal(true);
+        } else {
+          s.setShowMemoCreateModal(true);
+        }
       }
 
       // obstacle モード: クリック配置は無効化（パレットからのD&Dのみ）

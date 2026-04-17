@@ -111,17 +111,15 @@ export default function PartSelector() {
   const mobilePanelRef = useRef<HTMLDivElement>(null);
 
   // --- フローティングパネル状態 ---
-  const [panelPos, setPanelPos] = useState<{ x: number; y: number } | null>(null);
-  const [panelSize, setPanelSize] = useState({ w: 460, h: 220 });
+  const defaultW = 600;
+  const defaultH = 400;
+  const [panelPos, setPanelPos] = useState<{ x: number; y: number }>(() => {
+    if (typeof window === 'undefined') return { x: 0, y: 0 };
+    return { x: Math.max(0, (window.innerWidth - defaultW) / 2), y: window.innerHeight - 72 - defaultH - 8 };
+  });
+  const [panelSize, setPanelSize] = useState({ w: defaultW, h: defaultH });
   const [panelDrag, setPanelDrag] = useState<{ startX: number; startY: number; origX: number; origY: number } | null>(null);
   const [panelResize, setPanelResize] = useState<{ startX: number; startY: number; origW: number; origH: number } | null>(null);
-
-  // デフォルト位置を初期化（画面下部中央）
-  useEffect(() => {
-    if (!panelPos) {
-      setPanelPos({ x: Math.max(0, (window.innerWidth - panelSize.w) / 2), y: window.innerHeight - 72 - panelSize.h - 8 });
-    }
-  }, []);
 
   // パネルドラッグ
   useEffect(() => {
@@ -434,7 +432,7 @@ export default function PartSelector() {
   );
 
   const modeLabel = mode === 'obstacle' ? '障害物' : mode === 'memo' ? 'メモ' : '部材';
-  const pos = panelPos ?? { x: 0, y: 0 };
+  const pos = panelPos;
 
   // --- 共通コンテンツ ---
   const dirSwitch = (

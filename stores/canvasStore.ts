@@ -16,6 +16,7 @@ import {
   HandrailDirection,
   BuildingInputMethod,
   ScaffoldStartConfig,
+  MemoShape,
 } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS, INITIAL_GRID_PX, ZOOM_MIN, ZOOM_MAX } from '@/lib/konva/gridUtils';
 
@@ -134,8 +135,19 @@ type CanvasStore = {
   setShowBuilding2FModal: (show: boolean) => void;
   showSettings: boolean;
   setShowSettings: (show: boolean) => void;
+  showPartSelector: boolean;
+  togglePartSelector: () => void;
   showSettingsPanel: boolean;
   toggleSettingsPanel: () => void;
+
+  // メモ作成
+  memoDraft: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null;
+  setMemoDraft: (draft: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null) => void;
+  clearMemoDraft: () => void;
+  showMemoCreateModal: boolean;
+  setShowMemoCreateModal: (show: boolean) => void;
+  lastMemoSettings: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null;
+  setLastMemoSettings: (s: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null) => void;
 
   // コーナーガイド・グリッド強弱
   showCornerGuide: boolean;
@@ -302,8 +314,18 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setShowBuilding2FModal: (show) => set({ showBuilding2FModal: show }),
   showSettings: false,
   setShowSettings: (show) => set({ showSettings: show }),
+  showPartSelector: false,
+  togglePartSelector: () => set({ showPartSelector: !get().showPartSelector }),
   showSettingsPanel: true,
   toggleSettingsPanel: () => set({ showSettingsPanel: !get().showSettingsPanel }),
+
+  memoDraft: null,
+  setMemoDraft: (draft) => set({ memoDraft: draft }),
+  clearMemoDraft: () => set({ memoDraft: null }),
+  showMemoCreateModal: false,
+  setShowMemoCreateModal: (show) => set({ showMemoCreateModal: show }),
+  lastMemoSettings: null,
+  setLastMemoSettings: (s) => set({ lastMemoSettings: s }),
 
   showCornerGuide: false,
   toggleShowCornerGuide: () => set({ showCornerGuide: !get().showCornerGuide }),
