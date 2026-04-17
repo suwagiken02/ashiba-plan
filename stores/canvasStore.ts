@@ -130,6 +130,14 @@ type CanvasStore = {
   setShowBuildingModal: (show: boolean) => void;
   showBuilding2FModal: boolean;
   setShowBuilding2FModal: (show: boolean) => void;
+  showSettings: boolean;
+  setShowSettings: (show: boolean) => void;
+
+  // コーナーガイド・グリッド強弱
+  showCornerGuide: boolean;
+  toggleShowCornerGuide: () => void;
+  gridStrength: number;
+  setGridStrength: (s: number) => void;
 
   // 手摺入れ替えモード
   isReorderMode: boolean;
@@ -285,6 +293,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setShowBuildingModal: (show) => set({ showBuildingModal: show }),
   showBuilding2FModal: false,
   setShowBuilding2FModal: (show) => set({ showBuilding2FModal: show }),
+  showSettings: false,
+  setShowSettings: (show) => set({ showSettings: show }),
+
+  showCornerGuide: false,
+  toggleShowCornerGuide: () => set({ showCornerGuide: !get().showCornerGuide }),
+  gridStrength: 1,
+  setGridStrength: (s) => set({ gridStrength: s }),
 
   isReorderMode: false,
   toggleReorderMode: () => {

@@ -19,6 +19,7 @@ export default function ModeToolbar() {
     { id: 'auto' as const, label: '自動割付', icon: '⚡' },
     { id: 'memo' as const, label: 'メモ', icon: 'T' },
     { id: 'erase' as const, label: '消去', icon: '✕' },
+    { id: 'settings' as const, label: '設定', icon: '⚙' },
   ];
 
   const handleMainButton = (id: string) => {
@@ -33,6 +34,8 @@ export default function ModeToolbar() {
       useCanvasStore.getState().setShowScaffoldStart(true);
     } else if (id === 'auto') {
       useCanvasStore.getState().setShowAutoLayout(true);
+    } else if (id === 'settings') {
+      useCanvasStore.getState().setShowSettings(true);
     }
   };
 
@@ -81,15 +84,15 @@ export default function ModeToolbar() {
         )}
 
         {/* メインボタン */}
-        <div className="flex justify-around items-center px-1 py-1 max-w-lg mx-auto">
+        <div className="flex justify-around items-center px-0.5 py-1">
           {mainButtons.map((m) => (
             <button key={m.id} onClick={() => handleMainButton(m.id)}
-              className={`flex flex-col items-center justify-center py-2 px-1 rounded-lg min-w-[44px] transition-colors ${
+              className={`flex-col items-center justify-center py-2 px-1 rounded-lg min-w-[36px] transition-colors ${
                 isActive(m.id) ? 'bg-accent text-white' : 'text-dimension hover:text-canvas'
-              }`}
+              } ${'smOnly' in m && m.smOnly ? 'flex sm:hidden' : 'flex'}`}
             >
-              <span className="text-lg leading-none">{m.icon}</span>
-              <span className="text-[10px] mt-0.5">{m.label}</span>
+              <span className="text-base leading-none">{m.icon}</span>
+              <span className="text-[9px] mt-0.5">{m.label}</span>
             </button>
           ))}
         </div>

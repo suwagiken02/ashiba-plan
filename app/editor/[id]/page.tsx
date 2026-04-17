@@ -17,6 +17,7 @@ import RoofSettingsModal from '@/components/building/RoofSettingsModal';
 import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
+import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
 
 // Konvaはクライアントサイドのみ
@@ -70,6 +71,10 @@ export default function EditorPage() {
     setShowBuildingModal: setShowBuildingModalStore,
     showBuilding2FModal: showBuilding2FModalStore,
     setShowBuilding2FModal: setShowBuilding2FModalStore,
+    showSettings,
+    setShowSettings,
+    showCornerGuide,
+    toggleShowCornerGuide,
     selectedIds,
     vertexPoints,
     clearVertexPoints,
@@ -289,14 +294,25 @@ export default function EditorPage() {
             入替
           </button>
 
-          {/* ダークモード */}
-          <button
-            onClick={toggleDarkMode}
-            className="px-2 py-1 bg-dark-bg border border-dark-border rounded-lg text-sm text-dimension hover:text-canvas"
-            title={isDarkMode ? 'ライトモード' : 'ダークモード'}
-          >
-            {isDarkMode ? '☀️' : '🌙'}
-          </button>
+          {/* PC用設定トグル */}
+          <div className="hidden sm:flex items-center gap-1">
+            <button onClick={toggleDarkMode}
+              className={`px-2 py-1 rounded-lg text-sm border transition-colors ${isDarkMode ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
+              title={isDarkMode ? 'ライトモード' : 'ダークモード'}
+            >{isDarkMode ? '☀️' : '🌙'}</button>
+            <button onClick={toggleShowKidare}
+              className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${showKidare ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
+              title="離れ表示"
+            >離</button>
+            <button onClick={toggleShowDimensions}
+              className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${showDimensions ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
+              title="寸法表示"
+            >寸</button>
+            <button onClick={toggleShowCornerGuide}
+              className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${showCornerGuide ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
+              title="コーナーガイド"
+            >⌐</button>
+          </div>
 
           {/* 出力 */}
           <button
@@ -513,6 +529,9 @@ export default function EditorPage() {
             setSelectedLineIds([]);
           }}
         />
+      )}
+      {showSettings && (
+        <SettingsPanel onClose={() => setShowSettings(false)} />
       )}
       {showRoofModal && selectedIds.length === 1 && (() => {
         const bld = canvasData.buildings.find(b => b.id === selectedIds[0]);
