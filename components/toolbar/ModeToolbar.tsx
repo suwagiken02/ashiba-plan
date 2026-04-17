@@ -4,7 +4,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
 
 export default function ModeToolbar() {
-  const { mode, setMode, isMeasuring, toggleMeasuring, measureResultMm } = useCanvasStore();
+  const { mode, setMode, isMeasuring, toggleMeasuring } = useCanvasStore();
 
   // 躯体グループ（建物・障害物）
   const isKutaiMode = mode === 'building' || mode === 'obstacle';
@@ -101,14 +101,6 @@ export default function ModeToolbar() {
           ))}
         </div>
 
-        {/* 計測結果表示 */}
-        {isMeasuring && measureResultMm !== null && (
-          <div className="flex justify-center pb-1">
-            <span className="text-sm font-mono font-bold text-accent bg-accent/10 px-3 py-0.5 rounded-full">
-              {measureResultMm}mm
-            </span>
-          </div>
-        )}
       </div>
     </>
   );

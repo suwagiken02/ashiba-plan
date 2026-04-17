@@ -7,6 +7,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from './gridUtils';
 import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints } from './snapUtils';
 import { getHandrailColor } from './handrailColors';
+import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
 import { Point, Handrail, HandrailDirection, HandrailLengthMm } from '@/types';
 
@@ -35,6 +36,87 @@ function findHandrailAtPos(pos: Point, handrails: Handrail[]): Handrail | null {
     if (d < bestDist) { bestDist = d; best = h; }
   }
   return best;
+}
+
+/** 寸法計測時のスナップ（頂点強・辺弱） */
+function snapMeasurePoint(rawPos: Point, s: ReturnType<typeof useCanvasStore.getState>): Point {
+  const STRONG_SNAP = 12;
+  const WEAK_SNAP = 6;
+
+  const gridX = rawPos.x;
+  const gridY = rawPos.y;
+  let snapX = gridX, snapY = gridY;
+  let bestDist = Infinity;
+
+  const vertices: { x: number; y: number }[] = [];
+  const edges: { p1: { x: number; y: number }; p2: { x: number; y: number } }[] = [];
+
+  // 建物
+  for (const b of s.canvasData.buildings) {
+    const pts = b.points;
+    for (const p of pts) vertices.push(p);
+    for (let i = 0; i < pts.length; i++) {
+      edges.push({ p1: pts[i], p2: pts[(i + 1) % pts.length] });
+    }
+    // 屋根の出幅頂点・辺
+    if (b.roof) {
+      const overhangs = getEdgeOverhangs(b, b.roof);
+      if (!overhangs.every(o => o === 0)) {
+        const roofPts = computeOffsetPolygon(b.points, overhangs);
+        for (const p of roofPts) vertices.push(p);
+        for (let i = 0; i < roofPts.length; i++) {
+          edges.push({ p1: roofPts[i], p2: roofPts[(i + 1) % roofPts.length] });
+        }
+      }
+    }
+  }
+
+  // 手摺端点
+  for (const h of s.canvasData.handrails) {
+    const lengthGrid = Math.round(h.lengthMm / 10);
+    vertices.push({ x: h.x, y: h.y });
+    if (h.direction === 'horizontal') {
+      vertices.push({ x: h.x + lengthGrid, y: h.y });
+      edges.push({ p1: { x: h.x, y: h.y }, p2: { x: h.x + lengthGrid, y: h.y } });
+    } else if (h.direction === 'vertical') {
+      vertices.push({ x: h.x, y: h.y + lengthGrid });
+      edges.push({ p1: { x: h.x, y: h.y }, p2: { x: h.x, y: h.y + lengthGrid } });
+    } else {
+      const rad = (h.direction as number) * Math.PI / 180;
+      const ex = h.x + Math.round(lengthGrid * Math.cos(rad));
+      const ey = h.y + Math.round(lengthGrid * Math.sin(rad));
+      vertices.push({ x: ex, y: ey });
+      edges.push({ p1: { x: h.x, y: h.y }, p2: { x: ex, y: ey } });
+    }
+  }
+
+  // 頂点スナップ（強）
+  for (const v of vertices) {
+    const d = Math.hypot(v.x - gridX, v.y - gridY);
+    if (d < STRONG_SNAP && d < bestDist) {
+      bestDist = d;
+      snapX = v.x; snapY = v.y;
+    }
+  }
+
+  // 辺スナップ（頂点スナップが優先）
+  if (bestDist >= STRONG_SNAP) {
+    for (const e of edges) {
+      const dx = e.p2.x - e.p1.x, dy = e.p2.y - e.p1.y;
+      const len2 = dx * dx + dy * dy;
+      if (len2 < 0.01) continue;
+      const t = Math.max(0, Math.min(1, ((gridX - e.p1.x) * dx + (gridY - e.p1.y) * dy) / len2));
+      const projX = e.p1.x + t * dx;
+      const projY = e.p1.y + t * dy;
+      const d = Math.hypot(gridX - projX, gridY - projY);
+      if (d < WEAK_SNAP && d < bestDist) {
+        bestDist = d;
+        snapX = Math.round(projX); snapY = Math.round(projY);
+      }
+    }
+  }
+
+  return { x: snapX, y: snapY };
 }
 
 function snapRadiusGrid(zoom: number) {
@@ -206,14 +288,20 @@ export function useCanvasInteraction() {
 
       // 寸法計測モード
       if (s.isMeasuring) {
+        const snapped = snapMeasurePoint(rawPos, s);
         if (!s.measurePoint1) {
-          s.setMeasurePoint1(rawPos);
-        } else {
-          const dx = (rawPos.x - s.measurePoint1.x) * 10;
-          const dy = (rawPos.y - s.measurePoint1.y) * 10;
+          s.setMeasurePoint1(snapped);
+          s.setMeasurePoint2(null);
+        } else if (!s.measurePoint2) {
+          const dx = (snapped.x - s.measurePoint1.x) * 10;
+          const dy = (snapped.y - s.measurePoint1.y) * 10;
           s.setMeasureResultMm(Math.round(Math.sqrt(dx * dx + dy * dy)));
-          s.setMeasurePoint1(null);
+          s.setMeasurePoint2(snapped);
           s.setMeasureCursor(null);
+        } else {
+          s.setMeasurePoint1(snapped);
+          s.setMeasurePoint2(null);
+          s.setMeasureResultMm(null);
         }
         return;
       }
@@ -380,7 +468,9 @@ export function useCanvasInteraction() {
 
       // 寸法計測モード
       if (s.isMeasuring && s.measurePoint1) {
-        s.setMeasureCursor(toGrid(stage, clientPos));
+        const raw = toGrid(stage, clientPos);
+        const snapped = snapMeasurePoint(raw, s);
+        s.setMeasureCursor(snapped);
         return;
       }
 

@@ -76,6 +76,15 @@ export default function EditorPage() {
     showSettingsPanel,
     showCornerGuide,
     toggleShowCornerGuide,
+    isMeasuring,
+    toggleMeasuring,
+    measureResultMm,
+    measurePoint1,
+    measurePoint2,
+    setMeasurePoint1,
+    setMeasurePoint2,
+    setMeasureCursor,
+    setMeasureResultMm,
     selectedIds,
     vertexPoints,
     clearVertexPoints,
@@ -224,6 +233,11 @@ export default function EditorPage() {
             onClick={() => {
               if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
                 removeLastVertexPoint();
+              } else if (isMeasuring && (measurePoint1 || measurePoint2)) {
+                setMeasurePoint1(null);
+                setMeasurePoint2(null);
+                setMeasureCursor(null);
+                setMeasureResultMm(null);
               } else {
                 undo();
               }
@@ -231,6 +245,8 @@ export default function EditorPage() {
             disabled={
               mode === 'building' && buildingInputMethod === 'vertex'
                 ? vertexPoints.length === 0
+                : isMeasuring
+                ? !(measurePoint1 || measurePoint2)
                 : history.past.length === 0
             }
             className="px-2 py-1 text-lg disabled:opacity-30 text-dimension hover:text-canvas"
@@ -268,52 +284,6 @@ export default function EditorPage() {
               ? 'エラー'
               : '保存'}
           </button>
-
-          {/* 複製モード（スマホのみ表示） */}
-          <button
-            onClick={toggleDuplicateMode}
-            className={`sm:hidden px-2 py-1 border rounded-lg text-sm ${
-              isDuplicateMode
-                ? 'bg-accent border-accent text-white'
-                : 'bg-dark-bg border-dark-border text-dimension'
-            }`}
-            title={isDuplicateMode ? '複製モードOFF' : '複製モードON'}
-          >
-            {isDuplicateMode ? '複製ON' : '複製'}
-          </button>
-
-          {/* 手摺入れ替えモード */}
-          <button
-            onClick={toggleReorderMode}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors ${
-              isReorderMode
-                ? 'bg-accent text-white border-accent'
-                : 'border-dark-border text-dimension'
-            }`}
-            title="手摺入れ替えモード"
-          >
-            入替
-          </button>
-
-          {/* PC用設定トグル */}
-          <div className="hidden sm:flex items-center gap-1">
-            <button onClick={toggleDarkMode}
-              className={`px-2 py-1 rounded-lg text-sm border transition-colors ${isDarkMode ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
-              title={isDarkMode ? 'ライトモード' : 'ダークモード'}
-            >{isDarkMode ? '☀️' : '🌙'}</button>
-            <button onClick={toggleShowKidare}
-              className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${showKidare ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
-              title="離れ表示"
-            >離</button>
-            <button onClick={toggleShowDimensions}
-              className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${showDimensions ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
-              title="寸法表示"
-            >寸</button>
-            <button onClick={toggleShowCornerGuide}
-              className={`px-2 py-1 rounded-lg text-xs font-bold border transition-colors ${showCornerGuide ? 'bg-accent border-accent text-white' : 'bg-dark-bg border-dark-border text-dimension hover:text-canvas'}`}
-              title="コーナーガイド"
-            >⌐</button>
-          </div>
 
           {/* 出力 */}
           <button
@@ -407,7 +377,13 @@ export default function EditorPage() {
             }`}
             title={showKidare ? '離れを非表示' : '離れを表示'}
           >
-            <span className="text-xs font-bold">離</span>
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M3 12 L21 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M3 8 L3 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M21 8 L21 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <path d="M6 12 L8 10 M6 12 L8 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+              <path d="M18 12 L16 10 M18 12 L16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+            </svg>
           </button>
 
           {/* グリッドガイドトグル */}
@@ -429,6 +405,28 @@ export default function EditorPage() {
               <line x1="1" y1="17" x2="17" y2="17" />
             </svg>
           </button>
+
+          {/* 寸法計測ボタン */}
+          <button
+            onClick={toggleMeasuring}
+            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
+              isMeasuring
+                ? 'bg-accent border-accent text-white'
+                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
+            }`}
+            title="寸法計測（2点指定）"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+              <path d="M4 20 L20 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+              <circle cx="4" cy="20" r="2" fill="currentColor"/>
+              <circle cx="20" cy="4" r="2" fill="currentColor"/>
+            </svg>
+          </button>
+          {isMeasuring && measureResultMm !== null && (
+            <div className="px-2 py-1 bg-accent/20 border border-accent rounded-lg text-xs font-mono font-bold text-accent text-center">
+              {measureResultMm}mm
+            </div>
+          )}
 
           {/* 屋根設定ボタン（建物選択中のみ表示） */}
           {selectedIds.length === 1 && canvasData.buildings.some(b => b.id === selectedIds[0]) && (

@@ -30,7 +30,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measureCursor, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -676,14 +676,17 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
             const p1x = measurePoint1.x * gridPx + panX;
             const p1y = measurePoint1.y * gridPx + panY;
 
-            const cursor = measureCursor;
-            const p2x = cursor ? cursor.x * gridPx + panX : p1x;
-            const p2y = cursor ? cursor.y * gridPx + panY : p1y;
+            // 確定済み2点目 or カーソル追従
+            const endPoint = measurePoint2 || measureCursor;
+            const p2x = endPoint ? endPoint.x * gridPx + panX : p1x;
+            const p2y = endPoint ? endPoint.y * gridPx + panY : p1y;
 
-            // リアルタイム距離（mm）
-            const dx = cursor ? (cursor.x - measurePoint1.x) * 10 : 0;
-            const dy = cursor ? (cursor.y - measurePoint1.y) * 10 : 0;
-            const distMm = Math.round(Math.sqrt(dx * dx + dy * dy));
+            // 距離（mm）
+            const dx = endPoint ? (endPoint.x - measurePoint1.x) * 10 : 0;
+            const dy = endPoint ? (endPoint.y - measurePoint1.y) * 10 : 0;
+            const distMm = measurePoint2 && measureResultMm !== null
+              ? measureResultMm
+              : Math.round(Math.sqrt(dx * dx + dy * dy));
 
             // ラベル位置（中間点の少し上）
             const midX = (p1x + p2x) / 2;
@@ -691,30 +694,37 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
 
             return (
               <>
-                {/* 破線 */}
-                {cursor && (
+                {/* 線 */}
+                {endPoint && (
                   <Line
                     points={[p1x, p1y, p2x, p2y]}
                     stroke="#EF4444"
-                    strokeWidth={1.5}
-                    dash={[6, 4]}
-                    opacity={0.8}
+                    strokeWidth={measurePoint2 ? 2 : 1.5}
+                    dash={measurePoint2 ? undefined : [6, 4]}
+                    opacity={measurePoint2 ? 1 : 0.8}
                   />
                 )}
                 {/* 1点目 赤● */}
                 <Circle x={p1x} y={p1y} radius={6} fill="#EF4444" />
                 <Circle x={p1x} y={p1y} radius={2.5} fill="white" />
+                {/* 2点目 赤● */}
+                {endPoint && (
+                  <>
+                    <Circle x={p2x} y={p2y} radius={6} fill="#EF4444" />
+                    <Circle x={p2x} y={p2y} radius={2.5} fill="white" />
+                  </>
+                )}
                 {/* 距離ラベル */}
-                {cursor && distMm > 0 && (
+                {endPoint && distMm > 0 && (
                   <Text
                     x={midX}
                     y={midY}
                     text={`${distMm}mm`}
-                    fontSize={12}
+                    fontSize={measurePoint2 ? 14 : 12}
                     fontFamily="monospace"
                     fontStyle="bold"
                     fill="#EF4444"
-                    offsetX={(`${distMm}mm`.length * 7) / 2}
+                    offsetX={(`${distMm}mm`.length * (measurePoint2 ? 8 : 7)) / 2}
                     offsetY={0}
                   />
                 )}

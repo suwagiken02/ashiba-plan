@@ -13,7 +13,7 @@ export default function CompassWidget() {
 
   return (
     <div
-      className="absolute top-16 right-3 w-10 h-10 cursor-pointer select-none"
+      className="absolute top-3 left-3 w-10 h-10 cursor-pointer select-none"
       onClick={handleRotate}
       title="タップで方位を回転"
     >

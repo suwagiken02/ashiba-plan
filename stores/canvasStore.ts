@@ -100,8 +100,10 @@ type CanvasStore = {
   measurePoint1: { x: number; y: number } | null;
   measureCursor: { x: number; y: number } | null;
   measureResultMm: number | null;
+  measurePoint2: { x: number; y: number } | null;
   toggleMeasuring: () => void;
   setMeasurePoint1: (p: { x: number; y: number } | null) => void;
+  setMeasurePoint2: (p: { x: number; y: number } | null) => void;
   setMeasureCursor: (p: { x: number; y: number } | null) => void;
   setMeasureResultMm: (mm: number | null) => void;
 
@@ -254,6 +256,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   isMeasuring: false,
   measurePoint1: null,
+  measurePoint2: null,
   measureCursor: null,
   measureResultMm: null,
   toggleMeasuring: () => {
@@ -261,11 +264,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       isMeasuring: !isMeasuring,
       measurePoint1: null,
+      measurePoint2: null,
       measureCursor: null,
       measureResultMm: null,
     });
   },
   setMeasurePoint1: (p) => set({ measurePoint1: p }),
+  setMeasurePoint2: (p) => set({ measurePoint2: p }),
   setMeasureCursor: (p) => set({ measureCursor: p }),
   setMeasureResultMm: (mm) => set({ measureResultMm: mm }),
 

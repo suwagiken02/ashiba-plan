@@ -99,6 +99,7 @@ export default function PartSelector() {
     addHandrail, addAnti, addPost, addObstacle,
     canvasData, setHandrailPreview, setSnapPoint,
     isDarkMode,
+    isReorderMode, toggleReorderMode,
   } = useCanvasStore();
   const [expanded, setExpanded] = useState(true);
   const [toolbarDrag, setToolbarDrag] = useState<ToolbarDrag | null>(null);
@@ -547,7 +548,20 @@ export default function PartSelector() {
             <div className="px-3 py-2">
               {activeTab === 'handrail' && (
                 <div className="space-y-2">
-                  <p className="text-[10px] text-dimension">ドラッグで配置</p>
+                  <div className="flex items-center justify-between">
+                    <p className="text-[10px] text-dimension">ドラッグで配置</p>
+                    <button
+                      onClick={toggleReorderMode}
+                      className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                        isReorderMode
+                          ? 'bg-accent text-white border-accent'
+                          : 'border-dark-border text-dimension'
+                      }`}
+                      title="手摺入れ替えモード"
+                    >
+                      {isReorderMode ? '入替中' : '入替'}
+                    </button>
+                  </div>
                   {angleSelector}
                   {handrailButtons}
                 </div>
@@ -643,7 +657,20 @@ export default function PartSelector() {
                 <div className="flex-1 overflow-y-auto px-3 py-2">
                   {activeTab === 'handrail' && (
                     <div className="space-y-2">
-                      <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
+                      <div className="flex items-center justify-between">
+                        <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
+                        <button
+                          onClick={toggleReorderMode}
+                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${
+                            isReorderMode
+                              ? 'bg-accent text-white border-accent'
+                              : 'border-dark-border text-dimension'
+                          }`}
+                          title="手摺入れ替えモード"
+                        >
+                          {isReorderMode ? '入替中' : '入替'}
+                        </button>
+                      </div>
                       {angleSelector}
                       {handrailButtons}
                     </div>
