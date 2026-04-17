@@ -41,8 +41,8 @@ function findHandrailAtPos(pos: Point, handrails: Handrail[]): Handrail | null {
 
 /** 寸法計測時のスナップ（頂点強・辺弱） */
 function snapMeasurePoint(rawPos: Point, s: ReturnType<typeof useCanvasStore.getState>): Point {
-  const STRONG_SNAP = 12;
-  const WEAK_SNAP = 6;
+  const STRONG_SNAP = 25;
+  const WEAK_SNAP = 15;
 
   const gridX = rawPos.x;
   const gridY = rawPos.y;
@@ -88,6 +88,26 @@ function snapMeasurePoint(rawPos: Point, s: ReturnType<typeof useCanvasStore.get
       const ey = h.y + Math.round(lengthGrid * Math.sin(rad));
       vertices.push({ x: ex, y: ey });
       edges.push({ p1: { x: h.x, y: h.y }, p2: { x: ex, y: ey } });
+    }
+  }
+
+  // 壁方向入力の十字ガイド（directionPointsがあれば常にスナップ対象）
+  if (s.directionPoints && s.directionPoints.length > 0) {
+    const dpXs = s.directionPoints.map(p => p.x);
+    const dpYs = s.directionPoints.map(p => p.y);
+    // 交差点を頂点として追加（強スナップ）
+    for (const x of dpXs) {
+      for (const y of dpYs) {
+        vertices.push({ x, y });
+      }
+    }
+    // 縦線
+    for (const x of dpXs) {
+      edges.push({ p1: { x, y: gridY - 10000 }, p2: { x, y: gridY + 10000 } });
+    }
+    // 横線
+    for (const y of dpYs) {
+      edges.push({ p1: { x: gridX - 10000, y }, p2: { x: gridX + 10000, y } });
     }
   }
 
