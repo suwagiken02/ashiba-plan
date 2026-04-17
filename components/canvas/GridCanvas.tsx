@@ -2,7 +2,7 @@
 
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { Stage, Layer, Line, Rect, Circle, Text, Path, Group } from 'react-konva';
+import { Stage, Layer, Line, Rect, Circle, Text, Path, Group, Ellipse, Arc } from 'react-konva';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import {
@@ -30,7 +30,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -723,6 +723,108 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
             );
           })()}
         </Layer>
+      )}
+
+      {/* 壁方向入力プレビュー */}
+      {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length > 0 && (
+        <>
+          <Layer listening={false}>
+            {(() => {
+              const gridPx = INITIAL_GRID_PX * zoom;
+              const screenPts = directionPoints.map(p => ({
+                x: p.x * gridPx + panX,
+                y: p.y * gridPx + panY,
+              }));
+              const flatPts = screenPts.flatMap(p => [p.x, p.y]);
+              const first = screenPts[0];
+              return (
+                <>
+                  {/* ガイド線 */}
+                  {showDirectionGuide && directionPoints.map((pt, i) => {
+                    const sx = pt.x * gridPx + panX;
+                    const sy = pt.y * gridPx + panY;
+                    return (
+                      <React.Fragment key={`guide-${i}`}>
+                        <Line points={[sx, 0, sx, height]} stroke="#FF6B35" strokeWidth={2} opacity={0.8} dash={[10, 5]} />
+                        <Line points={[0, sy, width, sy]} stroke="#FF6B35" strokeWidth={2} opacity={0.8} dash={[10, 5]} />
+                      </React.Fragment>
+                    );
+                  })}
+                  <Line points={flatPts} stroke="#3B82F6" strokeWidth={5} opacity={1} />
+                  {screenPts.length >= 3 && (
+                    <Line
+                      points={[screenPts[screenPts.length - 1].x, screenPts[screenPts.length - 1].y, first.x, first.y]}
+                      stroke="#3B82F6" strokeWidth={3} opacity={0.4} dash={[6, 4]}
+                    />
+                  )}
+                  {screenPts.map((p, i) => (
+                    <Circle key={i} x={p.x} y={p.y} radius={i === 0 ? 9 : 7}
+                      fill={i === 0 ? '#EF4444' : '#3B82F6'}
+                      stroke="#fff"
+                      strokeWidth={2.5}
+                    />
+                  ))}
+                  <Text x={first.x + 10} y={first.y - 10}
+                    text="始点" fontSize={12} fill="#EF4444" />
+                  <Text x={screenPts[screenPts.length - 1].x + 10} y={screenPts[screenPts.length - 1].y - 10}
+                    text={`${screenPts.length}点`} fontSize={11} fill="#378ADD" />
+                </>
+              );
+            })()}
+          </Layer>
+          {/* 方向ボタン */}
+          <Layer>
+            {(() => {
+              const gridPx = INITIAL_GRID_PX * zoom;
+              const last = directionPoints[directionPoints.length - 1];
+              const px = last.x * gridPx + panX;
+              const py = last.y * gridPx + panY;
+              const btnSize = 36;
+              const btnDist = 50;
+
+              const handleDirection = (dir: 'up' | 'down' | 'left' | 'right') => {
+                useCanvasStore.getState().setPendingDirection(dir);
+                useCanvasStore.getState().setShowDirectionInputModal(true);
+              };
+
+              return (
+                <>
+                  {/* トップダウン視点キャラ */}
+                  <Group x={px} y={py} rotation={{ down: 180, left: 270, up: 0, right: 90 }[lastMoveDirection]} listening={false}>
+                    <Circle x={0} y={0} radius={14} fill="#F59E0B" />
+                    <Circle x={0} y={0} radius={10} fill="#FBBF77" />
+                    <Arc x={0} y={0} innerRadius={0} outerRadius={10} angle={180} rotation={180} fill="#78350F" />
+                    <Circle x={-9} y={5} radius={6} fill="#3B82F6" />
+                    <Circle x={9} y={5} radius={6} fill="#3B82F6" />
+                    <Ellipse x={0} y={6} radiusX={10} radiusY={7} fill="#3B82F6" />
+                    <Circle x={-3.5} y={0} radius={1.2} fill="#000" />
+                    <Circle x={3.5} y={0} radius={1.2} fill="#000" />
+                  </Group>
+                  {/* ↑ */}
+                  <Rect x={px - btnSize/2} y={py - btnDist - btnSize} width={btnSize} height={btnSize}
+                    fill="#378ADD" cornerRadius={8} shadowBlur={5} shadowOpacity={0.3}
+                    onClick={() => handleDirection('up')} onTap={() => handleDirection('up')} />
+                  <Text x={px - 10} y={py - btnDist - btnSize + 8} text="↑" fontSize={20} fill="white" fontStyle="bold" listening={false} />
+                  {/* ↓ */}
+                  <Rect x={px - btnSize/2} y={py + btnDist} width={btnSize} height={btnSize}
+                    fill="#378ADD" cornerRadius={8} shadowBlur={5} shadowOpacity={0.3}
+                    onClick={() => handleDirection('down')} onTap={() => handleDirection('down')} />
+                  <Text x={px - 10} y={py + btnDist + 8} text="↓" fontSize={20} fill="white" fontStyle="bold" listening={false} />
+                  {/* ← */}
+                  <Rect x={px - btnDist - btnSize} y={py - btnSize/2} width={btnSize} height={btnSize}
+                    fill="#378ADD" cornerRadius={8} shadowBlur={5} shadowOpacity={0.3}
+                    onClick={() => handleDirection('left')} onTap={() => handleDirection('left')} />
+                  <Text x={px - btnDist - btnSize + 10} y={py - 10} text="←" fontSize={20} fill="white" fontStyle="bold" listening={false} />
+                  {/* → */}
+                  <Rect x={px + btnDist} y={py - btnSize/2} width={btnSize} height={btnSize}
+                    fill="#378ADD" cornerRadius={8} shadowBlur={5} shadowOpacity={0.3}
+                    onClick={() => handleDirection('right')} onTap={() => handleDirection('right')} />
+                  <Text x={px + btnDist + 10} y={py - 10} text="→" fontSize={20} fill="white" fontStyle="bold" listening={false} />
+                </>
+              );
+            })()}
+          </Layer>
+        </>
       )}
 
       {/* 寸法計測オーバーレイ */}

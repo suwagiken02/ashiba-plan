@@ -421,6 +421,16 @@ export function useCanvasInteraction() {
 
       // obstacle モード: クリック配置は無効化（パレットからのD&Dのみ）
 
+      // building + direction モード: 起点をタップしてモーダル表示
+      if (s.mode === 'building' && s.buildingInputMethod === 'direction') {
+        if (s.directionPoints.length === 0) {
+          s.addDirectionPoint({ x: Math.round(rawPos.x), y: Math.round(rawPos.y) });
+          s.setShowDirectionInputModal(true);
+        }
+        dragStart.current = null;
+        return;
+      }
+
       // building + vertex モード: 頂点をタップで追加
       if (s.mode === 'building' && s.buildingInputMethod === 'vertex') {
         const CLOSE_TOL = 10; // 始点に戻る判定の許容差（グリッド）

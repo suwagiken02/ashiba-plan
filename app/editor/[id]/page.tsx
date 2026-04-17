@@ -19,6 +19,7 @@ import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
+import DirectionInputModal from '@/components/building/DirectionInputModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
 
 // Konvaはクライアントサイドのみ
@@ -80,6 +81,11 @@ export default function EditorPage() {
     setShowMemoCreateModal,
     showInnerPost,
     setShowInnerPost,
+    directionPoints,
+    clearDirectionPoints,
+    removeLastDirectionPoint,
+    showDirectionInputModal,
+    setShowDirectionInputModal,
     showCornerGuide,
     toggleShowCornerGuide,
     isMeasuring,
@@ -237,7 +243,9 @@ export default function EditorPage() {
           {/* アンドゥ/リドゥ */}
           <button
             onClick={() => {
-              if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
+              if (mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length > 0) {
+                removeLastDirectionPoint();
+              } else if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
                 removeLastVertexPoint();
               } else if (isMeasuring && (measurePoint1 || measurePoint2)) {
                 setMeasurePoint1(null);
@@ -249,7 +257,9 @@ export default function EditorPage() {
               }
             }}
             disabled={
-              mode === 'building' && buildingInputMethod === 'vertex'
+              mode === 'building' && buildingInputMethod === 'direction'
+                ? directionPoints.length === 0
+                : mode === 'building' && buildingInputMethod === 'vertex'
                 ? vertexPoints.length === 0
                 : isMeasuring
                 ? !(measurePoint1 || measurePoint2)
@@ -480,7 +490,45 @@ export default function EditorPage() {
         </div>
       )}
 
+      {/* 壁方向入力の確定ボタン */}
+      {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (
+        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3">
+          <button
+            onClick={() => {
+              clearDirectionPoints();
+              setBuildingInputMethod('template');
+              setMode('select');
+            }}
+            className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
+          >
+            キャンセル
+          </button>
+          <button
+            onClick={() => setShowDirectionInputModal(true)}
+            className="px-5 py-2.5 bg-accent/80 text-white rounded-xl text-sm font-bold shadow-lg"
+          >
+            壁を追加
+          </button>
+          {directionPoints.length >= 3 && (
+            <button
+              onClick={() => {
+                addBuilding({ id: uuidv4(), type: 'polygon', points: [...directionPoints], fill: '#3d3d3a' });
+                clearDirectionPoints();
+                setBuildingInputMethod('template');
+                setMode('select');
+              }}
+              className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
+            >
+              作図確定（{directionPoints.length}点）
+            </button>
+          )}
+        </div>
+      )}
+
       {/* モーダル */}
+      {showDirectionInputModal && (
+        <DirectionInputModal onClose={() => setShowDirectionInputModal(false)} />
+      )}
       {(showBuildingModal || showBuildingModalStore) && (
         <BuildingTemplateModal onClose={() => { setShowBuildingModal(false); setShowBuildingModalStore(false); }} />
       )}

@@ -81,6 +81,20 @@ type CanvasStore = {
   removeLastVertexPoint: () => void;
   clearVertexPoints: () => void;
 
+  // 壁方向入力モード
+  directionPoints: { x: number; y: number }[];
+  addDirectionPoint: (p: { x: number; y: number }) => void;
+  removeLastDirectionPoint: () => void;
+  clearDirectionPoints: () => void;
+  showDirectionInputModal: boolean;
+  setShowDirectionInputModal: (show: boolean) => void;
+  pendingDirection: 'up' | 'down' | 'left' | 'right' | null;
+  setPendingDirection: (dir: 'up' | 'down' | 'left' | 'right' | null) => void;
+  lastMoveDirection: 'up' | 'down' | 'left' | 'right';
+  setLastMoveDirection: (dir: 'up' | 'down' | 'left' | 'right') => void;
+  showDirectionGuide: boolean;
+  toggleDirectionGuide: () => void;
+
   // Dimensions toggle
   showDimensions: boolean;
   toggleShowDimensions: () => void;
@@ -254,6 +268,19 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     vertexPoints: state.vertexPoints.slice(0, -1)
   })),
   clearVertexPoints: () => set({ vertexPoints: [] }),
+
+  directionPoints: [],
+  addDirectionPoint: (p) => set((s) => ({ directionPoints: [...s.directionPoints, p] })),
+  removeLastDirectionPoint: () => set((s) => ({ directionPoints: s.directionPoints.slice(0, -1) })),
+  clearDirectionPoints: () => set({ directionPoints: [] }),
+  showDirectionInputModal: false,
+  setShowDirectionInputModal: (show) => set({ showDirectionInputModal: show }),
+  pendingDirection: null,
+  setPendingDirection: (dir) => set({ pendingDirection: dir }),
+  lastMoveDirection: 'down',
+  setLastMoveDirection: (dir) => set({ lastMoveDirection: dir }),
+  showDirectionGuide: true,
+  toggleDirectionGuide: () => set({ showDirectionGuide: !get().showDirectionGuide }),
 
   showDimensions: true,
   toggleShowDimensions: () => set({ showDimensions: !get().showDimensions }),
