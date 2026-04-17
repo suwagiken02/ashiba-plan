@@ -1,30 +1,52 @@
 'use client';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
 
 export default function ModeToolbar() {
-  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector } = useCanvasStore();
+  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
   const [showAutoMenu, setShowAutoMenu] = useState(false);
+  const [dismissedStage, setDismissedStage] = useState<string | null>(null);
 
   // 躯体グループ（建物・障害物）
   const isKutaiMode = mode === 'building' || mode === 'obstacle';
-  // 部材グループ（手摺・支柱・アンチ）
-  const isBuzaiMode = mode === 'handrail' || mode === 'post' || mode === 'anti';
 
   const mainButtons = [
-    { id: 'select' as const, label: '選択', icon: '↖' },
-    { id: 'kutai' as const, label: '躯体', icon: '⌂' },
-    { id: 'buzai' as const, label: '部材', icon: '━' },
-    { id: 'scaffold' as const, label: '足場開始', icon: '⚑' },
-    { id: 'auto' as const, label: '自動割付', icon: '⚡' },
-    { id: 'memo' as const, label: 'メモ', icon: 'T' },
-    { id: 'erase' as const, label: '消去', icon: '✕' },
-    { id: 'settings' as const, label: '設定', icon: '⚙' },
+    { id: 'select' as const, label: '選択', icon: '↖', color: '#378ADD' },
+    { id: 'kutai' as const, label: '躯体', icon: '⌂', color: '#4ECDC4' },
+    { id: 'scaffold' as const, label: '足場開始', icon: '⚑', color: '#FF6B6B' },
+    { id: 'buzai' as const, label: '部材', icon: '━', color: '#FFA500' },
+    { id: 'auto' as const, label: '自動割付', icon: '⚡', color: '#FFD700' },
+    { id: 'memo' as const, label: 'メモ', icon: 'T', color: '#DDA0DD' },
+    { id: 'erase' as const, label: '消去', icon: '✕', color: '#EF4444' },
+    { id: 'settings' as const, label: '設定', icon: '⚙', color: '#96CEB4' },
   ];
 
+  // ガイド点滅
+  const hasBuildings = canvasData.buildings.length > 0;
+  const hasScaffoldStart = !!canvasData.scaffoldStart;
+  const hasHandrails = canvasData.handrails.length > 0;
+
+  const getCurrentStage = (): string | null => {
+    if (!hasBuildings) return 'kutai';
+    if (!hasScaffoldStart) return 'scaffold';
+    return 'buzai';
+  };
+
+  const currentStage = getCurrentStage();
+  const highlightId = (currentStage && currentStage !== dismissedStage) ? currentStage : null;
+
+  // ステージが変わったらdismissをリセット
+  useEffect(() => {
+    setDismissedStage(null);
+  }, [hasBuildings, hasScaffoldStart]);
+
   const handleMainButton = (id: string) => {
+    const stage = getCurrentStage();
+    if (stage === 'kutai') setDismissedStage('kutai');
+    if (stage === 'scaffold') setDismissedStage('scaffold');
+    if (stage === 'buzai' && (id === 'buzai' || id === 'auto')) setDismissedStage('buzai');
     if (isMeasuring) toggleMeasuring();
     if (id === 'select' || id === 'erase') {
       setMode(id as ModeType);
@@ -131,11 +153,11 @@ export default function ModeToolbar() {
         <div className="flex justify-around items-center px-0.5 py-1">
           {mainButtons.map((m) => (
             <button key={m.id} onClick={() => handleMainButton(m.id)}
-              className={`flex-col items-center justify-center py-2 px-1 rounded-lg min-w-[36px] transition-colors ${
+              className={`flex-col items-center justify-center py-2 px-1 rounded-lg min-w-[36px] transition-colors flex ${
                 isActive(m.id) ? 'bg-accent text-white' : 'text-dimension hover:text-canvas'
-              } ${'smOnly' in m && m.smOnly ? 'flex sm:hidden' : 'flex'}`}
+              } ${highlightId === m.id || (highlightId === 'buzai' && m.id === 'auto') ? 'animate-highlight' : ''}`}
             >
-              <span className="text-base leading-none">{m.icon}</span>
+              <span className="text-base leading-none" style={{ color: isActive(m.id) ? 'white' : m.color }}>{m.icon}</span>
               <span className="text-[9px] mt-0.5">{m.label}</span>
             </button>
           ))}
