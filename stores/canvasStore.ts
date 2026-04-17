@@ -124,6 +124,8 @@ type CanvasStore = {
   isReorderMode: boolean;
   toggleReorderMode: () => void;
   reorderHandrails: (lineIds: string[], newOrder: string[]) => void;
+  selectedLineIds: string[];
+  setSelectedLineIds: (ids: string[]) => void;
 
   // 2F仮配置
   building2FDraft: {
@@ -265,21 +267,43 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   toggleShowKidare: () => set({ showKidare: !get().showKidare }),
 
   isReorderMode: false,
-  toggleReorderMode: () => set({ isReorderMode: !get().isReorderMode }),
-  reorderHandrails: (lineIds, newOrder) => {
-    const { canvasData, pushHistory } = get();
+  toggleReorderMode: () => {
+    const next = !get().isReorderMode;
+    set({ isReorderMode: next });
+    if (next) {
+      // 入替モードON時はselectモードに切り替え
+      get().setMode('select');
+    }
+  },
+  selectedLineIds: [],
+  setSelectedLineIds: (ids) => set({ selectedLineIds: ids }),
+  reorderHandrails: (lineIds: string[], newOrder: string[]) => {
+    const { canvasData } = get();
     const lineGroup = canvasData.handrails.filter(h => lineIds.includes(h.id));
     const others = canvasData.handrails.filter(h => !lineIds.includes(h.id));
+    const isHoriz = lineGroup[0]?.direction === 'horizontal';
     const sorted = [...lineGroup].sort((a, b) =>
-      a.direction === 'horizontal' ? a.x - b.x : a.y - b.y
+      isHoriz ? a.x - b.x : a.y - b.y
     );
-    const positions = sorted.map(h => ({ x: h.x, y: h.y }));
-    const reordered = newOrder.map((id, i) => {
+    // 先頭の開始座標を固定
+    const startCoord = isHoriz ? sorted[0].x : sorted[0].y;
+    // newOrderの順番で手摺を取り出してcursorで詰める
+    const reordered: typeof lineGroup = [];
+    let cursor = startCoord;
+    for (const id of newOrder) {
       const handrail = lineGroup.find(h => h.id === id)!;
-      return { ...handrail, x: positions[i].x, y: positions[i].y };
+      if (isHoriz) {
+        reordered.push({ ...handrail, x: cursor });
+      } else {
+        reordered.push({ ...handrail, y: cursor });
+      }
+      cursor += Math.round(handrail.lengthMm / 10);
+    }
+    get().pushHistory();
+    set({
+      canvasData: { ...canvasData, handrails: [...others, ...reordered] },
+      isDirty: true,
     });
-    pushHistory();
-    set({ canvasData: { ...canvasData, handrails: [...others, ...reordered] }, isDirty: true });
   },
 
   building2FDraft: null,

@@ -16,6 +16,7 @@ import ScaffoldStartModal from '@/components/scaffold/ScaffoldStartModal';
 import RoofSettingsModal from '@/components/building/RoofSettingsModal';
 import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
+import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
 
 // Konvaはクライアントサイドのみ
@@ -58,6 +59,9 @@ export default function EditorPage() {
     toggleShowKidare,
     isReorderMode,
     toggleReorderMode,
+    selectedLineIds,
+    setSelectedLineIds,
+    reorderHandrails,
     selectedIds,
     vertexPoints,
     clearVertexPoints,
@@ -527,6 +531,17 @@ export default function EditorPage() {
       )}
       {showAutoLayoutModal && (
         <AutoLayoutModal onClose={() => setShowAutoLayoutModal(false)} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />
+      )}
+      {selectedLineIds.length >= 2 && (
+        <HandrailReorderModal
+          lineIds={selectedLineIds}
+          buildingPoints={canvasData.buildings[0]?.points}
+          onClose={() => setSelectedLineIds([])}
+          onConfirm={(newOrder) => {
+            reorderHandrails(selectedLineIds, newOrder);
+            setSelectedLineIds([]);
+          }}
+        />
       )}
       {showRoofModal && selectedIds.length === 1 && (() => {
         const bld = canvasData.buildings.find(b => b.id === selectedIds[0]);
