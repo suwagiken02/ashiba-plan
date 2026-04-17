@@ -62,6 +62,14 @@ export default function EditorPage() {
     selectedLineIds,
     setSelectedLineIds,
     reorderHandrails,
+    showScaffoldStart,
+    setShowScaffoldStart,
+    showAutoLayout,
+    setShowAutoLayout,
+    showBuildingModal: showBuildingModalStore,
+    setShowBuildingModal: setShowBuildingModalStore,
+    showBuilding2FModal: showBuilding2FModalStore,
+    setShowBuilding2FModal: setShowBuilding2FModalStore,
     selectedIds,
     vertexPoints,
     clearVertexPoints,
@@ -123,13 +131,6 @@ export default function EditorPage() {
     loadDrawing();
   }, [drawingId, setDrawingId, setProjectId, setCanvasData]);
 
-  // 建物モードに切り替えたときモーダル表示
-  useEffect(() => {
-    // 頂点タップモードではモーダルを開かない（キャンバス直接操作）
-    if (mode === 'building' && useCanvasStore.getState().buildingInputMethod !== 'vertex') {
-      setShowBuildingModal(true);
-    }
-  }, [mode]);
 
   // 保存
   const handleSave = useCallback(async () => {
@@ -503,14 +504,14 @@ export default function EditorPage() {
       )}
 
       {/* モーダル */}
-      {showBuildingModal && (
-        <BuildingTemplateModal onClose={() => setShowBuildingModal(false)} />
+      {(showBuildingModal || showBuildingModalStore) && (
+        <BuildingTemplateModal onClose={() => { setShowBuildingModal(false); setShowBuildingModalStore(false); }} />
       )}
-      {showBuilding2FModal && (
+      {(showBuilding2FModal || showBuilding2FModalStore) && (
         <BuildingTemplateModal
           floor={2}
           floor1Building={canvasData.buildings.find(b => !b.floor || b.floor === 1)}
-          onClose={() => setShowBuilding2FModal(false)}
+          onClose={() => { setShowBuilding2FModal(false); setShowBuilding2FModalStore(false); }}
         />
       )}
       {showExportModal && (
@@ -523,14 +524,14 @@ export default function EditorPage() {
           siteName={siteName}
         />
       )}
-      {showScaffoldStartModal && (
-        <ScaffoldStartModal onClose={() => setShowScaffoldStartModal(false)} />
+      {(showScaffoldStartModal || showScaffoldStart) && (
+        <ScaffoldStartModal onClose={() => { setShowScaffoldStartModal(false); setShowScaffoldStart(false); }} />
       )}
       {showUdekiModal && (
         <UdekiModal onClose={() => setShowUdekiModal(false)} />
       )}
-      {showAutoLayoutModal && (
-        <AutoLayoutModal onClose={() => setShowAutoLayoutModal(false)} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />
+      {(showAutoLayoutModal || showAutoLayout) && (
+        <AutoLayoutModal onClose={() => { setShowAutoLayoutModal(false); setShowAutoLayout(false); }} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />
       )}
       {selectedLineIds.length >= 2 && (
         <HandrailReorderModal

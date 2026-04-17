@@ -121,6 +121,16 @@ type CanvasStore = {
   showKidare: boolean;
   toggleShowKidare: () => void;
 
+  // モーダル表示（ボトムナビから開く）
+  showScaffoldStart: boolean;
+  setShowScaffoldStart: (show: boolean) => void;
+  showAutoLayout: boolean;
+  setShowAutoLayout: (show: boolean) => void;
+  showBuildingModal: boolean;
+  setShowBuildingModal: (show: boolean) => void;
+  showBuilding2FModal: boolean;
+  setShowBuilding2FModal: (show: boolean) => void;
+
   // 手摺入れ替えモード
   isReorderMode: boolean;
   toggleReorderMode: () => void;
@@ -266,6 +276,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   showKidare: false,
   toggleShowKidare: () => set({ showKidare: !get().showKidare }),
+
+  showScaffoldStart: false,
+  setShowScaffoldStart: (show) => set({ showScaffoldStart: show }),
+  showAutoLayout: false,
+  setShowAutoLayout: (show) => set({ showAutoLayout: show }),
+  showBuildingModal: false,
+  setShowBuildingModal: (show) => set({ showBuildingModal: show }),
+  showBuilding2FModal: false,
+  setShowBuilding2FModal: (show) => set({ showBuilding2FModal: show }),
 
   isReorderMode: false,
   toggleReorderMode: () => {
