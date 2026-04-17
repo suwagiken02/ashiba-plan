@@ -413,26 +413,6 @@ export default function EditorPage() {
             </svg>
           </button>
 
-          {/* 足場開始ボタン（建物配置済みなら常に表示） */}
-          {canvasData.buildings.length > 0 && (
-            <button
-              onClick={() => setShowScaffoldStartModal(true)}
-              className="px-4 py-2 bg-accent text-white font-bold rounded-xl text-sm shadow-lg hover:bg-accent/90 transition-colors"
-            >
-              足場開始
-            </button>
-          )}
-
-          {/* 2F追加ボタン（1F建物がある場合のみ表示） */}
-          {canvasData.buildings.some(b => !b.floor || b.floor === 1) && (
-            <button
-              onClick={() => setShowBuilding2FModal(true)}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold border border-dark-border text-dimension hover:text-canvas shadow-lg transition-colors"
-            >
-              2F追加
-            </button>
-          )}
-
           {/* 屋根設定ボタン（建物選択中のみ表示） */}
           {selectedIds.length === 1 && canvasData.buildings.some(b => b.id === selectedIds[0]) && (
             <button
@@ -440,16 +420,6 @@ export default function EditorPage() {
               className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
             >
               屋根設定
-            </button>
-          )}
-
-          {/* 自動割付ボタン（建物配置済みなら常に表示） */}
-          {canvasData.buildings.length > 0 && (
-            <button
-              onClick={() => setShowAutoLayoutModal(true)}
-              className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
-            >
-              自動割付
             </button>
           )}
 
