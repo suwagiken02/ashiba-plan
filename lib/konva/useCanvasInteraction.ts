@@ -312,9 +312,8 @@ export function useCanvasInteraction() {
       const hitAnti = s.canvasData.antis.find(a => Math.hypot(a.x - rawPos.x, a.y - rawPos.y) < HIT_TOL);
       const hitElement = hitHandrail || hitPost || hitAnti;
 
-      if (hitElement && s.mode !== 'post') {
+      if (hitElement && s.mode !== 'post' && s.mode !== 'erase') {
         const isTouchEvent = 'touches' in e.evt;
-        console.log('[MouseDown]', { isTouchEvent, mode: s.mode, hitElement: !!hitElement });
         if (isTouchEvent) {
           stageRef.current = stage;
           if (hitHandrail) {
