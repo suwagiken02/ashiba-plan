@@ -148,6 +148,8 @@ type CanvasStore = {
   setShowMemoCreateModal: (show: boolean) => void;
   lastMemoSettings: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null;
   setLastMemoSettings: (s: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null) => void;
+  showInnerPost: boolean;
+  setShowInnerPost: (show: boolean) => void;
 
   // コーナーガイド・グリッド強弱
   showCornerGuide: boolean;
@@ -326,6 +328,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setShowMemoCreateModal: (show) => set({ showMemoCreateModal: show }),
   lastMemoSettings: null,
   setLastMemoSettings: (s) => set({ lastMemoSettings: s }),
+  showInnerPost: false,
+  setShowInnerPost: (show) => set({ showInnerPost: show }),
 
   showCornerGuide: false,
   toggleShowCornerGuide: () => set({ showCornerGuide: !get().showCornerGuide }),

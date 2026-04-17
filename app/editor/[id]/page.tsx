@@ -78,6 +78,8 @@ export default function EditorPage() {
     showPartSelector,
     showMemoCreateModal,
     setShowMemoCreateModal,
+    showInnerPost,
+    setShowInnerPost,
     showCornerGuide,
     toggleShowCornerGuide,
     isMeasuring,
@@ -442,15 +444,6 @@ export default function EditorPage() {
             </button>
           )}
 
-          {/* 腕木一括配置ボタン（手摺がある場合に表示） */}
-          {canvasData.handrails.length > 0 && (
-            <button
-              onClick={() => setShowUdekiModal(true)}
-              className="px-3 py-2 bg-dark-surface border border-dark-border rounded-xl text-xs text-dimension hover:text-canvas shadow-lg transition-colors"
-            >
-              内柱
-            </button>
-          )}
         </div>
 
 
@@ -516,8 +509,8 @@ export default function EditorPage() {
       {(showScaffoldStartModal || showScaffoldStart) && (
         <ScaffoldStartModal onClose={() => { setShowScaffoldStartModal(false); setShowScaffoldStart(false); }} />
       )}
-      {showUdekiModal && (
-        <UdekiModal onClose={() => setShowUdekiModal(false)} />
+      {(showUdekiModal || showInnerPost) && (
+        <UdekiModal onClose={() => { setShowUdekiModal(false); setShowInnerPost(false); }} />
       )}
       {(showAutoLayoutModal || showAutoLayout) && (
         <AutoLayoutModal onClose={() => { setShowAutoLayoutModal(false); setShowAutoLayout(false); }} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />

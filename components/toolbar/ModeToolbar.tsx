@@ -6,6 +6,7 @@ import { ModeType } from '@/types';
 export default function ModeToolbar() {
   const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
+  const [showAutoMenu, setShowAutoMenu] = useState(false);
 
   // 躯体グループ（建物・障害物）
   const isKutaiMode = mode === 'building' || mode === 'obstacle';
@@ -36,7 +37,7 @@ export default function ModeToolbar() {
     } else if (id === 'scaffold') {
       useCanvasStore.getState().setShowScaffoldStart(true);
     } else if (id === 'auto') {
-      useCanvasStore.getState().setShowAutoLayout(true);
+      setShowAutoMenu(true);
     } else if (id === 'settings') {
       if (window.innerWidth < 640) {
         useCanvasStore.getState().setShowSettings(true);
@@ -91,6 +92,35 @@ export default function ModeToolbar() {
             >
               <span className="text-3xl mb-1">⬒</span>
               <span className="text-sm font-bold">障害物</span>
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* 自動配置メニュー */}
+      {showAutoMenu && (
+        <>
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowAutoMenu(false)} />
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3">
+            <button
+              onClick={() => {
+                useCanvasStore.getState().setShowAutoLayout(true);
+                setShowAutoMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-28 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">⚡</span>
+              <span className="text-xs font-bold">自動割付</span>
+            </button>
+            <button
+              onClick={() => {
+                useCanvasStore.getState().setShowInnerPost(true);
+                setShowAutoMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-28 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">●</span>
+              <span className="text-xs font-bold">自動内柱配置</span>
             </button>
           </div>
         </>
