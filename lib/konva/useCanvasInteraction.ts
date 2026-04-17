@@ -13,6 +13,7 @@ import { Point, Handrail, HandrailDirection, HandrailLengthMm } from '@/types';
 
 const SNAP_PX = 80;
 const HIT_TOL = 25; // 手摺ヒット判定のグリッド許容差（250mm、タッチ操作対応）
+let lastTouchTime = 0;
 
 /** クリック位置に最も近い手摺を見つける（距離がHIT_TOL以内） */
 function findHandrailAtPos(pos: Point, handrails: Handrail[]): Handrail | null {
@@ -288,7 +289,24 @@ export function useCanvasInteraction() {
 
       // 寸法計測モード
       if (s.isMeasuring) {
-        const snapped = snapMeasurePoint(rawPos, s);
+        // タッチイベント後500ms以内のmousedownは無視（ゴースト発火対策）
+        if (e.type === 'mousedown' && Date.now() - lastTouchTime < 500) {
+          return;
+        }
+        if (e.type === 'touchstart') {
+          lastTouchTime = Date.now();
+        }
+
+        // タッチイベントの場合はchangedTouchesから直接座標を取得
+        let measurePos = rawPos;
+        const evt = e.evt;
+        if ('changedTouches' in evt && (evt as TouchEvent).changedTouches.length > 0) {
+          const touch = (evt as TouchEvent).changedTouches[0];
+          const rect = stage.container().getBoundingClientRect();
+          const { panX, panY, zoom } = useCanvasStore.getState();
+          measurePos = screenToGrid(touch.clientX - rect.left, touch.clientY - rect.top, panX, panY, zoom);
+        }
+        const snapped = snapMeasurePoint(measurePos, s);
         if (!s.measurePoint1) {
           s.setMeasurePoint1(snapped);
           s.setMeasurePoint2(null);
