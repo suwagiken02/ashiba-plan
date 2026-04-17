@@ -308,8 +308,23 @@ export default function EditorPage() {
         )}
         <CompassWidget />
 
-        {/* 右上ボタン群 */}
-        <div className="absolute top-3 right-3 flex flex-col gap-2 z-10" style={{ display: showSettingsPanel ? undefined : 'none' }}>
+        {/* スマホ用 全体表示ボタン */}
+        {canvasData.buildings.length > 0 && (
+          <button
+            onClick={() => {
+              const vw = canvasSize.width || window.innerWidth;
+              const vh = canvasSize.height || (window.innerHeight - 120);
+              zoomToFitBuildings(vw, vh, 3000);
+            }}
+            className="sm:hidden absolute top-3 right-3 p-2 bg-dark-surface border border-dark-border rounded-lg shadow-lg text-dimension z-10"
+            title="全体表示"
+          >
+            🔍
+          </button>
+        )}
+
+        {/* 右上ボタン群（PC） */}
+        <div className="hidden sm:flex absolute top-3 right-3 flex-col gap-2 z-10" style={{ display: showSettingsPanel ? undefined : 'none' }}>
           {/* 全体表示ボタン */}
           {canvasData.buildings.length > 0 && (
             <button
@@ -389,26 +404,6 @@ export default function EditorPage() {
               <path d="M21 8 L21 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
               <path d="M6 12 L8 10 M6 12 L8 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
               <path d="M18 12 L16 10 M18 12 L16 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-            </svg>
-          </button>
-
-          {/* グリッドガイドトグル */}
-          <button
-            onClick={toggleShowGridGuide}
-            className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
-              showGridGuide
-                ? 'bg-accent border-accent text-white'
-                : 'bg-dark-surface border-dark-border text-dimension hover:text-canvas'
-            }`}
-            title={showGridGuide ? 'グリッドガイドを非表示' : 'グリッドガイドを表示'}
-          >
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
-              <line x1="1" y1="1" x2="1" y2="17" />
-              <line x1="9" y1="1" x2="9" y2="17" />
-              <line x1="17" y1="1" x2="17" y2="17" />
-              <line x1="1" y1="1" x2="17" y2="1" />
-              <line x1="1" y1="9" x2="17" y2="9" />
-              <line x1="1" y1="17" x2="17" y2="17" />
             </svg>
           </button>
 

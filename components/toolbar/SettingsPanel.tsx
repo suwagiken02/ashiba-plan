@@ -8,6 +8,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
     showKidare, toggleShowKidare,
     showDimensions, toggleShowDimensions,
     showCornerGuide, toggleShowCornerGuide,
+    showGridGuide, toggleShowGridGuide,
     gridStrength, setGridStrength,
   } = useCanvasStore();
 
@@ -16,6 +17,7 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
     { label: '離れ表示', value: showKidare, toggle: toggleShowKidare, icon: '↔' },
     { label: '寸法表示', value: showDimensions, toggle: toggleShowDimensions, icon: '⤢' },
     { label: 'コーナーガイド', value: showCornerGuide, toggle: toggleShowCornerGuide, icon: '⌐' },
+    { label: 'グリッドガイド', value: showGridGuide, toggle: toggleShowGridGuide, icon: '⊞' },
   ];
 
   return (
