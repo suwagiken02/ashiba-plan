@@ -14,20 +14,36 @@ const DIR_LABEL: Record<string, string> = {
 };
 
 export default function DirectionInputModal({ onClose }: Props) {
-  const { directionPoints, addDirectionPoint, pendingDirection, setPendingDirection } = useCanvasStore();
-  const [distanceMm, setDistanceMm] = useState(3000);
+  const { directionPoints, addDirectionPoint, pendingDirection, setPendingDirection, pendingDirectionTarget, setPendingDirectionTarget } = useCanvasStore();
+
+  // 交点タップ時はターゲットから距離を算出して初期値にする
+  const last = directionPoints.length > 0 ? directionPoints[directionPoints.length - 1] : null;
+  const initialDistMm = pendingDirectionTarget && last
+    ? Math.round(Math.sqrt(Math.pow((pendingDirectionTarget.x - last.x) * 10, 2) + Math.pow((pendingDirectionTarget.y - last.y) * 10, 2)))
+    : 3000;
+
+  const [distanceMm, setDistanceMm] = useState(initialDistMm);
 
   if (!pendingDirection) return null;
 
   const handleConfirm = () => {
     if (directionPoints.length === 0 || !pendingDirection) return;
-    const last = directionPoints[directionPoints.length - 1];
-    const distGrid = Math.round(distanceMm / 10);
-    const next = { ...last };
-    if (pendingDirection === 'up') next.y -= distGrid;
-    if (pendingDirection === 'down') next.y += distGrid;
-    if (pendingDirection === 'left') next.x -= distGrid;
-    if (pendingDirection === 'right') next.x += distGrid;
+
+    let next: { x: number; y: number };
+
+    if (pendingDirectionTarget) {
+      // 交点タップ: ターゲット座標をそのまま使う
+      next = { ...pendingDirectionTarget };
+    } else {
+      // 4方向ボタン: 方向×距離で計算
+      const currentLast = directionPoints[directionPoints.length - 1];
+      const distGrid = Math.round(distanceMm / 10);
+      next = { ...currentLast };
+      if (pendingDirection === 'up') next.y -= distGrid;
+      if (pendingDirection === 'down') next.y += distGrid;
+      if (pendingDirection === 'left') next.x -= distGrid;
+      if (pendingDirection === 'right') next.x += distGrid;
+    }
 
     // 始点に近ければ自動完了
     const first = directionPoints[0];
@@ -36,23 +52,27 @@ export default function DirectionInputModal({ onClose }: Props) {
       useCanvasStore.getState().addBuilding({
         id: uuidv4(), type: 'polygon', points: [...directionPoints], fill: '#3d3d3a',
       });
+      useCanvasStore.getState().setLastCompletedDirectionSession({ points: [...directionPoints] });
       useCanvasStore.getState().clearDirectionPoints();
       useCanvasStore.getState().setBuildingInputMethod('template');
       useCanvasStore.getState().setMode('select');
-      setPendingDirection(null);
-      onClose();
+      cleanup();
       return;
     }
 
     addDirectionPoint(next);
     useCanvasStore.getState().setLastMoveDirection(pendingDirection);
+    cleanup();
+  };
+
+  const cleanup = () => {
     setPendingDirection(null);
+    setPendingDirectionTarget(null);
     onClose();
   };
 
   const handleClose = () => {
-    setPendingDirection(null);
-    onClose();
+    cleanup();
   };
 
   return (
@@ -60,7 +80,10 @@ export default function DirectionInputModal({ onClose }: Props) {
       <div className="bg-dark-surface border border-dark-border rounded-2xl p-5 max-w-xs w-full mx-4 space-y-4" onClick={e => e.stopPropagation()}>
         <h2 className="font-bold text-lg">壁の長さ</h2>
         <p className="text-sm text-accent font-bold">{DIR_LABEL[pendingDirection]}</p>
-        <p className="text-xs text-dimension">{directionPoints.length}点入力済み</p>
+        <p className="text-xs text-dimension">
+          {directionPoints.length}点入力済み
+          {pendingDirectionTarget && <span className="ml-2 text-orange-400">（交点タップ）</span>}
+        </p>
 
         {/* 距離入力 */}
         <div className="flex items-center gap-2">
@@ -71,14 +94,16 @@ export default function DirectionInputModal({ onClose }: Props) {
         </div>
 
         {/* よく使う距離プリセット */}
-        <div className="flex flex-wrap gap-1.5">
-          {[1000, 1800, 2000, 3000, 3640, 4000, 5000, 6000, 7280, 9100].map(mm => (
-            <button key={mm} onClick={() => setDistanceMm(mm)}
-              className={`px-2 py-1 rounded text-xs font-mono border transition-colors ${
-                distanceMm === mm ? 'bg-accent text-white border-accent' : 'border-dark-border text-dimension'
-              }`}>{mm}</button>
-          ))}
-        </div>
+        {!pendingDirectionTarget && (
+          <div className="flex flex-wrap gap-1.5">
+            {[1000, 1800, 2000, 3000, 3640, 4000, 5000, 6000, 7280, 9100].map(mm => (
+              <button key={mm} onClick={() => setDistanceMm(mm)}
+                className={`px-2 py-1 rounded text-xs font-mono border transition-colors ${
+                  distanceMm === mm ? 'bg-accent text-white border-accent' : 'border-dark-border text-dimension'
+                }`}>{mm}</button>
+            ))}
+          </div>
+        )}
 
         <div className="flex gap-3">
           <button onClick={handleClose}

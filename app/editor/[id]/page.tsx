@@ -82,10 +82,14 @@ export default function EditorPage() {
     showInnerPost,
     setShowInnerPost,
     directionPoints,
+    directionPointsHistory,
     clearDirectionPoints,
     removeLastDirectionPoint,
     showDirectionInputModal,
     setShowDirectionInputModal,
+    lastCompletedDirectionSession,
+    setLastCompletedDirectionSession,
+    setDirectionPoints,
     showDirectionGuide,
     toggleDirectionGuide,
     showCornerGuide,
@@ -247,22 +251,50 @@ export default function EditorPage() {
           {/* アンドゥ/リドゥ */}
           <button
             onClick={() => {
-              if (mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length > 0) {
-                removeLastDirectionPoint();
-              } else if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
+              const s = useCanvasStore.getState();
+              // ケースA: 壁方向入力モード中で履歴がある → 1点戻す
+              if (s.buildingInputMethod === 'direction' && s.directionPointsHistory.length > 0) {
+                s.undoDirectionPoint();
+                return;
+              }
+              // ケースB: 壁方向入力モード中で起点のみ → モード終了
+              if (s.buildingInputMethod === 'direction' && s.directionPoints.length > 0 && s.directionPointsHistory.length === 0) {
+                s.clearDirectionPoints();
+                s.setBuildingInputMethod('template');
+                s.setMode('select');
+                return;
+              }
+              // ケースC: 建物完成直後 → 建物を消して壁方向入力モードを再開
+              if (s.lastCompletedDirectionSession) {
+                const session = s.lastCompletedDirectionSession;
+                s.undo();
+                s.setDirectionPoints(session.points);
+                s.setBuildingInputMethod('direction');
+                s.setMode('building');
+                s.setLastCompletedDirectionSession(null);
+                return;
+              }
+              // 頂点タップモード
+              if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
                 removeLastVertexPoint();
-              } else if (isMeasuring && (measurePoint1 || measurePoint2)) {
+                return;
+              }
+              // 寸法計測
+              if (isMeasuring && (measurePoint1 || measurePoint2)) {
                 setMeasurePoint1(null);
                 setMeasurePoint2(null);
                 setMeasureCursor(null);
                 setMeasureResultMm(null);
-              } else {
-                undo();
+                return;
               }
+              // 通常undo
+              undo();
             }}
             disabled={
-              mode === 'building' && buildingInputMethod === 'direction'
-                ? directionPoints.length === 0
+              (buildingInputMethod === 'direction' && (directionPoints.length > 0 || directionPointsHistory.length > 0))
+                ? false
+                : lastCompletedDirectionSession
+                ? false
                 : mode === 'building' && buildingInputMethod === 'vertex'
                 ? vertexPoints.length === 0
                 : isMeasuring
@@ -569,6 +601,7 @@ export default function EditorPage() {
             <button
               onClick={() => {
                 addBuilding({ id: uuidv4(), type: 'polygon', points: [...directionPoints], fill: '#3d3d3a' });
+                setLastCompletedDirectionSession({ points: [...directionPoints] });
                 clearDirectionPoints();
                 setBuildingInputMethod('template');
                 setMode('select');

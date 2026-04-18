@@ -83,13 +83,20 @@ type CanvasStore = {
 
   // 壁方向入力モード
   directionPoints: { x: number; y: number }[];
+  directionPointsHistory: { x: number; y: number }[][];
+  lastCompletedDirectionSession: { points: { x: number; y: number }[] } | null;
   addDirectionPoint: (p: { x: number; y: number }) => void;
+  undoDirectionPoint: () => void;
   removeLastDirectionPoint: () => void;
   clearDirectionPoints: () => void;
+  setDirectionPoints: (points: { x: number; y: number }[]) => void;
+  setLastCompletedDirectionSession: (s: { points: { x: number; y: number }[] } | null) => void;
   showDirectionInputModal: boolean;
   setShowDirectionInputModal: (show: boolean) => void;
   pendingDirection: 'up' | 'down' | 'left' | 'right' | null;
   setPendingDirection: (dir: 'up' | 'down' | 'left' | 'right' | null) => void;
+  pendingDirectionTarget: { x: number; y: number } | null;
+  setPendingDirectionTarget: (p: { x: number; y: number } | null) => void;
   lastMoveDirection: 'up' | 'down' | 'left' | 'right';
   setLastMoveDirection: (dir: 'up' | 'down' | 'left' | 'right') => void;
   showDirectionGuide: boolean;
@@ -272,13 +279,28 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   clearVertexPoints: () => set({ vertexPoints: [] }),
 
   directionPoints: [],
-  addDirectionPoint: (p) => set((s) => ({ directionPoints: [...s.directionPoints, p] })),
+  directionPointsHistory: [],
+  lastCompletedDirectionSession: null,
+  addDirectionPoint: (p) => set((s) => ({
+    directionPointsHistory: [...s.directionPointsHistory, [...s.directionPoints]],
+    directionPoints: [...s.directionPoints, p],
+  })),
+  undoDirectionPoint: () => set((s) => {
+    if (s.directionPointsHistory.length === 0) return { directionPoints: [] };
+    const newHistory = [...s.directionPointsHistory];
+    const prevPoints = newHistory.pop()!;
+    return { directionPoints: prevPoints, directionPointsHistory: newHistory };
+  }),
   removeLastDirectionPoint: () => set((s) => ({ directionPoints: s.directionPoints.slice(0, -1) })),
-  clearDirectionPoints: () => set({ directionPoints: [] }),
+  clearDirectionPoints: () => set({ directionPoints: [], directionPointsHistory: [] }),
+  setDirectionPoints: (points) => set({ directionPoints: points }),
+  setLastCompletedDirectionSession: (s) => set({ lastCompletedDirectionSession: s }),
   showDirectionInputModal: false,
   setShowDirectionInputModal: (show) => set({ showDirectionInputModal: show }),
   pendingDirection: null,
   setPendingDirection: (dir) => set({ pendingDirection: dir }),
+  pendingDirectionTarget: null,
+  setPendingDirectionTarget: (p) => set({ pendingDirectionTarget: p }),
   lastMoveDirection: 'down',
   setLastMoveDirection: (dir) => set({ lastMoveDirection: dir }),
   showDirectionGuide: true,
@@ -421,7 +443,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   pushHistory: () => {
     const { canvasData, history } = get();
     const past = [...history.past, JSON.parse(JSON.stringify(canvasData))].slice(-MAX_HISTORY);
-    set({ history: { past, future: [] }, isDirty: true });
+    set({ history: { past, future: [] }, isDirty: true, lastCompletedDirectionSession: null });
   },
   undo: () => {
     const { canvasData, history } = get();

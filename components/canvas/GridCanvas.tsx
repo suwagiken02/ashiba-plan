@@ -745,8 +745,8 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
                     const sy = pt.y * gridPx + panY;
                     return (
                       <React.Fragment key={`guide-${i}`}>
-                        <Line points={[sx, 0, sx, height]} stroke="#FF6B35" strokeWidth={2} opacity={0.8} dash={[10, 5]} />
-                        <Line points={[0, sy, width, sy]} stroke="#FF6B35" strokeWidth={2} opacity={0.8} dash={[10, 5]} />
+                        <Line points={[sx, 0, sx, height]} stroke="#F97316" strokeWidth={1} opacity={0.5} dash={[6, 6]} listening={false} />
+                        <Line points={[0, sy, width, sy]} stroke="#F97316" strokeWidth={1} opacity={0.5} dash={[6, 6]} listening={false} />
                       </React.Fragment>
                     );
                   })}
@@ -824,6 +824,67 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
               );
             })()}
           </Layer>
+          {/* グリッド交点マーカー */}
+          {showDirectionGuide && (
+            <Layer>
+              {(() => {
+                const gridPx = INITIAL_GRID_PX * zoom;
+                const last = directionPoints[directionPoints.length - 1];
+                const cx = last.x;
+                const cy = last.y;
+                // 可視範囲をグリッド座標で算出
+                const minGX = Math.floor(-panX / gridPx) - 1;
+                const maxGX = Math.ceil((width - panX) / gridPx) + 1;
+                const minGY = Math.floor(-panY / gridPx) - 1;
+                const maxGY = Math.ceil((height - panY) / gridPx) + 1;
+
+                // directionPoints の x 座標と y 座標のユニーク集合
+                const xs = Array.from(new Set(directionPoints.map(p => p.x)));
+                const ys = Array.from(new Set(directionPoints.map(p => p.y)));
+
+                const markers: { x: number; y: number }[] = [];
+                // 全 x × 全 y の組み合わせ（既存頂点も含む、現在位置のみ除外）
+                for (const x of xs) {
+                  if (x < minGX || x > maxGX) continue;
+                  for (const y of ys) {
+                    if (y < minGY || y > maxGY) continue;
+                    if (x === cx && y === cy) continue;
+                    markers.push({ x, y });
+                  }
+                }
+
+                const handleMarkerTap = (target: { x: number; y: number }) => {
+                  const dx = target.x - cx;
+                  const dy = target.y - cy;
+                  let dir: 'up' | 'down' | 'left' | 'right';
+                  if (Math.abs(dx) >= Math.abs(dy)) {
+                    dir = dx > 0 ? 'right' : 'left';
+                  } else {
+                    dir = dy > 0 ? 'down' : 'up';
+                  }
+                  useCanvasStore.getState().setPendingDirection(dir);
+                  useCanvasStore.getState().setPendingDirectionTarget(target);
+                  useCanvasStore.getState().setShowDirectionInputModal(true);
+                };
+                return markers.map((m, i) => {
+                  const sx = m.x * gridPx + panX;
+                  const sy = m.y * gridPx + panY;
+                  return (
+                    <Circle
+                      key={`gm-${i}`}
+                      x={sx} y={sy}
+                      radius={4}
+                      fill="#F97316"
+                      opacity={0.5}
+                      hitStrokeWidth={12}
+                      onClick={() => handleMarkerTap(m)}
+                      onTap={() => handleMarkerTap(m)}
+                    />
+                  );
+                });
+              })()}
+            </Layer>
+          )}
         </>
       )}
 
