@@ -1,5 +1,5 @@
 import { Point, Handrail, HandrailLengthMm, Anti } from '@/types';
-import { mmToGrid } from './gridUtils';
+import { mmToGrid, INITIAL_GRID_PX } from './gridUtils';
 
 /** 最近傍の手摺端点へのスナップ */
 export const snapToHandrailEnd = (
@@ -179,6 +179,40 @@ export const getHandrailEndpoints = (h: Handrail): [Point, Point] => {
     { x: h.x, y: h.y },
     { x: h.x + dx, y: h.y + dy },
   ];
+};
+
+/** グリッド交点へのマグネットスナップ（太い線優先） */
+export const snapToGridIntersection = (
+  worldX: number,
+  worldY: number,
+  zoom: number,
+): Point => {
+  const MAJOR_STEP = 100;  // 太い線: 100グリッド = 1000mm
+  const MINOR_STEP = 50;   // 細い線: 50グリッド = 500mm
+
+  // スナップ範囲をグリッド単位に変換（画面上のピクセルから逆算）
+  const gridPx = INITIAL_GRID_PX * zoom;
+  const majorRange = 40 / gridPx; // 画面40px以内
+  const minorRange = 20 / gridPx; // 画面20px以内
+
+  // 太い線の最近接交点
+  const majorX = Math.round(worldX / MAJOR_STEP) * MAJOR_STEP;
+  const majorY = Math.round(worldY / MAJOR_STEP) * MAJOR_STEP;
+  const majorDist = Math.hypot(worldX - majorX, worldY - majorY);
+  if (majorDist <= majorRange) {
+    return { x: majorX, y: majorY };
+  }
+
+  // 細い線の最近接交点
+  const minorX = Math.round(worldX / MINOR_STEP) * MINOR_STEP;
+  const minorY = Math.round(worldY / MINOR_STEP) * MINOR_STEP;
+  const minorDist = Math.hypot(worldX - minorX, worldY - minorY);
+  if (minorDist <= minorRange) {
+    return { x: minorX, y: minorY };
+  }
+
+  // どちらにもスナップしない → 元の座標（グリッド1単位に丸め）
+  return { x: Math.round(worldX), y: Math.round(worldY) };
 };
 
 /** アンチの4隅を取得 */

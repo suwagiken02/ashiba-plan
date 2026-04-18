@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from './gridUtils';
-import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints } from './snapUtils';
+import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGridIntersection } from './snapUtils';
 import { getHandrailColor } from './handrailColors';
 import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
@@ -465,7 +465,8 @@ export function useCanvasInteraction() {
       // building + direction モード: 起点をタップしてモーダル表示
       if (s.mode === 'building' && s.buildingInputMethod === 'direction') {
         if (s.directionPoints.length === 0) {
-          s.addDirectionPoint({ x: Math.round(rawPos.x), y: Math.round(rawPos.y) });
+          const snapped = snapToGridIntersection(rawPos.x, rawPos.y, s.zoom);
+          s.addDirectionPoint(snapped);
           s.setShowDirectionInputModal(true);
         }
         dragStart.current = null;
