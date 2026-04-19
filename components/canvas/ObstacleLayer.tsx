@@ -56,6 +56,14 @@ export default function ObstacleLayer() {
                 strokeWidth={isSelected ? 2 : 1}
                 listening={mode === 'select' || mode === 'erase'}
                 id={obs.id}
+                draggable={mode === 'select'}
+                onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+                onDragEnd={(e) => {
+                  const dx = Math.round(e.target.x() / gridPx);
+                  const dy = Math.round(e.target.y() / gridPx);
+                  e.target.x(0); e.target.y(0);
+                  if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                }}
               />
               {label && (() => {
                 const cx = obs.points!.reduce((s, p) => s + p.x, 0) / obs.points!.length;
@@ -91,6 +99,14 @@ export default function ObstacleLayer() {
                 strokeWidth={isSelected ? 2 : 0.5}
                 listening={mode === 'select' || mode === 'erase'}
                 id={obs.id}
+                draggable={mode === 'select'}
+                onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+                onDragEnd={(e) => {
+                  const dx = Math.round(e.target.x() / gridPx);
+                  const dy = Math.round(e.target.y() / gridPx);
+                  e.target.x(0); e.target.y(0);
+                  if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                }}
               />
               {label && (
                 <Text
@@ -122,6 +138,14 @@ export default function ObstacleLayer() {
               dash={isCarport ? [8, 4] : undefined}
               listening={mode === 'select' || mode === 'erase'}
               id={obs.id}
+              draggable={mode === 'select'}
+              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragEnd={(e) => {
+                const dx = Math.round(e.target.x() / gridPx);
+                const dy = Math.round(e.target.y() / gridPx);
+                e.target.x(0); e.target.y(0);
+                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
+              }}
             />
             {label && (
               <Text
