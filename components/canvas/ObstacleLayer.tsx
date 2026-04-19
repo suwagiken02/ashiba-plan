@@ -102,9 +102,11 @@ export default function ObstacleLayer() {
                 draggable={mode === 'select'}
                 onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
                 onDragEnd={(e) => {
-                  const dx = Math.round(e.target.x() / gridPx);
-                  const dy = Math.round(e.target.y() / gridPx);
-                  e.target.x(0); e.target.y(0);
+                  const origX = screenX + r;
+                  const origY = screenY + r;
+                  const dx = Math.round((e.target.x() - origX) / gridPx);
+                  const dy = Math.round((e.target.y() - origY) / gridPx);
+                  e.target.x(origX); e.target.y(origY);
                   if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
                 }}
               />
@@ -141,9 +143,9 @@ export default function ObstacleLayer() {
               draggable={mode === 'select'}
               onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
               onDragEnd={(e) => {
-                const dx = Math.round(e.target.x() / gridPx);
-                const dy = Math.round(e.target.y() / gridPx);
-                e.target.x(0); e.target.y(0);
+                const dx = Math.round((e.target.x() - screenX) / gridPx);
+                const dy = Math.round((e.target.y() - screenY) / gridPx);
+                e.target.x(screenX); e.target.y(screenY);
                 if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
               }}
             />
