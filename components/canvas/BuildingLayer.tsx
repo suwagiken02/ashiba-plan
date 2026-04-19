@@ -72,11 +72,15 @@ export default function BuildingLayer() {
           p.x * gridPx + panX, p.y * gridPx + panY,
         ]);
         const isSelected = selectedIds.includes(building.id);
+        const is2F = building.floor === 2;
+        const fillColor = is2F ? '#A0A0A0' : (isDarkMode ? '#555555' : '#3d3d3a');
+        const strokeColor = isSelected ? '#FF6B35' : (is2F ? '#888888' : (isDarkMode ? '#888888' : '#1a1a18'));
 
         return (
           <Line key={building.id} points={flatPoints} closed
-            fill={building.fill ?? (building.floor === 2 ? '#5a5a7a' : (isDarkMode ? '#555555' : '#3d3d3a'))}
-            stroke={isSelected ? '#FF6B35' : (building.floor === 2 ? '#4a4a6a' : (isDarkMode ? '#888888' : '#1a1a18'))}
+            fill={fillColor}
+            opacity={is2F ? 0.6 : 1}
+            stroke={strokeColor}
             strokeWidth={isSelected ? 3 : 2}
             listening={mode === 'select' || mode === 'erase'}
             id={building.id}
