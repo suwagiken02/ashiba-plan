@@ -361,10 +361,12 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
               onClick={() => {
                 setBuildingInputMethod(m);
                 if (m === 'vertex') {
+                  useCanvasStore.getState().setPendingBuildingFloor(floor || 1);
                   useCanvasStore.getState().setMode('building');
                   useCanvasStore.getState().clearVertexPoints();
                   onClose();
                 } else if (m === 'direction') {
+                  useCanvasStore.getState().setPendingBuildingFloor(floor || 1);
                   useCanvasStore.getState().setMode('building');
                   useCanvasStore.getState().clearDirectionPoints();
                   onClose();

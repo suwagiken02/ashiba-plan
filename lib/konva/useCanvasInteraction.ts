@@ -483,12 +483,19 @@ export function useCanvasInteraction() {
           const dist = Math.hypot(rawPos.x - first.x, rawPos.y - first.y);
           if (dist < CLOSE_TOL) {
             // 始点に近い → ポリゴン確定
+            const newId = uuidv4();
+            const flr = s.pendingBuildingFloor;
             s.addBuilding({
-              id: uuidv4(),
+              id: newId,
               type: 'polygon',
               points: [...pts],
               fill: '#3d3d3a',
+              floor: flr,
             });
+            if (flr === 1) {
+              s.setAutoOpenRoofForBuildingId(newId);
+            }
+            s.setPendingBuildingFloor(1);
             s.clearVertexPoints();
             s.setMode('select');
             dragStart.current = null;

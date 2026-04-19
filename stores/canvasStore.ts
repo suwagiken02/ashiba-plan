@@ -93,6 +93,8 @@ type CanvasStore = {
   setLastCompletedDirectionSession: (s: { points: { x: number; y: number }[] } | null) => void;
   autoOpenRoofForBuildingId: string | null;
   setAutoOpenRoofForBuildingId: (id: string | null) => void;
+  pendingBuildingFloor: 1 | 2;
+  setPendingBuildingFloor: (f: 1 | 2) => void;
   showDirectionInputModal: boolean;
   setShowDirectionInputModal: (show: boolean) => void;
   pendingDirection: 'up' | 'down' | 'left' | 'right' | null;
@@ -299,6 +301,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setLastCompletedDirectionSession: (s) => set({ lastCompletedDirectionSession: s }),
   autoOpenRoofForBuildingId: null,
   setAutoOpenRoofForBuildingId: (id) => set({ autoOpenRoofForBuildingId: id }),
+  pendingBuildingFloor: 1,
+  setPendingBuildingFloor: (f) => set({ pendingBuildingFloor: f }),
   showDirectionInputModal: false,
   setShowDirectionInputModal: (show) => set({ showDirectionInputModal: show }),
   pendingDirection: null,

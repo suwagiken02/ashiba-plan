@@ -50,11 +50,15 @@ export default function DirectionInputModal({ onClose }: Props) {
     const dist = Math.hypot(next.x - first.x, next.y - first.y);
     if (directionPoints.length >= 3 && dist < 2) {
       const newId = uuidv4();
+      const flr = useCanvasStore.getState().pendingBuildingFloor;
       useCanvasStore.getState().addBuilding({
-        id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a',
+        id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a', floor: flr,
       });
       useCanvasStore.getState().setLastCompletedDirectionSession({ points: [...directionPoints] });
-      useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+      if (flr === 1) {
+        useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+      }
+      useCanvasStore.getState().setPendingBuildingFloor(1);
       useCanvasStore.getState().clearDirectionPoints();
       useCanvasStore.getState().setBuildingInputMethod('template');
       useCanvasStore.getState().setMode('select');

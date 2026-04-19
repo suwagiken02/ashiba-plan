@@ -92,6 +92,8 @@ export default function EditorPage() {
     setDirectionPoints,
     autoOpenRoofForBuildingId,
     setAutoOpenRoofForBuildingId,
+    pendingBuildingFloor,
+    setPendingBuildingFloor,
     showDirectionGuide,
     toggleDirectionGuide,
     showCornerGuide,
@@ -561,8 +563,13 @@ export default function EditorPage() {
           {vertexPoints.length >= 3 && (
             <button
               onClick={() => {
-                addBuilding({ id: uuidv4(), type: 'polygon', points: [...vertexPoints], fill: '#3d3d3a' });
+                const newId = uuidv4();
+                addBuilding({ id: newId, type: 'polygon', points: [...vertexPoints], fill: '#3d3d3a', floor: pendingBuildingFloor });
+                if (pendingBuildingFloor === 1) {
+                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                }
                 clearVertexPoints();
+                setPendingBuildingFloor(1);
                 setMode('select');
               }}
               className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
@@ -604,10 +611,13 @@ export default function EditorPage() {
             <button
               onClick={() => {
                 const newId = uuidv4();
-                addBuilding({ id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a' });
+                addBuilding({ id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a', floor: pendingBuildingFloor });
                 setLastCompletedDirectionSession({ points: [...directionPoints] });
-                useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                if (pendingBuildingFloor === 1) {
+                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                }
                 clearDirectionPoints();
+                setPendingBuildingFloor(1);
                 setBuildingInputMethod('template');
                 setMode('select');
               }}
