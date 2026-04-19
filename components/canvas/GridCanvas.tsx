@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useCallback, useEffect, useState } from 'react';
+import React, { useRef, useCallback, useEffect, useState, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { Stage, Layer, Line, Rect, Circle, Text, Path, Group, Ellipse, Arc } from 'react-konva';
 import Konva from 'konva';
@@ -20,6 +20,7 @@ import KidareLayer from './KidareLayer';
 import CompassWidget from './CompassWidget';
 import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
+import { getAllExistingVertices } from '@/lib/konva/snapUtils';
 import { getPrintAreaGrid } from '@/lib/export/pdfExport';
 
 type Props = {
@@ -45,6 +46,21 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
   const [draft2FPos, setDraft2FPos] = useState<{ x: number; y: number } | null>(null);
   const [memoCursorPos, setMemoCursorPos] = useState<{ x: number; y: number } | null>(null);
   const panInitialized = useRef(false);
+
+  // 十字ガイド用: 全頂点のユニークX/Y（建物+障害物+directionPoints）
+  const guideXs = useMemo(() => {
+    if (!showDirectionGuide || buildingInputMethod !== 'direction' || directionPoints.length === 0) return [];
+    const verts = getAllExistingVertices(canvasData.buildings, canvasData.obstacles);
+    verts.push(...directionPoints);
+    return Array.from(new Set(verts.map(v => v.x)));
+  }, [showDirectionGuide, buildingInputMethod, directionPoints, canvasData.buildings, canvasData.obstacles]);
+
+  const guideYs = useMemo(() => {
+    if (!showDirectionGuide || buildingInputMethod !== 'direction' || directionPoints.length === 0) return [];
+    const verts = getAllExistingVertices(canvasData.buildings, canvasData.obstacles);
+    verts.push(...directionPoints);
+    return Array.from(new Set(verts.map(v => v.y)));
+  }, [showDirectionGuide, buildingInputMethod, directionPoints, canvasData.buildings, canvasData.obstacles]);
   const lastPanPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // グリッド描画（キャンバス全体に広がる無限グリッド）
@@ -739,16 +755,16 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
               const first = screenPts[0];
               return (
                 <>
-                  {/* ガイド線 */}
-                  {showDirectionGuide && directionPoints.map((pt, i) => {
-                    const sx = pt.x * gridPx + panX;
-                    const sy = pt.y * gridPx + panY;
-                    return (
-                      <React.Fragment key={`guide-${i}`}>
-                        <Line points={[sx, 0, sx, height]} stroke="#F97316" strokeWidth={1} opacity={0.5} dash={[6, 6]} listening={false} />
-                        <Line points={[0, sy, width, sy]} stroke="#F97316" strokeWidth={1} opacity={0.5} dash={[6, 6]} listening={false} />
-                      </React.Fragment>
-                    );
+                  {/* ガイド線（全頂点のユニークX/Yから） */}
+                  {guideXs.map((gx, i) => {
+                    const sx = gx * gridPx + panX;
+                    if (sx < -10 || sx > width + 10) return null;
+                    return <Line key={`gx-${i}`} points={[sx, 0, sx, height]} stroke="#F97316" strokeWidth={1} opacity={0.5} dash={[6, 6]} listening={false} />;
+                  })}
+                  {guideYs.map((gy, i) => {
+                    const sy = gy * gridPx + panY;
+                    if (sy < -10 || sy > height + 10) return null;
+                    return <Line key={`gy-${i}`} points={[0, sy, width, sy]} stroke="#F97316" strokeWidth={1} opacity={0.5} dash={[6, 6]} listening={false} />;
                   })}
                   <Line points={flatPts} stroke="#3B82F6" strokeWidth={5} opacity={1} />
                   {screenPts.length >= 3 && (
@@ -838,20 +854,18 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
                 const minGY = Math.floor(-panY / gridPx) - 1;
                 const maxGY = Math.ceil((height - panY) / gridPx) + 1;
 
-                // directionPoints の x 座標と y 座標のユニーク集合
-                const xs = Array.from(new Set(directionPoints.map(p => p.x)));
-                const ys = Array.from(new Set(directionPoints.map(p => p.y)));
-
                 const markers: { x: number; y: number }[] = [];
-                // 全 x × 全 y の組み合わせ（既存頂点も含む、現在位置のみ除外）
-                for (const x of xs) {
+                // guideXs × guideYs の全組み合わせ（現在位置のみ除外）
+                for (const x of guideXs) {
                   if (x < minGX || x > maxGX) continue;
-                  for (const y of ys) {
+                  for (const y of guideYs) {
                     if (y < minGY || y > maxGY) continue;
                     if (x === cx && y === cy) continue;
                     markers.push({ x, y });
                   }
                 }
+                // 密集対策: 300個超えたら非表示
+                if (markers.length > 300) return null;
 
                 const handleMarkerTap = (target: { x: number; y: number }) => {
                   const dx = target.x - cx;
