@@ -579,9 +579,7 @@ export default function EditorPage() {
                   setPendingObstacleType(null);
                 } else {
                   addBuilding({ id: newId, type: 'polygon', points: pts, fill: '#3d3d3a', floor: pendingBuildingFloor });
-                  if (pendingBuildingFloor === 1) {
-                    useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
-                  }
+                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
                   setPendingBuildingFloor(1);
                 }
                 clearVertexPoints();
@@ -636,9 +634,7 @@ export default function EditorPage() {
                   setPendingObstacleType(null);
                 } else {
                   addBuilding({ id: newId, type: 'polygon', points: pts, fill: '#3d3d3a', floor: pendingBuildingFloor });
-                  if (pendingBuildingFloor === 1) {
-                    useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
-                  }
+                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
                   setPendingBuildingFloor(1);
                 }
                 setLastCompletedDirectionSession({ points: pts });

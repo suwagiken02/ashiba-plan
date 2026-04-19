@@ -521,7 +521,7 @@ export function useCanvasInteraction() {
             } else {
               const flr = s.pendingBuildingFloor;
               s.addBuilding({ id: newId, type: 'polygon', points: vertPts, fill: '#3d3d3a', floor: flr });
-              if (flr === 1) s.setAutoOpenRoofForBuildingId(newId);
+              s.setAutoOpenRoofForBuildingId(newId);
               s.setPendingBuildingFloor(1);
             }
             s.clearVertexPoints();
