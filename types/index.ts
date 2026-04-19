@@ -58,6 +58,7 @@ export type Obstacle = {
   y: number;
   width: number;
   height: number;
+  points?: Point[];
   label?: string;
   memo?: string;
 };

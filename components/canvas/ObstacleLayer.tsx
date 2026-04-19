@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Layer, Rect, Circle, Text } from 'react-konva';
+import { Layer, Rect, Circle, Text, Line } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
 import { ObstacleType } from '@/types';
@@ -41,6 +41,41 @@ export default function ObstacleLayer() {
         const screenY = obs.y * gridPx + panY;
         const w = obs.width * gridPx;
         const h = obs.height * gridPx;
+
+        // ポリゴン障害物
+        if (obs.points && obs.points.length >= 3) {
+          const flatPts = obs.points.flatMap(p => [p.x * gridPx + panX, p.y * gridPx + panY]);
+          return (
+            <React.Fragment key={obs.id}>
+              <Line
+                points={flatPts}
+                closed
+                fill={color}
+                opacity={0.7}
+                stroke={isSelected ? '#378ADD' : '#999'}
+                strokeWidth={isSelected ? 2 : 1}
+                listening={mode === 'select' || mode === 'erase'}
+                id={obs.id}
+              />
+              {label && (() => {
+                const cx = obs.points!.reduce((s, p) => s + p.x, 0) / obs.points!.length;
+                const cy = obs.points!.reduce((s, p) => s + p.y, 0) / obs.points!.length;
+                return (
+                  <Text
+                    x={cx * gridPx + panX}
+                    y={cy * gridPx + panY}
+                    text={label}
+                    fontSize={Math.max(8, 9 * zoom)}
+                    fill="#333"
+                    offsetX={label.length * Math.max(8, 9 * zoom) * 0.3}
+                    offsetY={Math.max(8, 9 * zoom) / 2}
+                    listening={false}
+                  />
+                );
+              })()}
+            </React.Fragment>
+          );
+        }
 
         if (obs.type === 'custom_circle') {
           const r = Math.max(w, h) / 2;

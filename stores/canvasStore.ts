@@ -95,6 +95,10 @@ type CanvasStore = {
   setAutoOpenRoofForBuildingId: (id: string | null) => void;
   pendingBuildingFloor: 1 | 2;
   setPendingBuildingFloor: (f: 1 | 2) => void;
+  pendingTargetType: 'building' | 'obstacle';
+  setPendingTargetType: (t: 'building' | 'obstacle') => void;
+  pendingObstacleType: import('@/types').ObstacleType | null;
+  setPendingObstacleType: (t: import('@/types').ObstacleType | null) => void;
   showDirectionInputModal: boolean;
   setShowDirectionInputModal: (show: boolean) => void;
   pendingDirection: 'up' | 'down' | 'left' | 'right' | null;
@@ -303,6 +307,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setAutoOpenRoofForBuildingId: (id) => set({ autoOpenRoofForBuildingId: id }),
   pendingBuildingFloor: 1,
   setPendingBuildingFloor: (f) => set({ pendingBuildingFloor: f }),
+  pendingTargetType: 'building',
+  setPendingTargetType: (t) => set({ pendingTargetType: t }),
+  pendingObstacleType: null,
+  setPendingObstacleType: (t) => set({ pendingObstacleType: t }),
   showDirectionInputModal: false,
   setShowDirectionInputModal: (show) => set({ showDirectionInputModal: show }),
   pendingDirection: null,
@@ -636,7 +644,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
           a.id === id ? { ...a, x: a.x + dx, y: a.y + dy } : a
         ),
         obstacles: canvasData.obstacles.map((o) =>
-          o.id === id ? { ...o, x: o.x + dx, y: o.y + dy } : o
+          o.id === id
+            ? { ...o, x: o.x + dx, y: o.y + dy, ...(o.points ? { points: o.points.map(p => ({ x: p.x + dx, y: p.y + dy })) } : {}) }
+            : o
         ),
         memos: canvasData.memos.map((m) =>
           m.id === id ? { ...m, x: m.x + dx, y: m.y + dy } : m

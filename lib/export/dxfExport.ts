@@ -69,14 +69,17 @@ export const exportToDxf = (canvasData: CanvasData, siteName: string): void => {
 
   // 障害物
   canvasData.obstacles.forEach((o) => {
-    const x = gridToMm(o.x);
-    const y = gridToMm(o.y);
-    const w = gridToMm(o.width);
-    const h = gridToMm(o.height);
-    if (o.type === 'custom_circle') {
+    if (o.points && o.points.length >= 3) {
+      dxf += `0\nLWPOLYLINE\n8\nOBSTACLE\n90\n${o.points.length}\n70\n1\n`;
+      o.points.forEach(p => { dxf += `10\n${gridToMm(p.x)}\n20\n${gridToMm(p.y)}\n`; });
+    } else if (o.type === 'custom_circle') {
+      const x = gridToMm(o.x), y = gridToMm(o.y);
+      const w = gridToMm(o.width), h = gridToMm(o.height);
       const r = Math.max(w, h) / 2;
       dxf += `0\nCIRCLE\n8\nOBSTACLE\n10\n${x + r}\n20\n${y + r}\n40\n${r}\n`;
     } else {
+      const x = gridToMm(o.x), y = gridToMm(o.y);
+      const w = gridToMm(o.width), h = gridToMm(o.height);
       dxf += '0\nLWPOLYLINE\n8\nOBSTACLE\n90\n4\n70\n1\n';
       dxf += `10\n${x}\n20\n${y}\n`;
       dxf += `10\n${x + w}\n20\n${y}\n`;

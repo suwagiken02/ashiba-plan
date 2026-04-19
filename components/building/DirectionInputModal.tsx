@@ -50,18 +50,25 @@ export default function DirectionInputModal({ onClose }: Props) {
     const dist = Math.hypot(next.x - first.x, next.y - first.y);
     if (directionPoints.length >= 3 && dist < 2) {
       const newId = uuidv4();
-      const flr = useCanvasStore.getState().pendingBuildingFloor;
-      useCanvasStore.getState().addBuilding({
-        id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a', floor: flr,
-      });
-      useCanvasStore.getState().setLastCompletedDirectionSession({ points: [...directionPoints] });
-      if (flr === 1) {
-        useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+      const s = useCanvasStore.getState();
+      const pts = [...directionPoints];
+      if (s.pendingTargetType === 'obstacle' && s.pendingObstacleType) {
+        const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+        const minX = Math.min(...xs), minY = Math.min(...ys);
+        const maxX = Math.max(...xs), maxY = Math.max(...ys);
+        s.addObstacle({ id: newId, type: s.pendingObstacleType, x: minX, y: minY, width: maxX - minX, height: maxY - minY, points: pts });
+        s.setPendingTargetType('building');
+        s.setPendingObstacleType(null);
+      } else {
+        const flr = s.pendingBuildingFloor;
+        s.addBuilding({ id: newId, type: 'polygon', points: pts, fill: '#3d3d3a', floor: flr });
+        if (flr === 1) s.setAutoOpenRoofForBuildingId(newId);
+        s.setPendingBuildingFloor(1);
       }
-      useCanvasStore.getState().setPendingBuildingFloor(1);
-      useCanvasStore.getState().clearDirectionPoints();
-      useCanvasStore.getState().setBuildingInputMethod('template');
-      useCanvasStore.getState().setMode('select');
+      s.setLastCompletedDirectionSession({ points: pts });
+      s.clearDirectionPoints();
+      s.setBuildingInputMethod('template');
+      s.setMode('select');
       cleanup();
       return;
     }

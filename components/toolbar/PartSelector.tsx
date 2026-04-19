@@ -627,7 +627,8 @@ export default function PartSelector() {
         )}
 
         {mode === 'obstacle' && (
-          <div className="px-3 py-2">
+          <div className="px-3 py-2 space-y-1.5">
+            {/* 種類選択 */}
             <div className="flex gap-1.5 overflow-x-auto">
               {OBSTACLE_TYPES.map((o) => (
                 <button key={o.id} onClick={() => selectObstacle(o.id)}
@@ -636,6 +637,67 @@ export default function PartSelector() {
                 >{o.label}</button>
               ))}
             </div>
+            {selectedObstacleType && (
+              <>
+                {/* サイズ入力 + 角度 */}
+                <div className="flex items-end gap-1.5">
+                  <div className="flex-1">
+                    <label className="text-[9px] text-dimension">幅</label>
+                    <MmInput value={obsWidthMm} onChange={setObsWidthMm} min={100} />
+                  </div>
+                  <span className="text-dimension text-[10px] pb-1">×</span>
+                  <div className="flex-1">
+                    <label className="text-[9px] text-dimension">{selectedObstacleType === 'custom_circle' ? '半径' : '奥行'}</label>
+                    <MmInput value={obsHeightMm} onChange={setObsHeightMm} min={100} />
+                  </div>
+                  {selectedObstacleType !== 'custom_circle' && (
+                    <div className="flex gap-0.5 shrink-0">
+                      {[0, 90, 180, 270].map((deg) => (
+                        <button key={deg} onClick={() => setObsRotation(deg)}
+                          className={`w-7 h-7 rounded text-[10px] border ${
+                            obsRotation === deg ? 'border-accent bg-accent/15 text-accent' : 'border-dark-border text-dimension'
+                          }`}
+                        >{deg}°</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {/* ドラッグして配置 + 壁方向入力 */}
+                <div className="flex gap-1.5">
+                  <div
+                    onPointerDown={handleObstacleDown}
+                    className="flex-1 relative flex items-center justify-center h-11 rounded-lg border-2 border-dashed border-dark-border cursor-grab active:cursor-grabbing select-none touch-none"
+                    style={{ backgroundColor: OBSTACLE_TYPES.find(o => o.id === selectedObstacleType)?.color + '30' }}
+                  >
+                    <div
+                      className="rounded"
+                      style={{
+                        width: selectedObstacleType === 'custom_circle' ? 20 : Math.min(36, Math.max(14, obsWidthMm / 40)),
+                        height: selectedObstacleType === 'custom_circle' ? 20 : Math.min(24, Math.max(10, obsHeightMm / 40)),
+                        borderRadius: selectedObstacleType === 'custom_circle' ? '50%' : 2,
+                        backgroundColor: OBSTACLE_TYPES.find(o => o.id === selectedObstacleType)?.color,
+                        transform: `rotate(${obsRotation}deg)`,
+                      }}
+                    />
+                    <span className="absolute bottom-0.5 text-[8px] text-dimension">ドラッグ配置</span>
+                  </div>
+                  {selectedObstacleType !== 'custom_circle' && (
+                    <button
+                      onClick={() => {
+                        useCanvasStore.getState().setPendingTargetType('obstacle');
+                        useCanvasStore.getState().setPendingObstacleType(selectedObstacleType);
+                        useCanvasStore.getState().setBuildingInputMethod('direction');
+                        useCanvasStore.getState().setMode('building');
+                        useCanvasStore.getState().clearDirectionPoints();
+                      }}
+                      className="shrink-0 px-2 h-11 rounded-lg text-[10px] font-bold border border-dark-border text-dimension hover:text-accent hover:border-accent transition-colors"
+                    >
+                      🏗 壁方向
+                    </button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -796,6 +858,22 @@ export default function PartSelector() {
                       />
                       <span className="absolute bottom-1 text-[10px] text-dimension">ドラッグして配置</span>
                     </div>
+                    {selectedObstacleType !== 'custom_circle' && (
+                      <div className="pt-1 border-t border-dark-border">
+                        <button
+                          onClick={() => {
+                            useCanvasStore.getState().setPendingTargetType('obstacle');
+                            useCanvasStore.getState().setPendingObstacleType(selectedObstacleType);
+                            useCanvasStore.getState().setBuildingInputMethod('direction');
+                            useCanvasStore.getState().setMode('building');
+                            useCanvasStore.getState().clearDirectionPoints();
+                          }}
+                          className="w-full py-1.5 rounded text-[11px] font-bold border border-dark-border text-dimension hover:text-accent hover:border-accent transition-colors"
+                        >
+                          🏗 壁方向入力
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

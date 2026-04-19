@@ -94,6 +94,11 @@ export default function EditorPage() {
     setAutoOpenRoofForBuildingId,
     pendingBuildingFloor,
     setPendingBuildingFloor,
+    pendingTargetType,
+    setPendingTargetType,
+    pendingObstacleType,
+    setPendingObstacleType,
+    addObstacle,
     showDirectionGuide,
     toggleDirectionGuide,
     showCornerGuide,
@@ -542,7 +547,7 @@ export default function EditorPage() {
       </div>
 
       {/* 部材選択パネル */}
-      {showPartSelector && <PartSelector />}
+      {(showPartSelector || mode === 'obstacle') && <PartSelector />}
 
       {/* モードツールバー */}
       <ModeToolbar />
@@ -564,12 +569,22 @@ export default function EditorPage() {
             <button
               onClick={() => {
                 const newId = uuidv4();
-                addBuilding({ id: newId, type: 'polygon', points: [...vertexPoints], fill: '#3d3d3a', floor: pendingBuildingFloor });
-                if (pendingBuildingFloor === 1) {
-                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                const pts = [...vertexPoints];
+                if (pendingTargetType === 'obstacle' && pendingObstacleType) {
+                  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+                  const minX = Math.min(...xs), minY = Math.min(...ys);
+                  const maxX = Math.max(...xs), maxY = Math.max(...ys);
+                  addObstacle({ id: newId, type: pendingObstacleType, x: minX, y: minY, width: maxX - minX, height: maxY - minY, points: pts });
+                  setPendingTargetType('building');
+                  setPendingObstacleType(null);
+                } else {
+                  addBuilding({ id: newId, type: 'polygon', points: pts, fill: '#3d3d3a', floor: pendingBuildingFloor });
+                  if (pendingBuildingFloor === 1) {
+                    useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                  }
+                  setPendingBuildingFloor(1);
                 }
                 clearVertexPoints();
-                setPendingBuildingFloor(1);
                 setMode('select');
               }}
               className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
@@ -611,13 +626,23 @@ export default function EditorPage() {
             <button
               onClick={() => {
                 const newId = uuidv4();
-                addBuilding({ id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a', floor: pendingBuildingFloor });
-                setLastCompletedDirectionSession({ points: [...directionPoints] });
-                if (pendingBuildingFloor === 1) {
-                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                const pts = [...directionPoints];
+                if (pendingTargetType === 'obstacle' && pendingObstacleType) {
+                  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+                  const minX = Math.min(...xs), minY = Math.min(...ys);
+                  const maxX = Math.max(...xs), maxY = Math.max(...ys);
+                  addObstacle({ id: newId, type: pendingObstacleType, x: minX, y: minY, width: maxX - minX, height: maxY - minY, points: pts });
+                  setPendingTargetType('building');
+                  setPendingObstacleType(null);
+                } else {
+                  addBuilding({ id: newId, type: 'polygon', points: pts, fill: '#3d3d3a', floor: pendingBuildingFloor });
+                  if (pendingBuildingFloor === 1) {
+                    useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
+                  }
+                  setPendingBuildingFloor(1);
                 }
+                setLastCompletedDirectionSession({ points: pts });
                 clearDirectionPoints();
-                setPendingBuildingFloor(1);
                 setBuildingInputMethod('template');
                 setMode('select');
               }}
