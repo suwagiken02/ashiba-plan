@@ -1,4 +1,4 @@
-import { Point, Handrail, HandrailLengthMm, Anti } from '@/types';
+import { Point, Handrail, HandrailLengthMm, Anti, BuildingShape, Obstacle } from '@/types';
 import { mmToGrid, INITIAL_GRID_PX } from './gridUtils';
 
 /** 最近傍の手摺端点へのスナップ */
@@ -214,6 +214,84 @@ export const snapToGridIntersection = (
   // どちらにもスナップしない → 元の座標（グリッド1単位に丸め）
   return { x: Math.round(worldX), y: Math.round(worldY) };
 };
+
+/** 全建物・障害物の頂点を取得 */
+export function getAllExistingVertices(buildings: BuildingShape[], obstacles: Obstacle[]): Point[] {
+  const vertices: Point[] = [];
+  for (const b of buildings) {
+    for (const p of b.points) vertices.push(p);
+  }
+  for (const o of obstacles) {
+    if (o.points) {
+      for (const p of o.points) vertices.push(p);
+    } else if (o.type !== 'custom_circle') {
+      vertices.push(
+        { x: o.x, y: o.y },
+        { x: o.x + o.width, y: o.y },
+        { x: o.x + o.width, y: o.y + o.height },
+        { x: o.x, y: o.y + o.height },
+      );
+    }
+  }
+  return vertices;
+}
+
+/** 全建物・障害物の辺を取得 */
+export function getAllExistingEdges(buildings: BuildingShape[], obstacles: Obstacle[]): { p1: Point; p2: Point }[] {
+  const edges: { p1: Point; p2: Point }[] = [];
+  for (const b of buildings) {
+    for (let i = 0; i < b.points.length; i++) {
+      edges.push({ p1: b.points[i], p2: b.points[(i + 1) % b.points.length] });
+    }
+  }
+  for (const o of obstacles) {
+    if (o.points) {
+      for (let i = 0; i < o.points.length; i++) {
+        edges.push({ p1: o.points[i], p2: o.points[(i + 1) % o.points.length] });
+      }
+    } else if (o.type !== 'custom_circle') {
+      const p1 = { x: o.x, y: o.y }, p2 = { x: o.x + o.width, y: o.y };
+      const p3 = { x: o.x + o.width, y: o.y + o.height }, p4 = { x: o.x, y: o.y + o.height };
+      edges.push({ p1, p2 }, { p1: p2, p2: p3 }, { p1: p3, p2: p4 }, { p1: p4, p2: p1 });
+    }
+  }
+  return edges;
+}
+
+/** 頂点への強スナップ */
+export function snapToVertex(
+  worldX: number, worldY: number, vertices: Point[], zoom: number, snapRangePx: number = 30
+): Point | null {
+  const gridPx = INITIAL_GRID_PX * zoom;
+  const range = snapRangePx / gridPx;
+  let closest: Point | null = null;
+  let minDist = Infinity;
+  for (const v of vertices) {
+    const d = Math.hypot(v.x - worldX, v.y - worldY);
+    if (d < range && d < minDist) { minDist = d; closest = v; }
+  }
+  return closest ? { x: closest.x, y: closest.y } : null;
+}
+
+/** 辺への弱スナップ */
+export function snapToEdge(
+  worldX: number, worldY: number, edges: { p1: Point; p2: Point }[], zoom: number, snapRangePx: number = 10
+): Point | null {
+  const gridPx = INITIAL_GRID_PX * zoom;
+  const range = snapRangePx / gridPx;
+  let closest: Point | null = null;
+  let minDist = Infinity;
+  for (const e of edges) {
+    const dx = e.p2.x - e.p1.x, dy = e.p2.y - e.p1.y;
+    const len2 = dx * dx + dy * dy;
+    if (len2 < 0.01) continue;
+    const t = Math.max(0, Math.min(1, ((worldX - e.p1.x) * dx + (worldY - e.p1.y) * dy) / len2));
+    const px = e.p1.x + t * dx, py = e.p1.y + t * dy;
+    const d = Math.hypot(px - worldX, py - worldY);
+    if (d < range && d < minDist) { minDist = d; closest = { x: Math.round(px), y: Math.round(py) }; }
+  }
+  return closest;
+}
 
 /** アンチの4隅を取得 */
 export const getAntiCorners = (a: Anti): Point[] => {

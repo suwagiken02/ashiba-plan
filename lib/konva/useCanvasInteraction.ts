@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from './gridUtils';
-import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGridIntersection } from './snapUtils';
+import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGridIntersection, getAllExistingVertices, getAllExistingEdges, snapToVertex, snapToEdge } from './snapUtils';
 import { getHandrailColor } from './handrailColors';
 import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
@@ -69,6 +69,21 @@ function snapMeasurePoint(rawPos: Point, s: ReturnType<typeof useCanvasStore.get
           edges.push({ p1: roofPts[i], p2: roofPts[(i + 1) % roofPts.length] });
         }
       }
+    }
+  }
+
+  // 障害物
+  for (const o of s.canvasData.obstacles) {
+    if (o.points) {
+      for (const p of o.points) vertices.push(p);
+      for (let i = 0; i < o.points.length; i++) {
+        edges.push({ p1: o.points[i], p2: o.points[(i + 1) % o.points.length] });
+      }
+    } else if (o.type !== 'custom_circle') {
+      const p1 = { x: o.x, y: o.y }, p2 = { x: o.x + o.width, y: o.y };
+      const p3 = { x: o.x + o.width, y: o.y + o.height }, p4 = { x: o.x, y: o.y + o.height };
+      vertices.push(p1, p2, p3, p4);
+      edges.push({ p1, p2 }, { p1: p2, p2: p3 }, { p1: p3, p2: p4 }, { p1: p4, p2: p1 });
     }
   }
 
@@ -465,7 +480,18 @@ export function useCanvasInteraction() {
       // building + direction モード: 起点をタップしてモーダル表示
       if (s.mode === 'building' && s.buildingInputMethod === 'direction') {
         if (s.directionPoints.length === 0) {
-          const snapped = snapToGridIntersection(rawPos.x, rawPos.y, s.zoom);
+          // 強スナップ: 既存建物・障害物の頂点
+          const existVerts = getAllExistingVertices(s.canvasData.buildings, s.canvasData.obstacles);
+          let snapped = snapToVertex(rawPos.x, rawPos.y, existVerts, s.zoom, 30);
+          // 次: グリッド交点マグネット
+          if (!snapped) snapped = snapToGridIntersection(rawPos.x, rawPos.y, s.zoom);
+          // 次: 辺への弱スナップ
+          if (!snapped) {
+            const existEdges = getAllExistingEdges(s.canvasData.buildings, s.canvasData.obstacles);
+            snapped = snapToEdge(rawPos.x, rawPos.y, existEdges, s.zoom, 10);
+          }
+          // フォールバック
+          if (!snapped) snapped = { x: Math.round(rawPos.x), y: Math.round(rawPos.y) };
           s.addDirectionPoint(snapped);
           s.setShowDirectionInputModal(true);
         }
