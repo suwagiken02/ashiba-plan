@@ -92,6 +92,44 @@ export default function RoofSettingsModal({ buildingId, buildingPoints, initialR
         </div>
 
         <div className="p-4 space-y-5">
+          {/* 建物プレビュー */}
+          {buildingPoints && buildingPoints.length >= 3 && (() => {
+            const xs = buildingPoints.map(p => p.x);
+            const ys = buildingPoints.map(p => p.y);
+            const minX = Math.min(...xs), maxX = Math.max(...xs);
+            const minY = Math.min(...ys), maxY = Math.max(...ys);
+            const w = maxX - minX || 1;
+            const h = maxY - minY || 1;
+            const pad = Math.max(w, h) * 0.15;
+            const vb = `${minX - pad} ${minY - pad} ${w + pad * 2} ${h + pad * 2}`;
+            const polyPts = buildingPoints.map(p => `${p.x},${p.y}`).join(' ');
+
+            // edges と同じ順序でラベルを計算（CW順序）
+            const edgeLabels = edges || [];
+
+            return (
+              <div className="mb-1">
+                <svg viewBox={vb} className="w-full h-40 bg-dark-bg rounded-lg border border-dark-border">
+                  <polygon points={polyPts} fill="rgba(59,130,246,0.15)" stroke="#3B82F6" strokeWidth={Math.max(w, h) * 0.01} />
+                  {edgeLabels.map((edge, i) => {
+                    const mx = (edge.p1.x + edge.p2.x) / 2;
+                    const my = (edge.p1.y + edge.p2.y) / 2;
+                    const offset = Math.max(w, h) * 0.06;
+                    const lx = mx + edge.nx * offset;
+                    const ly = my + edge.ny * offset;
+                    const fontSize = Math.max(w, h) * 0.06;
+                    return (
+                      <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="central"
+                        fill="#3B82F6" fontSize={fontSize} fontWeight="bold">
+                        {edge.label}
+                      </text>
+                    );
+                  })}
+                </svg>
+              </div>
+            );
+          })()}
+
           {/* 屋根形状 */}
           <div>
             <label className="block text-sm text-dimension mb-2">屋根形状</label>

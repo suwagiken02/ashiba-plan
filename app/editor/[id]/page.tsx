@@ -90,6 +90,8 @@ export default function EditorPage() {
     lastCompletedDirectionSession,
     setLastCompletedDirectionSession,
     setDirectionPoints,
+    autoOpenRoofForBuildingId,
+    setAutoOpenRoofForBuildingId,
     showDirectionGuide,
     toggleDirectionGuide,
     showCornerGuide,
@@ -267,6 +269,7 @@ export default function EditorPage() {
               // ケースC: 建物完成直後 → 建物を消して壁方向入力モードを再開
               if (s.lastCompletedDirectionSession) {
                 const session = s.lastCompletedDirectionSession;
+                s.setAutoOpenRoofForBuildingId(null);
                 s.undo();
                 s.setDirectionPoints(session.points);
                 s.setBuildingInputMethod('direction');
@@ -600,8 +603,10 @@ export default function EditorPage() {
           {directionPoints.length >= 3 && (
             <button
               onClick={() => {
-                addBuilding({ id: uuidv4(), type: 'polygon', points: [...directionPoints], fill: '#3d3d3a' });
+                const newId = uuidv4();
+                addBuilding({ id: newId, type: 'polygon', points: [...directionPoints], fill: '#3d3d3a' });
                 setLastCompletedDirectionSession({ points: [...directionPoints] });
+                useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
                 clearDirectionPoints();
                 setBuildingInputMethod('template');
                 setMode('select');
@@ -672,6 +677,17 @@ export default function EditorPage() {
             buildingPoints={bld.points}
             initialRoof={bld.roof}
             onClose={() => setShowRoofModal(false)}
+          />
+        ) : null;
+      })()}
+      {autoOpenRoofForBuildingId && (() => {
+        const bld = canvasData.buildings.find(b => b.id === autoOpenRoofForBuildingId);
+        return bld ? (
+          <RoofSettingsModal
+            buildingId={bld.id}
+            buildingPoints={bld.points}
+            initialRoof={bld.roof}
+            onClose={() => setAutoOpenRoofForBuildingId(null)}
           />
         ) : null;
       })()}
