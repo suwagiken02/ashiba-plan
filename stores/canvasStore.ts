@@ -75,12 +75,6 @@ type CanvasStore = {
   obstaclePreview: { x: number; y: number; widthGrid: number; heightGrid: number; type: import('@/types').ObstacleType } | null;
   setObstaclePreview: (p: { x: number; y: number; widthGrid: number; heightGrid: number; type: import('@/types').ObstacleType } | null) => void;
 
-  // 頂点タップモード
-  vertexPoints: { x: number; y: number }[];
-  addVertexPoint: (p: { x: number; y: number }) => void;
-  removeLastVertexPoint: () => void;
-  clearVertexPoints: () => void;
-
   // 壁方向入力モード
   directionPoints: { x: number; y: number }[];
   directionPointsHistory: { x: number; y: number }[][];
@@ -258,7 +252,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setCanvasData: (data) => set({ canvasData: data, isDirty: false }),
 
   mode: 'select',
-  setMode: (mode) => set({ mode, selectedIds: [], vertexPoints: [] }),
+  setMode: (mode) => set({ mode, selectedIds: [] }),
   buildingInputMethod: 'template',
   setBuildingInputMethod: (m) => set({ buildingInputMethod: m }),
 
@@ -278,13 +272,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   obstaclePreview: null,
   setObstaclePreview: (p) => set({ obstaclePreview: p }),
-
-  vertexPoints: [],
-  addVertexPoint: (p) => set((state) => ({ vertexPoints: [...state.vertexPoints, p] })),
-  removeLastVertexPoint: () => set((state) => ({
-    vertexPoints: state.vertexPoints.slice(0, -1)
-  })),
-  clearVertexPoints: () => set({ vertexPoints: [] }),
 
   directionPoints: [],
   directionPointsHistory: [],

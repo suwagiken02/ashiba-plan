@@ -31,7 +31,7 @@ type Props = {
 
 export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, vertexPoints, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -293,12 +293,7 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
       if (e.ctrlKey && e.key === 'z' && !e.shiftKey) {
         e.preventDefault();
         const s = useCanvasStore.getState();
-        // 頂点タップ中はundoではなく最後の頂点を削除
-        if (s.mode === 'building' && s.buildingInputMethod === 'vertex' && s.vertexPoints.length > 0) {
-          s.removeLastVertexPoint();
-        } else {
-          s.undo();
-        }
+        s.undo();
       }
       if (e.ctrlKey && e.key === 'z' && e.shiftKey) {
         e.preventDefault();
@@ -310,15 +305,6 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
         if (s.selectedIds.length > 0) {
           e.preventDefault();
           s.removeElements(s.selectedIds);
-        }
-      }
-      // Escape: 頂点タップモードをキャンセル
-      if (e.key === 'Escape') {
-        const s = useCanvasStore.getState();
-        if (s.mode === 'building' && s.buildingInputMethod === 'vertex') {
-          e.preventDefault();
-          s.clearVertexPoints();
-          s.setMode('select');
         }
       }
     };
@@ -698,48 +684,6 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
           </Layer>
         );
       })()}
-
-      {/* 頂点タップ建物入力プレビュー */}
-      {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0 && (
-        <Layer listening={false}>
-          {(() => {
-            const gridPx = INITIAL_GRID_PX * zoom;
-            const screenPts = vertexPoints.map(p => ({
-              x: p.x * gridPx + panX,
-              y: p.y * gridPx + panY,
-            }));
-            const flatPts = screenPts.flatMap(p => [p.x, p.y]);
-            const first = screenPts[0];
-            return (
-              <>
-                {/* 辺の線 */}
-                <Line points={flatPts} stroke="#378ADD" strokeWidth={2} opacity={0.6} />
-                {/* 始点に戻る破線（3点以上） */}
-                {screenPts.length >= 3 && (
-                  <Line
-                    points={[screenPts[screenPts.length - 1].x, screenPts[screenPts.length - 1].y, first.x, first.y]}
-                    stroke="#378ADD" strokeWidth={1.5} opacity={0.3} dash={[6, 4]}
-                  />
-                )}
-                {/* 各頂点のドット */}
-                {screenPts.map((p, i) => (
-                  <Circle key={i} x={p.x} y={p.y} radius={i === 0 ? 8 : 5}
-                    fill={i === 0 ? '#EF4444' : '#378ADD'}
-                    stroke={i === 0 ? '#fff' : undefined}
-                    strokeWidth={i === 0 ? 2 : 0}
-                  />
-                ))}
-                {/* 始点ラベル */}
-                <Text x={first.x + 10} y={first.y - 10}
-                  text="始点" fontSize={12} fill="#EF4444" />
-                {/* 頂点数表示 */}
-                <Text x={screenPts[screenPts.length - 1].x + 10} y={screenPts[screenPts.length - 1].y - 10}
-                  text={`${screenPts.length}点`} fontSize={11} fill="#378ADD" />
-              </>
-            );
-          })()}
-        </Layer>
-      )}
 
       {/* 壁方向入力プレビュー */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length > 0 && (

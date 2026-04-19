@@ -5,7 +5,7 @@ export type Point = { x: number; y: number };
 export type ModeType = 'building' | 'handrail' | 'post' | 'anti' | 'select' | 'erase' | 'memo' | 'obstacle';
 
 // === 建物入力方式 ===
-export type BuildingInputMethod = 'template' | 'freedraw' | 'vertex' | 'direction';
+export type BuildingInputMethod = 'template' | 'direction';
 
 // === 屋根タイプ ===
 export type RoofType = 'kirizuma' | 'yosemune' | 'katanagare' | 'none';

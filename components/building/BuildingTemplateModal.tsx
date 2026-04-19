@@ -356,16 +356,11 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
         </div>
 
         <div className="flex border-b border-dark-border">
-          {(['template', 'vertex', 'direction'] as BuildingInputMethod[]).map(m => (
+          {(['template', 'direction'] as BuildingInputMethod[]).map(m => (
             <button key={m}
               onClick={() => {
                 setBuildingInputMethod(m);
-                if (m === 'vertex') {
-                  useCanvasStore.getState().setPendingBuildingFloor(floor || 1);
-                  useCanvasStore.getState().setMode('building');
-                  useCanvasStore.getState().clearVertexPoints();
-                  onClose();
-                } else if (m === 'direction') {
+                if (m === 'direction') {
                   useCanvasStore.getState().setPendingBuildingFloor(floor || 1);
                   useCanvasStore.getState().setMode('building');
                   useCanvasStore.getState().clearDirectionPoints();
@@ -373,7 +368,7 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
                 }
               }}
               className={`flex-1 py-3 text-sm ${buildingInputMethod === m ? 'text-accent border-b-2 border-accent' : 'text-dimension'}`}
-            >{m === 'template' ? 'テンプレート' : m === 'vertex' ? '頂点タップ' : '壁方向入力'}</button>
+            >{m === 'template' ? 'テンプレート' : '壁方向入力'}</button>
           ))}
         </div>
 

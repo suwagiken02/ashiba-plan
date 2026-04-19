@@ -499,43 +499,6 @@ export function useCanvasInteraction() {
         return;
       }
 
-      // building + vertex モード: 頂点をタップで追加
-      if (s.mode === 'building' && s.buildingInputMethod === 'vertex') {
-        const CLOSE_TOL = 10; // 始点に戻る判定の許容差（グリッド）
-        const pts = s.vertexPoints;
-
-        if (pts.length >= 3) {
-          const first = pts[0];
-          const dist = Math.hypot(rawPos.x - first.x, rawPos.y - first.y);
-          if (dist < CLOSE_TOL) {
-            // 始点に近い → ポリゴン確定
-            const newId = uuidv4();
-            const vertPts = [...pts];
-            if (s.pendingTargetType === 'obstacle' && s.pendingObstacleType) {
-              const xs = vertPts.map(p => p.x), ys = vertPts.map(p => p.y);
-              const minX = Math.min(...xs), minY = Math.min(...ys);
-              const maxX = Math.max(...xs), maxY = Math.max(...ys);
-              s.addObstacle({ id: newId, type: s.pendingObstacleType, x: minX, y: minY, width: maxX - minX, height: maxY - minY, points: vertPts });
-              s.setPendingTargetType('building');
-              s.setPendingObstacleType(null);
-            } else {
-              const flr = s.pendingBuildingFloor;
-              s.addBuilding({ id: newId, type: 'polygon', points: vertPts, fill: '#3d3d3a', floor: flr });
-              s.setAutoOpenRoofForBuildingId(newId);
-              s.setPendingBuildingFloor(1);
-            }
-            s.clearVertexPoints();
-            s.setMode('select');
-            dragStart.current = null;
-            return;
-          }
-        }
-
-        // 頂点を追加
-        s.addVertexPoint({ x: Math.round(rawPos.x), y: Math.round(rawPos.y) });
-        dragStart.current = null;
-        return;
-      }
 
       // erase モード
       if (s.mode === 'erase') {

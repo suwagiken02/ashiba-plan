@@ -115,9 +115,6 @@ export default function EditorPage() {
     setMeasureCursor,
     setMeasureResultMm,
     selectedIds,
-    vertexPoints,
-    clearVertexPoints,
-    removeLastVertexPoint,
     addBuilding,
     setMode,
     buildingInputMethod,
@@ -284,11 +281,6 @@ export default function EditorPage() {
                 s.setLastCompletedDirectionSession(null);
                 return;
               }
-              // 頂点タップモード
-              if (mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length > 0) {
-                removeLastVertexPoint();
-                return;
-              }
               // 寸法計測
               if (isMeasuring && (measurePoint1 || measurePoint2)) {
                 setMeasurePoint1(null);
@@ -305,8 +297,6 @@ export default function EditorPage() {
                 ? false
                 : lastCompletedDirectionSession
                 ? false
-                : mode === 'building' && buildingInputMethod === 'vertex'
-                ? vertexPoints.length === 0
                 : isMeasuring
                 ? !(measurePoint1 || measurePoint2)
                 : history.past.length === 0
@@ -552,46 +542,6 @@ export default function EditorPage() {
       {/* モードツールバー */}
       <ModeToolbar />
 
-      {/* 頂点タップ確定ボタン */}
-      {mode === 'building' && buildingInputMethod === 'vertex' && vertexPoints.length >= 1 && (
-        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3">
-          <button
-            onClick={() => {
-              clearVertexPoints();
-              setBuildingInputMethod('template');
-              setMode('select');
-            }}
-            className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
-          >
-            キャンセル
-          </button>
-          {vertexPoints.length >= 3 && (
-            <button
-              onClick={() => {
-                const newId = uuidv4();
-                const pts = [...vertexPoints];
-                if (pendingTargetType === 'obstacle' && pendingObstacleType) {
-                  const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
-                  const minX = Math.min(...xs), minY = Math.min(...ys);
-                  const maxX = Math.max(...xs), maxY = Math.max(...ys);
-                  addObstacle({ id: newId, type: pendingObstacleType, x: minX, y: minY, width: maxX - minX, height: maxY - minY, points: pts });
-                  setPendingTargetType('building');
-                  setPendingObstacleType(null);
-                } else {
-                  addBuilding({ id: newId, type: 'polygon', points: pts, fill: '#3d3d3a', floor: pendingBuildingFloor });
-                  useCanvasStore.getState().setAutoOpenRoofForBuildingId(newId);
-                  setPendingBuildingFloor(1);
-                }
-                clearVertexPoints();
-                setMode('select');
-              }}
-              className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
-            >
-              作図確定（{vertexPoints.length}点）
-            </button>
-          )}
-        </div>
-      )}
 
       {/* 壁方向入力の確定ボタン */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (
