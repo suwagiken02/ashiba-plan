@@ -13,33 +13,7 @@ export default function BuildingLayer() {
 
   return (
     <Layer>
-      {/* 屋根の出幅（オフセットポリゴンとして描画） */}
-      {canvasData.buildings.map((building) => {
-        if (!building.roof || building.roof.roofType === 'none') return null;
-        const overhangs = getEdgeOverhangs(building, building.roof);
-        // 出幅が全て0なら描画しない
-        if (overhangs.every((o) => o === 0)) return null;
-
-        const offsetPts = computeOffsetPolygon(building.points, overhangs);
-        const flatPoints = offsetPts.flatMap((p) => [
-          p.x * gridPx + panX,
-          p.y * gridPx + panY,
-        ]);
-
-        return (
-          <Line
-            key={`roof-${building.id}`}
-            points={flatPoints}
-            closed
-            stroke="#888780"
-            strokeWidth={1}
-            dash={[6, 4]}
-            listening={false}
-          />
-        );
-      })}
-
-      {/* 旧式の roofOverhangs（後方互換） */}
+      {/* 旧式の roofOverhangs（後方互換、最下層） */}
       {canvasData.roofOverhangs.map((overhang) => {
         const building = canvasData.buildings.find((b) => b.id === overhang.buildingId);
         if (!building) return null;
@@ -88,7 +62,32 @@ export default function BuildingLayer() {
         );
       })}
 
-      {/* 屋根形状線（建物本体の上に描画、長方形のみ） */}
+      {/* 屋根の出幅（建物本体の上に描画） */}
+      {canvasData.buildings.map((building) => {
+        if (!building.roof || building.roof.roofType === 'none') return null;
+        const overhangs = getEdgeOverhangs(building, building.roof);
+        if (overhangs.every((o) => o === 0)) return null;
+
+        const offsetPts = computeOffsetPolygon(building.points, overhangs);
+        const flatPoints = offsetPts.flatMap((p) => [
+          p.x * gridPx + panX,
+          p.y * gridPx + panY,
+        ]);
+
+        return (
+          <Line
+            key={`roof-${building.id}`}
+            points={flatPoints}
+            closed
+            stroke="#888780"
+            strokeWidth={1}
+            dash={[6, 4]}
+            listening={false}
+          />
+        );
+      })}
+
+      {/* 屋根形状線（最上層） */}
       {canvasData.buildings.map((building) => {
         if (!building.roof || building.roof.roofType === 'none') return null;
         const pts = building.points;
