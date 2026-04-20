@@ -84,7 +84,7 @@ export default function ScaffoldLayer() {
               strokeWidth={isSelected ? 2 : 1.5}
               listening={mode === 'select' || mode === 'erase'}
               id={anti.id}
-              draggable={mode === 'select'}
+              draggable={false} /* TODO: デバッグ用 一時false */
               onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round(e.target.x() / gridPx);
@@ -140,7 +140,7 @@ export default function ScaffoldLayer() {
               hitStrokeWidth={isReorderMode ? 30 : 10}
               listening={true}
               id={h.id}
-              draggable={mode === 'select'}
+              draggable={false} /* TODO: デバッグ用 一時false */
               onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onClick={() => handleHandrailClick(h.id)}
               onTap={() => handleHandrailClick(h.id)}
@@ -210,7 +210,7 @@ export default function ScaffoldLayer() {
               strokeWidth={isSelected ? 2 : 0}
               listening={mode === 'select' || mode === 'erase'}
               id={p.id}
-              draggable={mode === 'select'}
+              draggable={false} /* TODO: デバッグ用 一時false */
               onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round(e.target.x() / gridPx);

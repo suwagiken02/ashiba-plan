@@ -57,7 +57,7 @@ export default function ObstacleLayer() {
                 strokeWidth={isSelected ? 2 : 1}
                 listening={mode === 'select' || mode === 'erase'}
                 id={obs.id}
-                draggable={mode === 'select'}
+                draggable={false} /* TODO: デバッグ用 一時false */
                 onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] obstacle'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
                 onDragEnd={(e) => {
                   const dx = Math.round(e.target.x() / gridPx);
@@ -100,7 +100,7 @@ export default function ObstacleLayer() {
                 strokeWidth={isSelected ? 2 : 0.5}
                 listening={mode === 'select' || mode === 'erase'}
                 id={obs.id}
-                draggable={mode === 'select'}
+                draggable={false} /* TODO: デバッグ用 一時false */
                 onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] obstacle'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
                 onDragEnd={(e) => {
                   const origX = screenX + r;
@@ -141,7 +141,7 @@ export default function ObstacleLayer() {
               dash={isCarport ? [8, 4] : undefined}
               listening={mode === 'select' || mode === 'erase'}
               id={obs.id}
-              draggable={mode === 'select'}
+              draggable={false} /* TODO: デバッグ用 一時false */
               onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] obstacle'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round((e.target.x() - screenX) / gridPx);
