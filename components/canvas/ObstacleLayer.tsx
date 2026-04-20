@@ -5,6 +5,7 @@ import { Layer, Rect, Circle, Text, Line } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
 import { ObstacleType } from '@/types';
+import { useDebugStore } from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 const OBSTACLE_COLORS: Record<ObstacleType, string> = {
   ecocute: '#B5D4F4',
@@ -57,7 +58,7 @@ export default function ObstacleLayer() {
                 listening={mode === 'select' || mode === 'erase'}
                 id={obs.id}
                 draggable={mode === 'select'}
-                onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+                onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] obstacle'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
                 onDragEnd={(e) => {
                   const dx = Math.round(e.target.x() / gridPx);
                   const dy = Math.round(e.target.y() / gridPx);
@@ -100,7 +101,7 @@ export default function ObstacleLayer() {
                 listening={mode === 'select' || mode === 'erase'}
                 id={obs.id}
                 draggable={mode === 'select'}
-                onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+                onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] obstacle'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
                 onDragEnd={(e) => {
                   const origX = screenX + r;
                   const origY = screenY + r;
@@ -141,7 +142,7 @@ export default function ObstacleLayer() {
               listening={mode === 'select' || mode === 'erase'}
               id={obs.id}
               draggable={mode === 'select'}
-              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] obstacle'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round((e.target.x() - screenX) / gridPx);
                 const dy = Math.round((e.target.y() - screenY) / gridPx);

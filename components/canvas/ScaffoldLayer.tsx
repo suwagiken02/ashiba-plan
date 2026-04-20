@@ -8,6 +8,7 @@ import { INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
 import { getHandrailEndpoints } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import { HandrailLengthMm } from '@/types';
+import { useDebugStore } from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 const LINE_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DDA0DD', '#98D8C8', '#F7DC6F'];
 const TOL = 3;
@@ -84,7 +85,7 @@ export default function ScaffoldLayer() {
               listening={mode === 'select' || mode === 'erase'}
               id={anti.id}
               draggable={mode === 'select'}
-              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
@@ -140,7 +141,7 @@ export default function ScaffoldLayer() {
               listening={true}
               id={h.id}
               draggable={mode === 'select'}
-              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onClick={() => handleHandrailClick(h.id)}
               onTap={() => handleHandrailClick(h.id)}
               onDragEnd={(e) => {
@@ -210,7 +211,7 @@ export default function ScaffoldLayer() {
               listening={mode === 'select' || mode === 'erase'}
               id={p.id}
               draggable={mode === 'select'}
-              onDragStart={() => { useCanvasStore.getState().pushHistory(); }}
+              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);

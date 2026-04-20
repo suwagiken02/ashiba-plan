@@ -9,7 +9,8 @@ import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGrid
 import { getHandrailColor } from './handrailColors';
 import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
-import { Point, Handrail, HandrailDirection, HandrailLengthMm } from '@/types';
+import { Point, Handrail, HandrailDirection, HandrailLengthMm, Obstacle } from '@/types';
+import { useDebugStore } from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 const SNAP_PX = 80;
 const HIT_TOL = 25; // 手摺ヒット判定のグリッド許容差（250mm、タッチ操作対応）
@@ -155,6 +156,37 @@ function snapMeasurePoint(rawPos: Point, s: ReturnType<typeof useCanvasStore.get
   return { x: snapX, y: snapY };
 }
 
+/** クリック位置に含まれる障害物を見つける */
+function findObstacleAtPos(pos: Point, obstacles: Obstacle[]): Obstacle | null {
+  for (const o of obstacles) {
+    if (o.points && o.points.length >= 3) {
+      // ポリゴン障害物: point-in-polygon
+      let inside = false;
+      const n = o.points.length;
+      for (let i = 0, j = n - 1; i < n; j = i++) {
+        const xi = o.points[i].x, yi = o.points[i].y;
+        const xj = o.points[j].x, yj = o.points[j].y;
+        if ((yi > pos.y) !== (yj > pos.y) &&
+            pos.x < (xj - xi) * (pos.y - yi) / (yj - yi) + xi) {
+          inside = !inside;
+        }
+      }
+      if (inside) return o;
+    } else if (o.type === 'custom_circle') {
+      // 円障害物
+      const cx = o.x + o.width / 2;
+      const cy = o.y + o.height / 2;
+      const r = Math.max(o.width, o.height) / 2;
+      if (Math.hypot(pos.x - cx, pos.y - cy) <= r) return o;
+    } else {
+      // 矩形障害物
+      if (pos.x >= o.x && pos.x <= o.x + o.width &&
+          pos.y >= o.y && pos.y <= o.y + o.height) return o;
+    }
+  }
+  return null;
+}
+
 function snapRadiusGrid(zoom: number) {
   return Math.max(Math.round(SNAP_PX / (INITIAL_GRID_PX * zoom)), 5);
 }
@@ -194,6 +226,7 @@ export function useCanvasInteraction() {
   const isDragging = useRef(false);
   const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isLongPress, setIsLongPress] = useState(false);
+  const touchDragReady = useRef(false); // 長押し完了後のみtrue
   const [selectionRect, setSelectionRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   /** ドラッグ移動中の手摺情報（全モード共通） */
   const movingElementId = useRef<string | null>(null);
@@ -215,6 +248,11 @@ export function useCanvasInteraction() {
 
     const onWindowMove = (e: PointerEvent | TouchEvent) => {
       if (!movingElementId.current || !stageRef.current) return;
+      // タッチ操作で長押し未完了なら移動しない
+      if ('touches' in e && !touchDragReady.current) {
+        useDebugStore.getState().addLog(`[Move] BLOCKED ready=false`); // TODO: デバッグ後削除
+        return;
+      }
       // dragStartがnullでも、movingElementIdがあれば初期化して続行
       if (!dragStart.current) {
         const { clientX, clientY } = getClientPos(e);
@@ -243,6 +281,7 @@ export function useCanvasInteraction() {
 
     const onWindowUp = (e: PointerEvent | TouchEvent) => {
       if (!movingElementId.current) return;
+      useDebugStore.getState().addLog(`[Up] ready=${touchDragReady.current} dragging=${isDragging.current}`); // TODO: デバッグ後削除
       const { clientX, clientY } = getClientPos(e);
       const s = useCanvasStore.getState();
 
@@ -282,6 +321,11 @@ export function useCanvasInteraction() {
       movingHandrail.current = null;
       isDragging.current = false;
       dragStart.current = null;
+      touchDragReady.current = false;
+      if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+      }
     };
 
     window.addEventListener('pointermove', onWindowMove);
@@ -362,14 +406,16 @@ export function useCanvasInteraction() {
         return;
       }
 
-      // 全モード共通: クリック位置に既存手摺があれば選択 or 移動
+      // 全モード共通: クリック位置に既存要素があれば選択 or 移動
       const hitHandrail = findHandrailAtPos(rawPos, s.canvasData.handrails);
       const hitPost = s.canvasData.posts.find(p => Math.hypot(p.x - rawPos.x, p.y - rawPos.y) < HIT_TOL);
       const hitAnti = s.canvasData.antis.find(a => Math.hypot(a.x - rawPos.x, a.y - rawPos.y) < HIT_TOL);
-      const hitElement = hitHandrail || hitPost || hitAnti;
+      const hitObstacle = findObstacleAtPos(rawPos, s.canvasData.obstacles);
+      const hitElement = hitHandrail || hitPost || hitAnti || hitObstacle;
 
       if (hitElement && s.mode !== 'post' && s.mode !== 'erase') {
         const isTouchEvent = 'touches' in e.evt;
+        useDebugStore.getState().addLog(`[Start] hit=${hitElement.id.slice(0,8)} mode=${s.mode} touch=${isTouchEvent} ready=${touchDragReady.current}`); // TODO: デバッグ後削除
         if (isTouchEvent) {
           stageRef.current = stage;
           if (hitHandrail) {
@@ -382,14 +428,21 @@ export function useCanvasInteraction() {
               movingHandrail.current = { ...hitHandrail };
               movingElementId.current = hitHandrail.id;
             }
+          } else {
+            movingElementId.current = hitElement.id;
           }
           dragStart.current = rawPos;
           isDragging.current = false;
-          // 即時選択 → 300ms後に選択色でフィードバック
+          // 500ms長押しで選択+ドラッグ可能に
           s.setSelectedIds([]);
+          touchDragReady.current = false;
+          useDebugStore.getState().addLog('[Timer] 500ms start'); // TODO: デバッグ後削除
           longPressTimer.current = setTimeout(() => {
+            touchDragReady.current = true;
             s.setSelectedIds([movingElementId.current!]);
-          }, 300);
+            try { navigator.vibrate?.(50); } catch (_) {}
+            useDebugStore.getState().addLog('[Timer] FIRED - ready=true'); // TODO: デバッグ後削除
+          }, 500);
           return;
         }
         // PC: Alt+ドラッグで複製、通常は移動（window イベント方式）
