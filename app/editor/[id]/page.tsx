@@ -544,20 +544,20 @@ export default function EditorPage() {
 
       {/* 壁方向入力の確定ボタン */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (
-        <div className="fixed bottom-20 sm:bottom-6 left-1/2 -translate-x-1/2 z-50 flex gap-3">
+        <div className="fixed bottom-20 sm:bottom-6 left-0 right-0 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 z-50 flex gap-1 sm:gap-3 px-2 sm:px-0">
           <button
             onClick={() => {
               clearDirectionPoints();
               setBuildingInputMethod('template');
               setMode('select');
             }}
-            className="px-5 py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg"
+            className="flex-1 sm:flex-none h-11 sm:h-auto px-2 sm:px-5 sm:py-2.5 bg-dark-surface border border-dark-border rounded-xl text-sm text-dimension font-bold shadow-lg whitespace-nowrap"
           >
             キャンセル
           </button>
           <button
             onClick={toggleDirectionGuide}
-            className={`px-4 py-2.5 rounded-xl text-sm font-bold shadow-lg border transition-colors ${
+            className={`flex-1 sm:flex-none h-11 sm:h-auto px-2 sm:px-4 sm:py-2.5 rounded-xl text-sm font-bold shadow-lg border transition-colors whitespace-nowrap ${
               showDirectionGuide ? 'bg-orange-500 text-white border-orange-500' : 'bg-dark-surface border-dark-border text-dimension'
             }`}
           >
@@ -565,7 +565,7 @@ export default function EditorPage() {
           </button>
           <button
             onClick={() => setShowDirectionInputModal(true)}
-            className="px-5 py-2.5 bg-accent/80 text-white rounded-xl text-sm font-bold shadow-lg"
+            className="flex-1 sm:flex-none h-11 sm:h-auto px-2 sm:px-5 sm:py-2.5 bg-accent/80 text-white rounded-xl text-sm font-bold shadow-lg whitespace-nowrap"
           >
             壁を追加
           </button>
@@ -591,7 +591,7 @@ export default function EditorPage() {
                 setBuildingInputMethod('template');
                 setMode('select');
               }}
-              className="px-5 py-2.5 bg-accent text-white rounded-xl text-sm font-bold shadow-lg"
+              className="flex-1 sm:flex-none h-11 sm:h-auto px-2 sm:px-5 sm:py-2.5 bg-accent text-white rounded-xl text-xs sm:text-sm font-bold shadow-lg whitespace-nowrap"
             >
               作図確定（{directionPoints.length}点）
             </button>
