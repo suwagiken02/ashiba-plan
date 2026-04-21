@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { Handrail, HandrailLengthMm, Point } from '@/types';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
+import NumInput from '@/components/ui/NumInput';
 import {
   getBuildingEdgesClockwise,
   computeAutoLayout,
@@ -421,16 +422,17 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                       />
                     </div>
                   ) : (
-                    <input
-                      type="number"
+                    // NumInput: 内部テキストstate + blur/Enterでコミット。
+                    // これにより入力途中の "9" や空欄を許容し、Backspace で自由に編集可能。
+                    <NumInput
                       value={getDistance(edge.index)}
-                      onChange={e => setDistance(edge.index, Math.max(0, Number(e.target.value)))}
+                      onChange={v => setDistance(edge.index, Math.max(0, v))}
                       onFocus={() => setFocusedEdgeIndex(edge.index)}
                       onBlur={() => setFocusedEdgeIndex(null)}
+                      min={0} step={1}
                       className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
                         focusedEdgeIndex === edge.index ? 'border-accent' : 'border-dark-border'
                       }`}
-                      min={0} step={10}
                     />
                   )}
                   {lockedEdgeIndices.has(edge.index) && (
