@@ -216,25 +216,31 @@ export default function RoofSettingsModal({ buildingId, buildingPoints, initialR
                     </div>
                   ))}
                 </div>
-              ) : (
-                /* 矩形: 4面入力 */
+              ) : edges ? (
+                /* 4辺以下: edges 配列の順序（プレビューの ABCD と一致）で入力欄を生成 */
                 <div className="space-y-2">
-                  <label className="block text-sm text-dimension">面ごとの出幅 (mm)</label>
-                  {[
-                    { label: '北面', value: northMm, set: setNorthMm },
-                    { label: '南面', value: southMm, set: setSouthMm },
-                    { label: '東面', value: eastMm, set: setEastMm },
-                    { label: '西面', value: westMm, set: setWestMm },
-                  ].map((f) => (
-                    <div key={f.label} className="flex items-center gap-3">
-                      <span className="text-sm w-10 shrink-0">{f.label}</span>
-                      <NumInput value={f.value} onChange={f.set} min={0} step={50}
-                        className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
-                      />
-                    </div>
-                  ))}
+                  <label className="block text-sm text-dimension">辺ごとの出幅 (mm)</label>
+                  {edges.map((edge) => {
+                    // edge.face に応じて対応する state / setter を選択
+                    const pair =
+                      edge.face === 'north' ? { value: northMm, set: setNorthMm }
+                      : edge.face === 'south' ? { value: southMm, set: setSouthMm }
+                      : edge.face === 'east' ? { value: eastMm, set: setEastMm }
+                      : { value: westMm, set: setWestMm };
+                    return (
+                      <div key={edge.index} className="flex items-center gap-2">
+                        <span className="w-8 h-6 flex items-center justify-center rounded text-xs font-bold bg-dark-bg text-dimension">
+                          {edge.label}
+                        </span>
+                        <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
+                        <NumInput value={pair.value} onChange={pair.set} min={0} step={50}
+                          className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm"
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
+              ) : null}
             </>
           )}
 
