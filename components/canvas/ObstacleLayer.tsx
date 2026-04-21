@@ -67,18 +67,6 @@ export default function ObstacleLayer() {
                     const newCx = obs.x + dx + obs.width / 2;
                     const newCy = obs.y + dy + obs.height / 2;
                     const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-                    // TODO: デバッグ後削除
-                    console.log('[Obstacle Drag Snap polygon]', {
-                      obsId: obs.id.slice(0, 8),
-                      obsXY: { x: obs.x, y: obs.y },
-                      obsWH: { w: obs.width, h: obs.height },
-                      dxDy: { dx, dy },
-                      newCenter: { x: newCx, y: newCy },
-                      buildingCount: canvasData.buildings.length,
-                      snapped,
-                      willUseSnap: snapped !== null,
-                      finalDxDy: snapped ? { dx: snapped.x - obs.x, dy: snapped.y - obs.y } : { dx, dy },
-                    });
                     if (snapped) {
                       useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
                     } else {
@@ -133,18 +121,6 @@ export default function ObstacleLayer() {
                     const newCx = obs.x + dx + obs.width / 2;
                     const newCy = obs.y + dy + obs.height / 2;
                     const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-                    // TODO: デバッグ後削除
-                    console.log('[Obstacle Drag Snap circle]', {
-                      obsId: obs.id.slice(0, 8),
-                      obsXY: { x: obs.x, y: obs.y },
-                      obsWH: { w: obs.width, h: obs.height },
-                      dxDy: { dx, dy },
-                      newCenter: { x: newCx, y: newCy },
-                      buildingCount: canvasData.buildings.length,
-                      snapped,
-                      willUseSnap: snapped !== null,
-                      finalDxDy: snapped ? { dx: snapped.x - obs.x, dy: snapped.y - obs.y } : { dx, dy },
-                    });
                     if (snapped) {
                       useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
                     } else {
@@ -193,18 +169,6 @@ export default function ObstacleLayer() {
                   const newCx = obs.x + dx + obs.width / 2;
                   const newCy = obs.y + dy + obs.height / 2;
                   const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-                  // TODO: デバッグ後削除
-                  console.log('[Obstacle Drag Snap rect]', {
-                    obsId: obs.id.slice(0, 8),
-                    obsXY: { x: obs.x, y: obs.y },
-                    obsWH: { w: obs.width, h: obs.height },
-                    dxDy: { dx, dy },
-                    newCenter: { x: newCx, y: newCy },
-                    buildingCount: canvasData.buildings.length,
-                    snapped,
-                    willUseSnap: snapped !== null,
-                    finalDxDy: snapped ? { dx: snapped.x - obs.x, dy: snapped.y - obs.y } : { dx, dy },
-                  });
                   if (snapped) {
                     useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
                   } else {
