@@ -18,11 +18,13 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
 
   const loadProjects = useCallback(async () => {
-    const currentUser = useAuthStore.getState().user;
-    const query = currentUser && currentUser.id !== 'anonymous'
-      ? supabase.from('projects').select('*').eq('owner_id', currentUser.id).order('updated_at', { ascending: false })
-      : supabase.from('projects').select('*').order('updated_at', { ascending: false });
-    const { data } = await query;
+    // テスト段階のためテスター全員で現場データを共有。
+    // owner_id は作成者記録用に引き続き保存するが、一覧ではフィルタしない。
+    // 本番公開時は owner_id ベースの権限管理 or 組織単位の共有を実装する。
+    const { data } = await supabase
+      .from('projects')
+      .select('*')
+      .order('updated_at', { ascending: false });
     if (data) setProjects(data);
   }, []);
 
