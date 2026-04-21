@@ -10,7 +10,6 @@ import { getHandrailColor } from './handrailColors';
 import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
 import { Point, Handrail, HandrailDirection, HandrailLengthMm, Obstacle } from '@/types';
-import { useDebugStore } from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 const SNAP_PX = 80;
 const HIT_TOL = 25; // 手摺ヒット判定のグリッド許容差（250mm、タッチ操作対応）
@@ -253,11 +252,7 @@ export function useCanvasInteraction() {
         'touches' in e ||
         (typeof PointerEvent !== 'undefined' && e instanceof PointerEvent && e.pointerType === 'touch');
       // タッチ操作で長押し未完了なら移動しない
-      if (isTouchEvent && !touchDragReady.current) {
-        const type = 'touches' in e ? 'touch' : 'pointer-touch'; // TODO: デバッグ後削除
-        useDebugStore.getState().addLog(`[Move] BLOCKED ready=false type=${type}`); // TODO: デバッグ後削除
-        return;
-      }
+      if (isTouchEvent && !touchDragReady.current) return;
       // dragStartがnullでも、movingElementIdがあれば初期化して続行
       if (!dragStart.current) {
         const { clientX, clientY } = getClientPos(e);
@@ -286,7 +281,6 @@ export function useCanvasInteraction() {
 
     const onWindowUp = (e: PointerEvent | TouchEvent) => {
       if (!movingElementId.current) return;
-      useDebugStore.getState().addLog(`[Up] ready=${touchDragReady.current} dragging=${isDragging.current}`); // TODO: デバッグ後削除
       const { clientX, clientY } = getClientPos(e);
       const s = useCanvasStore.getState();
 
@@ -343,38 +337,6 @@ export function useCanvasInteraction() {
       window.removeEventListener('touchmove', onWindowMove as EventListener);
       window.removeEventListener('touchend', onWindowUp as EventListener);
     };
-  }, []);
-
-  // TODO: デバッグ後削除 - handrails の座標を RAF で毎フレーム監視（直接ミューテーションも検出）
-  useEffect(() => {
-    let rafId = 0;
-    let snapshot: string = '';
-    let tickCount = 0;
-    useDebugStore.getState().addLog('[RAF] mounted'); // マウント確認
-    const tick = () => {
-      tickCount++;
-      if (tickCount % 120 === 0) {
-        // 約2秒ごとにheartbeat
-        useDebugStore.getState().addLog(`[RAF] alive tick=${tickCount}`);
-      }
-      const hs = useCanvasStore.getState().canvasData.handrails;
-      const current = hs.map(h => `${h.id.slice(0,8)}:${h.x},${h.y}`).join('|');
-      if (snapshot && current !== snapshot) {
-        const prevMap = new Map(snapshot.split('|').map(s => { const [id, xy] = s.split(':'); return [id, xy]; }));
-        for (const h of hs) {
-          const id8 = h.id.slice(0,8);
-          const prev = prevMap.get(id8);
-          const cur = `${h.x},${h.y}`;
-          if (prev && prev !== cur) {
-            useDebugStore.getState().addLog(`[RAF WATCH] handrail ${id8} ${prev}→${cur}`);
-          }
-        }
-      }
-      snapshot = current;
-      rafId = requestAnimationFrame(tick);
-    };
-    rafId = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafId);
   }, []);
 
   // 画面座標をグリッド座標に変換
@@ -452,7 +414,6 @@ export function useCanvasInteraction() {
 
       if (hitElement && s.mode !== 'post' && s.mode !== 'erase') {
         const isTouchEvent = 'touches' in e.evt;
-        useDebugStore.getState().addLog(`[Start] hit=${hitElement.id.slice(0,8)} mode=${s.mode} touch=${isTouchEvent} ready=${touchDragReady.current}`); // TODO: デバッグ後削除
         if (isTouchEvent) {
           stageRef.current = stage;
           if (hitHandrail) {
@@ -473,12 +434,10 @@ export function useCanvasInteraction() {
           // 500ms長押しで選択+ドラッグ可能に
           s.setSelectedIds([]);
           touchDragReady.current = false;
-          useDebugStore.getState().addLog('[Timer] 500ms start'); // TODO: デバッグ後削除
           longPressTimer.current = setTimeout(() => {
             touchDragReady.current = true;
             s.setSelectedIds([movingElementId.current!]);
             try { navigator.vibrate?.(50); } catch (_) {}
-            useDebugStore.getState().addLog('[Timer] FIRED - ready=true'); // TODO: デバッグ後削除
           }, 500);
           return;
         }
@@ -608,9 +567,6 @@ export function useCanvasInteraction() {
 
   const handleStageMouseMove = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-      // TODO: デバッグ後削除
-      const isTouch = 'touches' in e.evt;
-      useDebugStore.getState().addLog(`[StageMove] type=${e.type} touch=${isTouch} moving=${movingElementId.current?.slice(0,8) || 'none'}`);
       if ('touches' in e.evt && (e.evt as TouchEvent).touches.length >= 2) return;
 
       const stage = e.target.getStage();
@@ -687,8 +643,6 @@ export function useCanvasInteraction() {
 
   const handleStageMouseUp = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
-      // TODO: デバッグ後削除
-      useDebugStore.getState().addLog(`[StageUp] type=${e.type}`);
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
         longPressTimer.current = null;

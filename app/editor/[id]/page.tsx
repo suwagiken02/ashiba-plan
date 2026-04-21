@@ -21,7 +21,6 @@ import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import DirectionInputModal from '@/components/building/DirectionInputModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
-import DebugPanel from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 // Konvaはクライアントサイドのみ
 const GridCanvas = dynamic(() => import('@/components/canvas/GridCanvas'), {
@@ -542,8 +541,6 @@ export default function EditorPage() {
 
       {/* モードツールバー */}
       <ModeToolbar />
-      <DebugPanel /> {/* TODO: デバッグ後削除 */}
-
 
       {/* 壁方向入力の確定ボタン */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (

@@ -19,7 +19,6 @@ import {
   MemoShape,
 } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS, INITIAL_GRID_PX, ZOOM_MIN, ZOOM_MAX } from '@/lib/konva/gridUtils';
-import { useDebugStore } from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 const createEmptyCanvasData = (): CanvasData => ({
   version: '1.0',
@@ -243,41 +242,14 @@ type CanvasStore = {
 
 const MAX_HISTORY = 40;
 
-export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
-  // TODO: デバッグ後削除 - canvasData.handrails が変わる set を全て検出
-  const set: typeof setRaw = ((...args: unknown[]) => {
-    const prev = get()?.canvasData?.handrails;
-    (setRaw as (...a: unknown[]) => void)(...args);
-    const next = get()?.canvasData?.handrails;
-    if (prev !== next) {
-      const prevLen = prev?.length ?? 0;
-      const nextLen = next?.length ?? 0;
-      let moved = '';
-      if (prev && next && prevLen === nextLen) {
-        for (let i = 0; i < prev.length; i++) {
-          const p = prev[i];
-          const n = next[i];
-          if (p.id !== n.id || p.x !== n.x || p.y !== n.y) {
-            moved = ` MOVED id=${n.id.slice(0, 8)} (${p.x},${p.y})→(${n.x},${n.y})`;
-            break;
-          }
-        }
-      }
-      useDebugStore.getState().addLog(`[SET handrails] ${prevLen}→${nextLen}${moved}`);
-      console.trace('[SET handrails] called from');
-    }
-  }) as typeof setRaw;
-  return ({
+export const useCanvasStore = create<CanvasStore>((set, get) => ({
   drawingId: null,
   projectId: null,
   setDrawingId: (id) => set({ drawingId: id }),
   setProjectId: (id) => set({ projectId: id }),
 
   canvasData: createEmptyCanvasData(),
-  setCanvasData: (data) => {
-    useDebugStore.getState().addLog(`[setCanvasData] h=${data.handrails.length}`); // TODO: デバッグ後削除
-    set({ canvasData: data, isDirty: false });
-  },
+  setCanvasData: (data) => set({ canvasData: data, isDirty: false }),
 
   mode: 'select',
   setMode: (mode) => set({ mode, selectedIds: [] }),
@@ -285,10 +257,7 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
   setBuildingInputMethod: (m) => set({ buildingInputMethod: m }),
 
   selectedIds: [],
-  setSelectedIds: (ids) => {
-    useDebugStore.getState().addLog(`[setSelectedIds] ids=${ids.map(i => i.slice(0,8)).join(',') || 'empty'}`); // TODO: デバッグ後削除
-    set({ selectedIds: ids });
-  },
+  setSelectedIds: (ids) => set({ selectedIds: ids }),
   selectedHandrailLength: 1800,
   setSelectedHandrailLength: (l) => set({ selectedHandrailLength: l }),
   selectedAntiWidth: 400,
@@ -435,7 +404,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
   selectedLineIds: [],
   setSelectedLineIds: (ids) => set({ selectedLineIds: ids }),
   reorderHandrails: (lineIds: string[], newOrder: string[]) => {
-    useDebugStore.getState().addLog(`[reorderHandrails] n=${lineIds.length}`); // TODO: デバッグ後削除
     const { canvasData } = get();
     const lineGroup = canvasData.handrails.filter(h => lineIds.includes(h.id));
     const others = canvasData.handrails.filter(h => !lineIds.includes(h.id));
@@ -471,14 +439,8 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
   zoom: 1.0,
   panX: 0,
   panY: 0,
-  setZoom: (z) => {
-    useDebugStore.getState().addLog(`[setZoom] z=${z.toFixed(3)}`); // TODO: デバッグ後削除
-    set({ zoom: Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)) });
-  },
-  setPan: (x, y) => {
-    useDebugStore.getState().addLog(`[setPan] x=${Math.round(x)} y=${Math.round(y)}`); // TODO: デバッグ後削除
-    set({ panX: x, panY: y });
-  },
+  setZoom: (z) => set({ zoom: Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z)) }),
+  setPan: (x, y) => set({ panX: x, panY: y }),
 
   history: { past: [], future: [] },
   pushHistory: () => {
@@ -487,7 +449,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
     set({ history: { past, future: [] }, isDirty: true, lastCompletedDirectionSession: null });
   },
   undo: () => {
-    useDebugStore.getState().addLog(`[undo]`); // TODO: デバッグ後削除
     const { canvasData, history } = get();
     if (history.past.length === 0) return;
     const past = [...history.past];
@@ -502,7 +463,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
     });
   },
   redo: () => {
-    useDebugStore.getState().addLog(`[redo]`); // TODO: デバッグ後削除
     const { canvasData, history } = get();
     if (history.future.length === 0) return;
     const future = [...history.future];
@@ -567,7 +527,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
     });
   },
   addHandrail: (h) => {
-    useDebugStore.getState().addLog(`[addHandrail] x=${h.x} y=${h.y}`); // TODO: デバッグ後削除
     const { canvasData, pushHistory } = get();
     pushHistory();
     set({
@@ -577,7 +536,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
   },
   addHandrails: (hs) => {
     if (hs.length === 0) return;
-    useDebugStore.getState().addLog(`[addHandrails] n=${hs.length}`); // TODO: デバッグ後削除
     const { canvasData, pushHistory } = get();
     pushHistory();
     set({
@@ -618,7 +576,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
     });
   },
   removeElement: (id) => {
-    useDebugStore.getState().addLog(`[removeElement] id=${id.slice(0,8)}`); // TODO: デバッグ後削除
     const { canvasData, pushHistory } = get();
     pushHistory();
     set({
@@ -636,7 +593,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
     });
   },
   removeElements: (ids) => {
-    useDebugStore.getState().addLog(`[removeElements] n=${ids.length}`); // TODO: デバッグ後削除
     const { canvasData, pushHistory } = get();
     pushHistory();
     const idSet = new Set(ids);
@@ -656,9 +612,6 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
     });
   },
   moveElement: (id, dx, dy) => {
-    // TODO: デバッグ後削除
-    useDebugStore.getState().addLog(`[moveElement] id=${id.slice(0,8)} dx=${dx} dy=${dy}`);
-    console.trace('moveElement called from');
     const { canvasData } = get();
     set({
       canvasData: {
@@ -744,5 +697,4 @@ export const useCanvasStore = create<CanvasStore>((setRaw, get) => {
       selectedIds: [],
     });
   },
-  });
-});
+}));
