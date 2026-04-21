@@ -12,8 +12,8 @@ export const ZOOM_MAX = 5.0;
 export const DEFAULT_COLS = 600;
 export const DEFAULT_ROWS = 400;
 
-/** mm → グリッド単位変換 */
-export const mmToGrid = (mm: number): number => Math.round(mm / GRID_UNIT_MM);
+/** mm → グリッド単位変換（小数許容。1mm 精度の入力値を保持するため Math.round しない） */
+export const mmToGrid = (mm: number): number => mm / GRID_UNIT_MM;
 
 /** グリッド単位 → mm変換 */
 export const gridToMm = (grid: number): number => grid * GRID_UNIT_MM;

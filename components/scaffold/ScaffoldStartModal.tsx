@@ -161,12 +161,12 @@ export default function ScaffoldStartModal({ onClose }: Props) {
             <div className="space-y-3">
               <div className="flex items-center gap-3">
                 <span className="text-sm w-20 shrink-0">{faceLabels.label1}</span>
-                <NumInput value={face1Distance} onChange={setFace1Distance} min={0} step={10}
+                <NumInput value={face1Distance} onChange={setFace1Distance} min={0} step={1}
                   className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div className="flex items-center gap-3">
                 <span className="text-sm w-20 shrink-0">{faceLabels.label2}</span>
-                <NumInput value={face2Distance} onChange={setFace2Distance} min={0} step={10}
+                <NumInput value={face2Distance} onChange={setFace2Distance} min={0} step={1}
                   className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>

@@ -432,7 +432,7 @@ export default function BuildingTemplateModal({ onClose, floor, floor1Building }
                   </span>
                   <NumInput value={mmToDisplay(dims.diameter ?? 6000)}
                     onChange={(v) => updateDim('diameter', displayToMm(v))}
-                    min={unit === 'm' ? 0.1 : 100} step={unit === 'm' ? 0.1 : 100}
+                    min={unit === 'm' ? 0.1 : 100} step={unit === 'm' ? 0.001 : 1}
                     className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-canvas text-right font-mono text-sm focus:outline-none focus:border-accent"
                   />
                   <span className="text-dimension text-xs w-6">{unit}</span>

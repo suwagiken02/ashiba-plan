@@ -182,21 +182,36 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setResult(null);
   };
 
-  // 端数0になる離れを探す
-  const findDistanceSuggestions = (el: EdgeLayout, currentDist: number): number[] => {
-    const remainder = el.candidates[0]?.remainder ?? 0;
-    if (remainder === 0) return [];
-
-    const suggestions: number[] = [];
-
-    // 端数がremainder mm → 離れをremainder mm調整で解消
-    const adjust1 = currentDist + remainder;
-    const adjust2 = currentDist - remainder;
-
-    if (adjust1 > 0 && adjust1 !== currentDist) suggestions.push(adjust1);
-    if (adjust2 > 0 && adjust2 !== currentDist && !suggestions.includes(adjust2)) suggestions.push(adjust2);
-
-    return suggestions.slice(0, 2);
+  // 問題辺の effectiveMm は「隣接2辺の離れ」で決まる（自身の離れは無関係）。
+  // 修正する離れは問題辺の隣接非L辺（= prev か next の非L字側）を対象にする。
+  // 新離れ = 隣接非L辺の現在離れ - 問題辺のremainder
+  //   remainder > 0 (不足) → 新離れ = 現在離れ - remainder（隣接離れを縮める）
+  //   remainder < 0 (突出) → 新離れ = 現在離れ + |remainder|（隣接離れを伸ばす）
+  // 戻り値は "どの辺を調整するか" も含む。
+  const findDistanceSuggestions = (el: EdgeLayout): {
+    adjustEdgeIndex: number; adjustLabel: string; currentDist: number; newDists: number[];
+  } | null => {
+    const edgeIdx = edges.findIndex(e => e.index === el.edge.index);
+    if (edgeIdx < 0) return null;
+    const nE = edges.length;
+    const prevE = edges[(edgeIdx - 1 + nE) % nE];
+    const nextE = edges[(edgeIdx + 1) % nE];
+    // 隣接辺のうち L字固定でない側を調整対象とする
+    let adjE: typeof prevE | null = null;
+    if (!lockedEdgeIndices.has(prevE.index)) adjE = prevE;
+    else if (!lockedEdgeIndices.has(nextE.index)) adjE = nextE;
+    if (!adjE) return null; // 両隣が L字固定 → 調整不能
+    const currentDist = distances[adjE.index] ?? 900;
+    const newDists: number[] = [];
+    for (const cand of el.candidates) {
+      if (cand.remainder === 0) continue;
+      const newDist = Math.round(currentDist - cand.remainder);
+      if (newDist > 0 && newDist !== currentDist && !newDists.includes(newDist)) {
+        newDists.push(newDist);
+      }
+    }
+    if (newDists.length === 0) return null;
+    return { adjustEdgeIndex: adjE.index, adjustLabel: adjE.label, currentDist, newDists: newDists.slice(0, 2) };
   };
 
   const handleCalc = () => {
@@ -218,12 +233,23 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     })));
 
     if (problemEdges.length > 0) {
-      const suggestions = problemEdges.map(el => ({
-        edgeIndex: el.edge.index,
-        edgeLabel: el.edge.label,
-        currentDist: distances[el.edge.index] ?? 900,
-        suggestions: findDistanceSuggestions(el, distances[el.edge.index] ?? 900),
-      })).filter(s => s.suggestions.length > 0);
+      const seen = new Set<string>();
+      const suggestions = problemEdges
+        .map(el => {
+          const r = findDistanceSuggestions(el);
+          if (!r) return null;
+          // 同じ隣接非L辺を複数の問題辺が指す場合は重複排除
+          const key = `${r.adjustEdgeIndex}|${r.newDists.join(',')}`;
+          if (seen.has(key)) return null;
+          seen.add(key);
+          return {
+            edgeIndex: r.adjustEdgeIndex,
+            edgeLabel: r.adjustLabel,
+            currentDist: r.currentDist,
+            suggestions: r.newDists,
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null);
 
       console.log('[handleCalc] suggestions:', suggestions.map(s => ({
         label: s.edgeLabel,
@@ -276,9 +302,11 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     if (!result || !building) return;
     const allHandrails: Handrail[] = [];
 
+    // L字辺も通常辺と同様に配置する（L字辺の特徴は「離れ固定 + ダイアログ対象外」のみ）。
+    // ScaffoldStartModal で既に置かれた L字辺の始点手摺は、下の overlappingIds で検出されて
+    // 削除ダイアログが出るので、ユーザーが置換を承認すれば正しい配置に再構成される。
     for (let i = 0; i < result.edgeLayouts.length; i++) {
       const el = result.edgeLayouts[i];
-      if (el.locked) continue;
       const selIdx = selections[i] ?? 0;
       const candidate = el.candidates[selIdx];
       if (!candidate || candidate.rails.length === 0) continue;
@@ -440,18 +468,18 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 if (!candidate) return null;
 
                 return (
-                  <div key={i} className={`bg-dark-bg rounded-xl p-3 ${el.locked ? 'opacity-50' : ''}`}>
+                  <div key={i} className="bg-dark-bg rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold">
                         {el.edge.label} ({FACE_LABEL[el.edge.face]})
-                        {el.locked && <span className="text-[10px] text-dimension ml-1">L字済</span>}
+                        {el.locked && <span className="text-[10px] text-dimension ml-1">L字固定</span>}
                       </span>
                       <span className="text-[10px] text-dimension">
                         辺長 {el.edgeLengthMm}mm / 有効 {el.effectiveMm}mm
                       </span>
                     </div>
 
-                    {!el.locked && candidate.rails.length > 0 ? (
+                    {candidate.rails.length > 0 ? (
                       <>
                         <p className="text-xs text-canvas font-mono mb-1">
                           {formatRailsSummary(candidate.rails)}
@@ -464,24 +492,22 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           ))}
                         </div>
                       </>
-                    ) : !el.locked ? (
+                    ) : (
                       <p className="text-xs text-dimension">手摺なし</p>
-                    ) : null}
-
-                    {!el.locked && (
-                      <div className="flex items-center justify-between">
-                        <span className={`text-[11px] font-mono ${
-                          candidate.remainder === 0 ? 'text-green-400' :
-                          candidate.remainder < 0 ? 'text-red-400' : 'text-yellow-400'
-                        }`}>
-                          端数: {candidate.remainder >= 0 ? '+' : ''}{candidate.remainder}mm
-                          {candidate.remainder < 0 && ' (突出)'}
-                        </span>
-                        <span className="text-[10px] text-dimension">{candidate.count}本</span>
-                      </div>
                     )}
 
-                    {!el.locked && el.candidates.length > 1 && (
+                    <div className="flex items-center justify-between">
+                      <span className={`text-[11px] font-mono ${
+                        candidate.remainder === 0 ? 'text-green-400' :
+                        candidate.remainder < 0 ? 'text-red-400' : 'text-yellow-400'
+                      }`}>
+                        端数: {candidate.remainder >= 0 ? '+' : ''}{candidate.remainder}mm
+                        {candidate.remainder < 0 && ' (突出)'}
+                      </span>
+                      <span className="text-[10px] text-dimension">{candidate.count}本</span>
+                    </div>
+
+                    {el.candidates.length > 1 && (
                       <div className="mt-2 pt-2 border-t border-dark-border">
                         <p className="text-[10px] text-dimension mb-1">候補：</p>
                         <div className="flex flex-wrap gap-1">

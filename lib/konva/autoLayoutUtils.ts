@@ -200,10 +200,11 @@ export function findBestEndCombinations(effectiveMm: number): LayoutCombination[
   }
 
   // ── パターンD: 端数を1本で賄えるサイズを試す ──
+  // 全サイズを試す（早期 break しない）。HANDRAIL_SIZES は降順 [1800,...,200] だが、
+  // 長側候補（rem < 0）を 0 に最も近づけるには最小 200 まで列挙する必要がある。
   for (const size of HANDRAIL_SIZES) {
     const rem = leftover - size;
     addResult([...base1800, size], rem);
-    if (rem < 0) break; // これ以上小さいサイズは端数がさらに大きくなる
   }
 
   // ── パターンE: 端数を2本で賄う組み合わせ ──
@@ -248,26 +249,35 @@ export function findBestEndCombinations(effectiveMm: number): LayoutCombination[
     addResult(base1800, leftover);
   }
 
-  // ソート: 端数の絶対値が小さい → 部材数が少ない → はみ出しより不足を優先
-  results.sort((a, b) => {
-    const da = Math.abs(a.remainder), db = Math.abs(b.remainder);
-    if (da !== db) return da - db;
-    if (a.count !== b.count) return a.count - b.count;
-    return (a.remainder >= 0 ? 0 : 1) - (b.remainder >= 0 ? 0 : 1);
-  });
+  // 有効長より短い側（+remainder = 不足）/ 長い側（-remainder = 突出）
+  // それぞれの最良候補を選び、候補A/Bダイアログで提示する。
+  //   Short: remainder >= 0 の中で最小（端数最小）
+  //   Long : remainder < 0 の中で最大（突出最小、つまり 0 に近い負）
+  const shorts = results
+    .filter(r => r.remainder >= 0)
+    .sort((a, b) => (a.remainder - b.remainder) || (a.count - b.count));
+  const longs = results
+    .filter(r => r.remainder < 0)
+    .sort((a, b) => (b.remainder - a.remainder) || (a.count - b.count));
 
-  const bestAbs = Math.abs(results[0].remainder);
-  return results.filter(r => Math.abs(r.remainder) === bestAbs);
+  const out: LayoutCombination[] = [];
+  if (shorts[0]) out.push(shorts[0]);
+  if (longs[0]) out.push(longs[0]);
+  // 端数 abs が小さい側を先頭（プライマリ候補）にする
+  out.sort((a, b) => Math.abs(a.remainder) - Math.abs(b.remainder));
+  return out.length > 0 ? out : results.slice(0, 1);
 }
 
 // ============================================================
 // 辺のscaffoldCoordを計算（固定軸座標）
 // ============================================================
 function calcScaffoldCoord(edge: EdgeInfo, distGrid: number): number {
+  // 1mm精度の離れ（例: 999mm = 99.9 grid）を保持したまま足場ライン座標を計算。
+  // 候補A/Bダイアログが 1mm 単位で正しい新離れを提案できるようにする。
   if (edge.handrailDir === 'horizontal') {
-    return Math.round(edge.p1.y + edge.ny * distGrid);
+    return edge.p1.y + edge.ny * distGrid;
   } else {
-    return Math.round(edge.p1.x + edge.nx * distGrid);
+    return edge.p1.x + edge.nx * distGrid;
   }
 }
 
@@ -288,7 +298,18 @@ export function computeAutoLayout(
   const edges = getBuildingEdgesClockwise(building);
   const n = edges.length;
 
+  // L字スタート角に隣接する 2 辺を「固定辺」として識別。
+  // この 2 辺は ScaffoldStartModal で既に手摺 1 本配置済みなので、
+  // 自動割付では追加配置をスキップする（locked=true）。
+  const lockedIndices = new Set<number>();
+  if (scaffoldStart && n >= 2) {
+    const startIdx = scaffoldStart.startVertexIndex ?? 0;
+    lockedIndices.add(edges[startIdx % n].index);
+    lockedIndices.add(edges[(startIdx - 1 + n) % n].index);
+  }
+
   // 1パス目: 各辺のscaffoldCoordを計算
+  // 離れは 1mm 精度のまま保持（候補A/B提案で正しい 10mm 単位の新離れを算出するため）。
   const scaffoldCoords: number[] = [];
   const distGrids: number[] = [];
   for (let i = 0; i < n; i++) {
@@ -311,7 +332,6 @@ export function computeAutoLayout(
     const nextEdge = edges[nextIdx];
 
     const thisDist = distances[edge.index] ?? 900;
-    const nextDist = distances[nextEdge.index] ?? 900;
 
     const dx = edge.p2.x - edge.p1.x;
     const dy = edge.p2.y - edge.p1.y;
@@ -338,10 +358,12 @@ export function computeAutoLayout(
     const endConvex = isConvexCorner(edge, nextEdge);
     const nextScaffold = scaffoldCoords[nextIdx];
     let cursorEnd: number;
+    // 1mm精度のまま計算し、effectiveMm で Math.round して整数 mm 化する
+    const nextDistGrid = distGrids[nextIdx];
     if (edge.handrailDir === 'horizontal') {
       const sign = dx > 0 ? 1 : -1;
       if (endConvex) {
-        cursorEnd = edge.p2.x + sign * mmToGrid(nextDist);
+        cursorEnd = edge.p2.x + sign * nextDistGrid;
       } else if (nextEdge.handrailDir !== edge.handrailDir) {
         cursorEnd = nextScaffold;
       } else {
@@ -350,7 +372,7 @@ export function computeAutoLayout(
     } else {
       const sign = dy > 0 ? 1 : -1;
       if (endConvex) {
-        cursorEnd = edge.p2.y + sign * mmToGrid(nextDist);
+        cursorEnd = edge.p2.y + sign * nextDistGrid;
       } else if (nextEdge.handrailDir !== edge.handrailDir) {
         cursorEnd = nextScaffold;
       } else {
@@ -359,7 +381,8 @@ export function computeAutoLayout(
     }
 
 
-    const effectiveMm = Math.abs(cursorEnd - cursorStart) * 10;
+    // 1mm精度の建物座標でも float 誤差で `=== 0` 判定が壊れるのを防ぐため整数 mm に正規化
+    const effectiveMm = Math.round(Math.abs(cursorEnd - cursorStart) * 10);
     const candidates = findBestEndCombinations(Math.max(0, effectiveMm));
 
     edgeLayouts.push({
@@ -372,7 +395,7 @@ export function computeAutoLayout(
       cursorEnd,
       candidates,
       selectedIndex: 0,
-      locked: false,
+      locked: lockedIndices.has(edge.index),
     });
   }
 

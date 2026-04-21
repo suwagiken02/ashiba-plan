@@ -3,6 +3,7 @@ import React, { useState } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
 import NumInput from '@/components/ui/NumInput';
+import { GRID_UNIT_MM } from '@/lib/konva/gridUtils';
 
 type Props = { onClose: () => void };
 
@@ -37,7 +38,7 @@ export default function DirectionInputModal({ onClose }: Props) {
     } else {
       // 4方向ボタン: 方向×距離で計算
       const currentLast = directionPoints[directionPoints.length - 1];
-      const distGrid = Math.round(distanceMm / 10);
+      const distGrid = distanceMm / GRID_UNIT_MM;
       next = { ...currentLast };
       if (pendingDirection === 'up') next.y -= distGrid;
       if (pendingDirection === 'down') next.y += distGrid;
@@ -101,7 +102,7 @@ export default function DirectionInputModal({ onClose }: Props) {
         {/* 距離入力 */}
         <div className="flex items-center gap-2">
           <span className="text-sm text-dimension">距離</span>
-          <NumInput value={distanceMm} onChange={setDistanceMm} min={100} step={100}
+          <NumInput value={distanceMm} onChange={setDistanceMm} min={100} step={1}
             className="flex-1 bg-dark-bg border border-dark-border rounded-lg px-3 py-2 text-sm text-right font-mono" />
           <span className="text-xs text-dimension">mm</span>
         </div>
