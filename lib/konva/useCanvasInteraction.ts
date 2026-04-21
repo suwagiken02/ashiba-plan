@@ -248,9 +248,14 @@ export function useCanvasInteraction() {
 
     const onWindowMove = (e: PointerEvent | TouchEvent) => {
       if (!movingElementId.current || !stageRef.current) return;
+      // タッチ由来のイベントか判定（TouchEvent と PointerEvent のタッチモード両方に対応）
+      const isTouchEvent =
+        'touches' in e ||
+        (typeof PointerEvent !== 'undefined' && e instanceof PointerEvent && e.pointerType === 'touch');
       // タッチ操作で長押し未完了なら移動しない
-      if ('touches' in e && !touchDragReady.current) {
-        useDebugStore.getState().addLog(`[Move] BLOCKED ready=false`); // TODO: デバッグ後削除
+      if (isTouchEvent && !touchDragReady.current) {
+        const type = 'touches' in e ? 'touch' : 'pointer-touch'; // TODO: デバッグ後削除
+        useDebugStore.getState().addLog(`[Move] BLOCKED ready=false type=${type}`); // TODO: デバッグ後削除
         return;
       }
       // dragStartがnullでも、movingElementIdがあれば初期化して続行
@@ -338,6 +343,38 @@ export function useCanvasInteraction() {
       window.removeEventListener('touchmove', onWindowMove as EventListener);
       window.removeEventListener('touchend', onWindowUp as EventListener);
     };
+  }, []);
+
+  // TODO: デバッグ後削除 - handrails の座標を RAF で毎フレーム監視（直接ミューテーションも検出）
+  useEffect(() => {
+    let rafId = 0;
+    let snapshot: string = '';
+    let tickCount = 0;
+    useDebugStore.getState().addLog('[RAF] mounted'); // マウント確認
+    const tick = () => {
+      tickCount++;
+      if (tickCount % 120 === 0) {
+        // 約2秒ごとにheartbeat
+        useDebugStore.getState().addLog(`[RAF] alive tick=${tickCount}`);
+      }
+      const hs = useCanvasStore.getState().canvasData.handrails;
+      const current = hs.map(h => `${h.id.slice(0,8)}:${h.x},${h.y}`).join('|');
+      if (snapshot && current !== snapshot) {
+        const prevMap = new Map(snapshot.split('|').map(s => { const [id, xy] = s.split(':'); return [id, xy]; }));
+        for (const h of hs) {
+          const id8 = h.id.slice(0,8);
+          const prev = prevMap.get(id8);
+          const cur = `${h.x},${h.y}`;
+          if (prev && prev !== cur) {
+            useDebugStore.getState().addLog(`[RAF WATCH] handrail ${id8} ${prev}→${cur}`);
+          }
+        }
+      }
+      snapshot = current;
+      rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
   }, []);
 
   // 画面座標をグリッド座標に変換
@@ -571,6 +608,9 @@ export function useCanvasInteraction() {
 
   const handleStageMouseMove = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+      // TODO: デバッグ後削除
+      const isTouch = 'touches' in e.evt;
+      useDebugStore.getState().addLog(`[StageMove] type=${e.type} touch=${isTouch} moving=${movingElementId.current?.slice(0,8) || 'none'}`);
       if ('touches' in e.evt && (e.evt as TouchEvent).touches.length >= 2) return;
 
       const stage = e.target.getStage();
@@ -647,6 +687,8 @@ export function useCanvasInteraction() {
 
   const handleStageMouseUp = useCallback(
     (e: Konva.KonvaEventObject<MouseEvent | TouchEvent>) => {
+      // TODO: デバッグ後削除
+      useDebugStore.getState().addLog(`[StageUp] type=${e.type}`);
       if (longPressTimer.current) {
         clearTimeout(longPressTimer.current);
         longPressTimer.current = null;

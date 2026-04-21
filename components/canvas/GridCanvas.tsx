@@ -22,6 +22,7 @@ import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
 import { getAllExistingVertices } from '@/lib/konva/snapUtils';
 import { getPrintAreaGrid } from '@/lib/export/pdfExport';
+import { useDebugStore } from '@/components/debug/DebugPanel'; // TODO: デバッグ後削除
 
 type Props = {
   width: number;
@@ -37,6 +38,39 @@ export default function GridCanvas({ width, height, showDimensionLines = false }
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
   const colorGridMajor = isDarkMode ? 'rgba(0,255,65,0.35)' : '#d0cfcb';
   const { handleStageMouseDown, handleStageMouseMove, handleStageMouseUp, selectionRect } = useCanvasInteraction();
+
+  // TODO: デバッグ後削除 - GridCanvas トップで RAF 監視（直接ミューテーションも検出）
+  useEffect(() => {
+    useDebugStore.getState().addLog('[GridCanvas] mounted');
+    let prevRef = useCanvasStore.getState().canvasData.handrails;
+    let tickCount = 0;
+    const rafLoop = () => {
+      tickCount++;
+      if (tickCount % 60 === 0) {
+        useDebugStore.getState().addLog(`[RAF] tick=${tickCount}`);
+      }
+      const current = useCanvasStore.getState().canvasData.handrails;
+      if (current !== prevRef) {
+        useDebugStore.getState().addLog(`[RAF] handrails ref changed len=${current.length}`);
+        prevRef = current;
+      }
+      for (let i = 0; i < current.length; i++) {
+        const h = current[i];
+        const hRef = h as unknown as { __lastX?: number; __lastY?: number };
+        if (hRef.__lastX !== undefined && (hRef.__lastX !== h.x || hRef.__lastY !== h.y)) {
+          useDebugStore.getState().addLog(`[RAF COORD CHANGED] id=${h.id.slice(0,8)} (${hRef.__lastX},${hRef.__lastY})→(${h.x},${h.y})`);
+        }
+        hRef.__lastX = h.x;
+        hRef.__lastY = h.y;
+      }
+      rafId = requestAnimationFrame(rafLoop);
+    };
+    let rafId = requestAnimationFrame(rafLoop);
+    return () => {
+      cancelAnimationFrame(rafId);
+      useDebugStore.getState().addLog('[GridCanvas] unmounted');
+    };
+  }, []);
 
   // ピンチズーム用
   const lastDist = useRef<number>(0);

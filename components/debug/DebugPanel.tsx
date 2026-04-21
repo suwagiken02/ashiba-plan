@@ -11,7 +11,7 @@ interface DebugStore {
 export const useDebugStore = create<DebugStore>((set) => ({
   logs: [],
   addLog: (msg) => set((s) => ({
-    logs: [...s.logs.slice(-9), `${new Date().toLocaleTimeString().slice(3)} ${msg}`]
+    logs: [...s.logs.slice(-49), `${new Date().toLocaleTimeString().slice(3)} ${msg}`]
   })),
   clearLogs: () => set({ logs: [] }),
 }));
@@ -25,7 +25,7 @@ export default function DebugPanel() {
       top: 60,
       right: 4,
       width: 200,
-      maxHeight: 180,
+      maxHeight: 400,
       overflowY: 'auto',
       background: 'rgba(0,0,0,0.9)',
       color: '#0f0',

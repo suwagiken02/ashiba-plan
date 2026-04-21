@@ -16,6 +16,13 @@ const TOL = 3;
 export default function ScaffoldLayer() {
   const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode, highlightIds, isReorderMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
+  // TODO: デバッグ後削除 - 選択中の手摺の座標を毎レンダーでログ
+  if (selectedIds.length > 0) {
+    const sel = canvasData.handrails.find(h => selectedIds.includes(h.id));
+    if (sel) {
+      useDebugStore.getState().addLog(`[Render] sel=${sel.id.slice(0,8)} x=${sel.x} y=${sel.y} pan=${Math.round(panX)},${Math.round(panY)} z=${zoom.toFixed(2)}`);
+    }
+  }
 
   // 同一ラインごとにグループ化してカラーインデックスを割り当て
   const lineColorMap = useMemo(() => {
@@ -85,7 +92,8 @@ export default function ScaffoldLayer() {
               listening={mode === 'select' || mode === 'erase'}
               id={anti.id}
               draggable={false} /* TODO: デバッグ用 一時false */
-              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
+              onDragStart={(e) => { useDebugStore.getState().addLog(`[Konva DragStart] anti id=${anti.id.slice(0,8)}`); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
+              onDragMove={(e) => { useDebugStore.getState().addLog(`[Konva DragMove] anti id=${anti.id.slice(0,8)} x=${e.target.x().toFixed(0)} y=${e.target.y().toFixed(0)}`); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
@@ -141,7 +149,9 @@ export default function ScaffoldLayer() {
               listening={true}
               id={h.id}
               draggable={false} /* TODO: デバッグ用 一時false */
-              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
+              onDragStart={(e) => { useDebugStore.getState().addLog(`[Konva DragStart] handrail id=${h.id.slice(0,8)}`); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
+              onDragMove={(e) => { useDebugStore.getState().addLog(`[Konva DragMove] handrail id=${h.id.slice(0,8)} x=${e.target.x().toFixed(0)} y=${e.target.y().toFixed(0)}`); }} // TODO: デバッグ後削除
+              onPointerMove={() => { useDebugStore.getState().addLog(`[Line PointerMove] id=${h.id.slice(0,8)}`); }} // TODO: デバッグ後削除
               onClick={() => handleHandrailClick(h.id)}
               onTap={() => handleHandrailClick(h.id)}
               onDragEnd={(e) => {
@@ -211,7 +221,8 @@ export default function ScaffoldLayer() {
               listening={mode === 'select' || mode === 'erase'}
               id={p.id}
               draggable={false} /* TODO: デバッグ用 一時false */
-              onDragStart={() => { useDebugStore.getState().addLog('[Konva DragStart] scaffold'); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
+              onDragStart={(e) => { useDebugStore.getState().addLog(`[Konva DragStart] post id=${p.id.slice(0,8)}`); useCanvasStore.getState().pushHistory(); }} // TODO: デバッグ後削除
+              onDragMove={(e) => { useDebugStore.getState().addLog(`[Konva DragMove] post id=${p.id.slice(0,8)} x=${e.target.x().toFixed(0)} y=${e.target.y().toFixed(0)}`); }} // TODO: デバッグ後削除
               onDragEnd={(e) => {
                 const dx = Math.round(e.target.x() / gridPx);
                 const dy = Math.round(e.target.y() / gridPx);
