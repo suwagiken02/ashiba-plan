@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { HandrailLengthMm, HandrailDirection, AntiWidth, ObstacleType } from '@/types';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
-import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints } from '@/lib/konva/snapUtils';
+import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints, snapObstacleToWall } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
 
@@ -256,13 +256,15 @@ export default function PartSelector() {
         useCanvasStore.getState().setSnapPoint(null);
         const cr = getCanvasRect(e);
         if (cr) {
-          const { zoom, panX, panY } = useCanvasStore.getState();
+          const { zoom, panX, panY, canvasData } = useCanvasStore.getState();
           const gridPos = screenToGrid(e.clientX - cr.left, e.clientY - cr.top, panX, panY, zoom);
           const wg = mmToGrid(toolbarDrag.widthMm);
           const hg = mmToGrid(toolbarDrag.heightMm);
+          // 壁スナップを試行。成功ならその位置、失敗ならカーソル中心に配置
+          const snapped = snapObstacleToWall(gridPos, wg, hg, canvasData.buildings);
           useCanvasStore.getState().setObstaclePreview({
-            x: gridPos.x - Math.round(wg / 2),
-            y: gridPos.y - Math.round(hg / 2),
+            x: snapped ? snapped.x : gridPos.x - Math.round(wg / 2),
+            y: snapped ? snapped.y : gridPos.y - Math.round(hg / 2),
             widthGrid: wg, heightGrid: hg,
             type: toolbarDrag.obstacleType,
           });
@@ -341,44 +343,9 @@ export default function PartSelector() {
         } else if (toolbarDrag.type === 'obstacle') {
           const wGrid = mmToGrid(toolbarDrag.widthMm);
           const hGrid = mmToGrid(toolbarDrag.heightMm);
-          let finalX = gridPos.x - Math.round(wGrid / 2);
-          let finalY = gridPos.y - Math.round(hGrid / 2);
-
-          if (canvasData.buildings.length > 0) {
-            let bestDist = Infinity;
-            for (const b of canvasData.buildings) {
-              for (let i = 0; i < b.points.length; i++) {
-                const p1 = b.points[i];
-                const p2 = b.points[(i + 1) % b.points.length];
-                const dx = p2.x - p1.x;
-                const dy = p2.y - p1.y;
-                const len = Math.sqrt(dx * dx + dy * dy);
-                if (len < 1) continue;
-                const t = Math.max(0, Math.min(1, ((gridPos.x - p1.x) * dx + (gridPos.y - p1.y) * dy) / (len * len)));
-                const projX = p1.x + t * dx;
-                const projY = p1.y + t * dy;
-                const dist = Math.hypot(gridPos.x - projX, gridPos.y - projY);
-                if (dist < bestDist && dist < mmToGrid(2000)) {
-                  bestDist = dist;
-                  const cx = b.points.reduce((s, p) => s + p.x, 0) / b.points.length;
-                  const cy = b.points.reduce((s, p) => s + p.y, 0) / b.points.length;
-                  let nx = -dy / len;
-                  let ny = dx / len;
-                  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-                  if (Math.hypot(mid.x + nx - cx, mid.y + ny - cy) < Math.hypot(mid.x - cx, mid.y - cy)) { nx = -nx; ny = -ny; }
-                  const isHorizEdge = Math.abs(dy) < Math.abs(dx);
-                  if (isHorizEdge) {
-                    finalX = Math.round(projX - wGrid / 2);
-                    finalY = ny > 0 ? Math.round(projY) : Math.round(projY - hGrid);
-                  } else {
-                    finalX = nx > 0 ? Math.round(projX) : Math.round(projX - wGrid);
-                    finalY = Math.round(projY - hGrid / 2);
-                  }
-                }
-              }
-            }
-          }
-
+          const snapped = snapObstacleToWall(gridPos, wGrid, hGrid, canvasData.buildings);
+          const finalX = snapped ? snapped.x : gridPos.x - Math.round(wGrid / 2);
+          const finalY = snapped ? snapped.y : gridPos.y - Math.round(hGrid / 2);
           addObstacle({ id: uuidv4(), type: toolbarDrag.obstacleType, x: finalX, y: finalY, width: wGrid, height: hGrid });
         }
       }

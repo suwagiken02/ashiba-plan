@@ -4,6 +4,7 @@ import React from 'react';
 import { Layer, Rect, Circle, Text, Line } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
+import { snapObstacleToWall } from '@/lib/konva/snapUtils';
 import { ObstacleType } from '@/types';
 
 const OBSTACLE_COLORS: Record<ObstacleType, string> = {
@@ -62,7 +63,16 @@ export default function ObstacleLayer() {
                   const dx = Math.round(e.target.x() / gridPx);
                   const dy = Math.round(e.target.y() / gridPx);
                   e.target.x(0); e.target.y(0);
-                  if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                  if (dx !== 0 || dy !== 0) {
+                    const newCx = obs.x + dx + obs.width / 2;
+                    const newCy = obs.y + dy + obs.height / 2;
+                    const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
+                    if (snapped) {
+                      useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
+                    } else {
+                      useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                    }
+                  }
                 }}
               />
               {label && (() => {
@@ -107,7 +117,16 @@ export default function ObstacleLayer() {
                   const dx = Math.round((e.target.x() - origX) / gridPx);
                   const dy = Math.round((e.target.y() - origY) / gridPx);
                   e.target.x(origX); e.target.y(origY);
-                  if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                  if (dx !== 0 || dy !== 0) {
+                    const newCx = obs.x + dx + obs.width / 2;
+                    const newCy = obs.y + dy + obs.height / 2;
+                    const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
+                    if (snapped) {
+                      useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
+                    } else {
+                      useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                    }
+                  }
                 }}
               />
               {label && (
@@ -146,7 +165,16 @@ export default function ObstacleLayer() {
                 const dx = Math.round((e.target.x() - screenX) / gridPx);
                 const dy = Math.round((e.target.y() - screenY) / gridPx);
                 e.target.x(screenX); e.target.y(screenY);
-                if (dx !== 0 || dy !== 0) useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                if (dx !== 0 || dy !== 0) {
+                  const newCx = obs.x + dx + obs.width / 2;
+                  const newCy = obs.y + dy + obs.height / 2;
+                  const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
+                  if (snapped) {
+                    useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
+                  } else {
+                    useCanvasStore.getState().moveElement(obs.id, dx, dy);
+                  }
+                }
               }}
             />
             {label && (

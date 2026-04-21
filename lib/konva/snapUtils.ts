@@ -324,3 +324,83 @@ export const angleBetween = (from: Point, to: Point): number => {
   const rad = Math.atan2(to.y - from.y, to.x - from.x);
   return (rad * 180) / Math.PI;
 };
+
+/** 障害物の壁面スナップ範囲（デフォルト 2000mm = 200グリッド） */
+export const OBSTACLE_WALL_SNAP_RANGE_GRID = mmToGrid(2000);
+
+/**
+ * 障害物を建物の壁面にスナップさせ、障害物の左上座標を返す。
+ * 壁に近い場合は壁に沿って配置（外側に接地）、そうでなければ null を返す。
+ *
+ * @param cursor 障害物の想定中心位置（グリッド座標）
+ * @param width 障害物の幅（グリッド単位、ポリゴン障害物はバウンディングボックスの幅）
+ * @param height 障害物の高さ（グリッド単位）
+ * @param buildings 全建物
+ * @param rangeGrid スナップ有効距離（グリッド単位、デフォルト OBSTACLE_WALL_SNAP_RANGE_GRID）
+ * @returns スナップ成功時は左上座標 {x, y}、対象辺がなければ null
+ */
+export function snapObstacleToWall(
+  cursor: Point,
+  width: number,
+  height: number,
+  buildings: BuildingShape[],
+  rangeGrid: number = OBSTACLE_WALL_SNAP_RANGE_GRID,
+): Point | null {
+  let bestDist = Infinity;
+  let result: Point | null = null;
+
+  for (const b of buildings) {
+    const pts = b.points;
+    if (pts.length < 2) continue;
+
+    // 建物中心（外向き法線の判定用）
+    const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
+    const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
+
+    for (let i = 0; i < pts.length; i++) {
+      const p1 = pts[i];
+      const p2 = pts[(i + 1) % pts.length];
+      const ex = p2.x - p1.x;
+      const ey = p2.y - p1.y;
+      const len = Math.sqrt(ex * ex + ey * ey);
+      if (len < 1) continue;
+
+      // カーソルを辺に射影
+      const t = Math.max(0, Math.min(1, ((cursor.x - p1.x) * ex + (cursor.y - p1.y) * ey) / (len * len)));
+      const projX = p1.x + t * ex;
+      const projY = p1.y + t * ey;
+      const dist = Math.hypot(cursor.x - projX, cursor.y - projY);
+
+      if (dist < bestDist && dist < rangeGrid) {
+        bestDist = dist;
+
+        // 外向き法線（建物中心の反対側）
+        let nx = -ey / len;
+        let ny = ex / len;
+        const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
+        if (Math.hypot(mid.x + nx - cx, mid.y + ny - cy) < Math.hypot(mid.x - cx, mid.y - cy)) {
+          nx = -nx;
+          ny = -ny;
+        }
+
+        // 辺の向き（水平寄り or 垂直寄り）で配置方向を決定
+        const isHorizEdge = Math.abs(ey) < Math.abs(ex);
+        if (isHorizEdge) {
+          // 水平辺: 障害物の横中心を projX に合わせ、外向きに接地
+          result = {
+            x: Math.round(projX - width / 2),
+            y: ny > 0 ? Math.round(projY) : Math.round(projY - height),
+          };
+        } else {
+          // 垂直辺: 障害物の縦中心を projY に合わせ、外向きに接地
+          result = {
+            x: nx > 0 ? Math.round(projX) : Math.round(projX - width),
+            y: Math.round(projY - height / 2),
+          };
+        }
+      }
+    }
+  }
+
+  return result;
+}

@@ -5,7 +5,7 @@ import { v4 as uuidv4 } from 'uuid';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from './gridUtils';
-import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGridIntersection, getAllExistingVertices, getAllExistingEdges, snapToVertex, snapToEdge } from './snapUtils';
+import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGridIntersection, getAllExistingVertices, getAllExistingEdges, snapToVertex, snapToEdge, snapObstacleToWall } from './snapUtils';
 import { getHandrailColor } from './handrailColors';
 import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
@@ -293,6 +293,7 @@ export function useCanvasInteraction() {
         } else {
           // キャンバス上にドロップ → スナップ適用
           const currentH = s.canvasData.handrails.find(h => h.id === movingElementId.current);
+          const currentObs = !currentH ? s.canvasData.obstacles.find(o => o.id === movingElementId.current) : null;
           if (currentH) {
             const dir = typeof currentH.direction === 'string' ? currentH.direction : 'horizontal';
             const otherHandrails = s.canvasData.handrails.filter(h => h.id !== movingElementId.current);
@@ -311,6 +312,17 @@ export function useCanvasInteraction() {
               setTimeout(() => s.setSnapPoint(null), 400);
             } else {
               s.setSnapPoint(null);
+            }
+          } else if (currentObs) {
+            // 障害物: 中心を基準に壁スナップ
+            const center = { x: currentObs.x + currentObs.width / 2, y: currentObs.y + currentObs.height / 2 };
+            const snapped = snapObstacleToWall(center, currentObs.width, currentObs.height, s.canvasData.buildings);
+            if (snapped) {
+              const snapDx = snapped.x - currentObs.x;
+              const snapDy = snapped.y - currentObs.y;
+              if (snapDx !== 0 || snapDy !== 0) {
+                s.moveElement(movingElementId.current!, snapDx, snapDy);
+              }
             }
           }
         }
