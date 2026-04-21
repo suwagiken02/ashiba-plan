@@ -317,6 +317,16 @@ export function useCanvasInteraction() {
             // 障害物: 中心を基準に壁スナップ
             const center = { x: currentObs.x + currentObs.width / 2, y: currentObs.y + currentObs.height / 2 };
             const snapped = snapObstacleToWall(center, currentObs.width, currentObs.height, s.canvasData.buildings);
+            // TODO: デバッグ後削除
+            console.log('[Obstacle Touch Drag Snap]', {
+              obsId: currentObs.id.slice(0, 8),
+              obsXY: { x: currentObs.x, y: currentObs.y },
+              obsWH: { w: currentObs.width, h: currentObs.height },
+              center,
+              buildingCount: s.canvasData.buildings.length,
+              snapped,
+              willUseSnap: snapped !== null,
+            });
             if (snapped) {
               const snapDx = snapped.x - currentObs.x;
               const snapDy = snapped.y - currentObs.y;
