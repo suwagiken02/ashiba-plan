@@ -60,7 +60,7 @@ function isClockwise(pts: Point[]): boolean {
   return sum > 0;
 }
 
-function isPointInPolygon(px: number, py: number, polygon: Point[]): boolean {
+export function isPointInPolygon(px: number, py: number, polygon: Point[]): boolean {
   let inside = false;
   const n = polygon.length;
   for (let i = 0, j = n - 1; i < n; j = i++) {
@@ -449,4 +449,31 @@ export function placeHandrailsForEdge(
   }
 
   return results;
+}
+
+// ============================================================
+// target 建物の辺のうち、cover 建物で「覆われていない」辺を返す。
+// 判定: target の辺の中点から外向き法線方向に 1 グリッド (=10mm) ずらした点が
+//      cover ポリゴンの「外側」にあれば、その辺は cover で覆われていない。
+//
+// 使用例（1F+2F同時モード）:
+//   getEdgesNotCoveredBy(building1F, building2F)
+//     → 1F のうち 2F で覆えない辺（＝下屋部分）に 1F 足場必要
+//   2F 側は常に全周足場なので、この関数で絞り込む必要なし
+// ============================================================
+export function getEdgesNotCoveredBy(
+  target: BuildingShape,
+  cover: BuildingShape,
+): EdgeInfo[] {
+  const edges = getBuildingEdgesClockwise(target);
+  const polyCover = cover.points;
+  return edges.filter(edge => {
+    const midX = (edge.p1.x + edge.p2.x) / 2;
+    const midY = (edge.p1.y + edge.p2.y) / 2;
+    // 外向きに 1 グリッド = 10mm ずらす
+    const testX = midX + edge.nx * 1;
+    const testY = midY + edge.ny * 1;
+    // cover ポリゴンの外側なら覆われていない
+    return !isPointInPolygon(testX, testY, polyCover);
+  });
 }
