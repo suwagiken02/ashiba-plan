@@ -377,6 +377,13 @@ export function useCanvasInteraction() {
       const rawPos = toGrid(stage, clientPos);
       const s = useCanvasStore.getState();
 
+      // 足場一括移動モード: stage 全体のドラッグで全部材を平行移動
+      if (s.mode === 'move-scaffold') {
+        dragStart.current = rawPos;
+        isDragging.current = false;
+        return;
+      }
+
       // 寸法計測モード
       if (s.isMeasuring) {
         // タッチイベント後500ms以内のmousedownは無視（ゴースト発火対策）
@@ -602,6 +609,20 @@ export function useCanvasInteraction() {
         return;
       }
 
+      // 足場一括移動モード: stage ドラッグ追従
+      if (s.mode === 'move-scaffold' && dragStart.current) {
+        const gridPos = toGrid(stage, clientPos);
+        const dx = gridPos.x - dragStart.current.x;
+        const dy = gridPos.y - dragStart.current.y;
+        // 0.1 grid = 1mm 未満の微小変位は無視（ノイズ抑制）
+        if (Math.abs(dx) >= 0.1 || Math.abs(dy) >= 0.1) {
+          useCanvasStore.getState().shiftAllScaffolds(dx * 10, dy * 10);
+          dragStart.current = gridPos;
+          isDragging.current = true;
+        }
+        return;
+      }
+
       if (!dragStart.current) return;
       isDragging.current = true;
 
@@ -670,6 +691,13 @@ export function useCanvasInteraction() {
 
       const gridPos = toGrid(stage, clientPos);
       const s = useCanvasStore.getState();
+
+      // 足場一括移動モード: ドラッグ終了処理
+      if (s.mode === 'move-scaffold') {
+        dragStart.current = null;
+        isDragging.current = false;
+        return;
+      }
 
       // 手摺モード: キャンバスドラッグでの配置は無効化（パレットD&Dのみ）
       s.setHandrailPreview(null);

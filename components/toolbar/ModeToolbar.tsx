@@ -124,17 +124,16 @@ export default function ModeToolbar() {
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowAshibaMenu(false)} />
           <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3 flex-wrap justify-center max-w-[calc(100vw-32px)]">
-            {/* 移動（Phase 2で実装予定のプレースホルダ） */}
+            {/* 移動（足場一括移動モードに入る） */}
             <button
               onClick={() => {
-                alert('「移動」機能は実装中です');
+                useCanvasStore.getState().enterScaffoldMoveMode();
                 setShowAshibaMenu(false);
               }}
-              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-dark-bg border-2 border-dark-border text-dimension hover:border-accent/50 transition-colors"
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
             >
               <span className="text-3xl mb-1">↔</span>
               <span className="text-xs font-bold">移動</span>
-              <span className="text-[9px] opacity-60">実装中</span>
             </button>
             {/* 入れ替え（既存の toggleReorderMode を呼ぶ） */}
             <button

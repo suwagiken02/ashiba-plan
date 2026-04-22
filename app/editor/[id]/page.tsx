@@ -17,6 +17,7 @@ import RoofSettingsModal from '@/components/building/RoofSettingsModal';
 import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
+import ScaffoldMoveControlPanel from '@/components/scaffold/ScaffoldMoveControlPanel';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import DirectionInputModal from '@/components/building/DirectionInputModal';
@@ -541,6 +542,9 @@ export default function EditorPage() {
 
       {/* モードツールバー */}
       <ModeToolbar />
+
+      {/* 足場一括移動モードの中央コントロールパネル */}
+      <ScaffoldMoveControlPanel />
 
       {/* 壁方向入力の確定ボタン */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (

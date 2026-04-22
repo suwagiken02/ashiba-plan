@@ -189,6 +189,17 @@ type CanvasStore = {
   selectedLineIds: string[];
   setSelectedLineIds: (ids: string[]) => void;
 
+  // 足場一括移動モード
+  scaffoldMoveBackup: { handrails: Handrail[]; posts: Post[]; antis: Anti[] } | null;
+  scaffoldMoveStep: 1 | 10 | 100;
+  setScaffoldMoveStep: (s: 1 | 10 | 100) => void;
+  enterScaffoldMoveMode: () => void;
+  commitScaffoldMoveMode: () => void;
+  cancelScaffoldMoveMode: () => void;
+  resetScaffoldMoveMode: () => void;
+  /** 全足場部材を平行移動（引数は mm 単位、内部で 1/10 してグリッドに反映） */
+  shiftAllScaffolds: (dxMm: number, dyMm: number) => void;
+
   // 2F仮配置
   building2FDraft: {
     points: { x: number; y: number }[];
@@ -403,6 +414,73 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   },
   selectedLineIds: [],
   setSelectedLineIds: (ids) => set({ selectedLineIds: ids }),
+
+  // --- 足場一括移動モード ---
+  scaffoldMoveBackup: null,
+  scaffoldMoveStep: 10,
+  setScaffoldMoveStep: (s) => set({ scaffoldMoveStep: s }),
+  enterScaffoldMoveMode: () => {
+    const { canvasData } = get();
+    // ディープコピーで移動前状態を保持（commit/cancel/reset 用）
+    set({
+      scaffoldMoveBackup: {
+        handrails: JSON.parse(JSON.stringify(canvasData.handrails)),
+        posts: JSON.parse(JSON.stringify(canvasData.posts)),
+        antis: JSON.parse(JSON.stringify(canvasData.antis)),
+      },
+      mode: 'move-scaffold',
+      selectedIds: [],
+    });
+  },
+  commitScaffoldMoveMode: () => {
+    // 現在の位置を確定。履歴を1スナップ残し、モード終了。
+    get().pushHistory();
+    set({ scaffoldMoveBackup: null, mode: 'select', isDirty: true });
+  },
+  cancelScaffoldMoveMode: () => {
+    const backup = get().scaffoldMoveBackup;
+    if (!backup) { set({ mode: 'select' }); return; }
+    const { canvasData } = get();
+    set({
+      canvasData: {
+        ...canvasData,
+        handrails: backup.handrails,
+        posts: backup.posts,
+        antis: backup.antis,
+      },
+      scaffoldMoveBackup: null,
+      mode: 'select',
+    });
+  },
+  resetScaffoldMoveMode: () => {
+    const backup = get().scaffoldMoveBackup;
+    if (!backup) return;
+    const { canvasData } = get();
+    // バックアップの複製を再配置（以後の移動で backup を書き換えないため）
+    set({
+      canvasData: {
+        ...canvasData,
+        handrails: JSON.parse(JSON.stringify(backup.handrails)),
+        posts: JSON.parse(JSON.stringify(backup.posts)),
+        antis: JSON.parse(JSON.stringify(backup.antis)),
+      },
+    });
+  },
+  shiftAllScaffolds: (dxMm, dyMm) => {
+    if (dxMm === 0 && dyMm === 0) return;
+    const dx = dxMm / 10; // mm → grid（1mm=0.1グリッド、小数精度維持）
+    const dy = dyMm / 10;
+    const { canvasData } = get();
+    set({
+      canvasData: {
+        ...canvasData,
+        handrails: canvasData.handrails.map(h => ({ ...h, x: h.x + dx, y: h.y + dy })),
+        posts: canvasData.posts.map(p => ({ ...p, x: p.x + dx, y: p.y + dy })),
+        antis: canvasData.antis.map(a => ({ ...a, x: a.x + dx, y: a.y + dy })),
+      },
+      isDirty: true,
+    });
+  },
   reorderHandrails: (lineIds: string[], newOrder: string[]) => {
     const { canvasData } = get();
     const lineGroup = canvasData.handrails.filter(h => lineIds.includes(h.id));
