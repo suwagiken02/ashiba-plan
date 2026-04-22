@@ -90,23 +90,20 @@ export default function DimensionLayer() {
   const gy = (g: number) => g * gridPx + panY;
   const elements: React.ReactElement[] = [];
 
-  // 全手摺の端点
+  const scaffoldStart = canvasData.scaffoldStart;
+  // scaffoldStart の階に合致する建物を対象に、同階の手摺だけで端点を集める
+  const targetFloor = scaffoldStart?.floor ?? 1;
+
+  // 全手摺の端点（同階のみ）
   const eps: { x: number; y: number }[] = [];
   for (const h of canvasData.handrails) {
+    if ((h.floor ?? 1) !== targetFloor) continue;
     const [p1, p2] = getHandrailEndpoints(h);
     eps.push(p1, p2);
   }
 
-  // [DEBUG] 全端点のX/Y座標をダンプ
-  const uniqueXs = Array.from(new Set(eps.map(ep => ep.x))).sort((a, b) => a - b);
-  const uniqueYs = Array.from(new Set(eps.map(ep => ep.y))).sort((a, b) => a - b);
-  console.log(`[DimLayer] all endpoint Xs: [${uniqueXs.join(', ')}]`);
-  console.log(`[DimLayer] all endpoint Ys: [${uniqueYs.join(', ')}]`);
-
-  const scaffoldStart = canvasData.scaffoldStart;
-
   if (scaffoldStart && canvasData.buildings.length > 0) {
-    const building = canvasData.buildings[0];
+    const building = canvasData.buildings.find(b => (b.floor ?? 1) === targetFloor) ?? canvasData.buildings[0];
     const edges = getBuildingEdgesClockwise(building);
     const n = edges.length;
     if (n < 3) return <Layer listening={false} />;

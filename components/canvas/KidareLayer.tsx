@@ -20,17 +20,24 @@ export default function KidareLayer() {
   const gy = (g: number) => g * gridPx + panY;
   const elements: React.ReactElement[] = [];
 
-  const building = canvasData.buildings[0];
-  const edges = getBuildingEdgesClockwise(building);
+  // 全建物を iterate し、建物の階層と一致する手摺の端点だけを検索対象にする。
+  // これにより 2F 建物 ⇔ 2F 手摺 / 1F 建物 ⇔ 1F 手摺 の組合せで離れが表示される。
+  for (const building of canvasData.buildings) {
+    const buildingFloor = (building.floor ?? 1);
+    const edges = getBuildingEdgesClockwise(building);
 
-  // 全手摺の端点
-  const eps: { x: number; y: number }[] = [];
-  for (const h of canvasData.handrails) {
-    const [p1, p2] = getHandrailEndpoints(h);
-    eps.push(p1, p2);
-  }
+    // この建物の階層と一致する手摺の端点
+    const eps: { x: number; y: number }[] = [];
+    for (const h of canvasData.handrails) {
+      if ((h.floor ?? 1) !== buildingFloor) continue;
+      const [p1, p2] = getHandrailEndpoints(h);
+      eps.push(p1, p2);
+    }
+    if (eps.length === 0) continue;
 
-  edges.forEach((edge, i) => {
+    const floorKey = `f${buildingFloor}`;
+
+    edges.forEach((edge, i) => {
     const isH = edge.face === 'north' || edge.face === 'south';
 
     // 足場ラインのグリッド座標を推定（手摺端点から）
@@ -67,15 +74,15 @@ export default function KidareLayer() {
       const a = ARROW * zoom;
 
       elements.push(
-        <Line key={`k-${i}`} points={[x1, y1, x1, y2]}
+        <Line key={`${floorKey}-k-${i}`} points={[x1, y1, x1, y2]}
           stroke={COLOR} strokeWidth={1.5} listening={false} />,
-        <Line key={`ka-${i}`} points={[x1-a, y1+a*Math.sign(y2-y1), x1, y1, x1+a, y1+a*Math.sign(y2-y1)]}
+        <Line key={`${floorKey}-ka-${i}`} points={[x1-a, y1+a*Math.sign(y2-y1), x1, y1, x1+a, y1+a*Math.sign(y2-y1)]}
           stroke={COLOR} strokeWidth={1.5} listening={false} />,
-        <Line key={`kb-${i}`} points={[x1-a, y2-a*Math.sign(y2-y1), x1, y2, x1+a, y2-a*Math.sign(y2-y1)]}
+        <Line key={`${floorKey}-kb-${i}`} points={[x1-a, y2-a*Math.sign(y2-y1), x1, y2, x1+a, y2-a*Math.sign(y2-y1)]}
           stroke={COLOR} strokeWidth={1.5} listening={false} />,
-        <Rect key={`kr-${i}`} x={x1-18} y={(y1+y2)/2-9} width={36} height={18}
+        <Rect key={`${floorKey}-kr-${i}`} x={x1-18} y={(y1+y2)/2-9} width={36} height={18}
           fill="white" opacity={0.8} cornerRadius={2} listening={false} />,
-        <Text key={`kt-${i}`} x={x1-18} y={(y1+y2)/2-7}
+        <Text key={`${floorKey}-kt-${i}`} x={x1-18} y={(y1+y2)/2-7}
           text={`${distMm}`} fontSize={12} fontFamily="monospace" fontStyle="bold"
           fill={COLOR} width={36} align="center" listening={false} />,
       );
@@ -109,20 +116,21 @@ export default function KidareLayer() {
       const a = ARROW * zoom;
 
       elements.push(
-        <Line key={`k-${i}`} points={[x1, y1, x2, y1]}
+        <Line key={`${floorKey}-k-${i}`} points={[x1, y1, x2, y1]}
           stroke={COLOR} strokeWidth={1.5} listening={false} />,
-        <Line key={`ka-${i}`} points={[x1+a*Math.sign(x2-x1), y1-a, x1, y1, x1+a*Math.sign(x2-x1), y1+a]}
+        <Line key={`${floorKey}-ka-${i}`} points={[x1+a*Math.sign(x2-x1), y1-a, x1, y1, x1+a*Math.sign(x2-x1), y1+a]}
           stroke={COLOR} strokeWidth={1.5} listening={false} />,
-        <Line key={`kb-${i}`} points={[x2-a*Math.sign(x2-x1), y1-a, x2, y1, x2-a*Math.sign(x2-x1), y1+a]}
+        <Line key={`${floorKey}-kb-${i}`} points={[x2-a*Math.sign(x2-x1), y1-a, x2, y1, x2-a*Math.sign(x2-x1), y1+a]}
           stroke={COLOR} strokeWidth={1.5} listening={false} />,
-        <Rect key={`kr-${i}`} x={(x1+x2)/2-18} y={y1-9} width={36} height={18}
+        <Rect key={`${floorKey}-kr-${i}`} x={(x1+x2)/2-18} y={y1-9} width={36} height={18}
           fill="white" opacity={0.8} cornerRadius={2} listening={false} />,
-        <Text key={`kt-${i}`} x={(x1+x2)/2-18} y={y1-7}
+        <Text key={`${floorKey}-kt-${i}`} x={(x1+x2)/2-18} y={y1-7}
           text={`${distMm}`} fontSize={12} fontFamily="monospace" fontStyle="bold"
           fill={COLOR} width={36} align="center" listening={false} />,
       );
     }
   });
+  } // end of for (building of buildings)
 
   return <Layer listening={false}>{elements}</Layer>;
 }
