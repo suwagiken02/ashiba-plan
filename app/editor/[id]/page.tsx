@@ -18,6 +18,7 @@ import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import ScaffoldMoveControlPanel from '@/components/scaffold/ScaffoldMoveControlPanel';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import DirectionInputModal from '@/components/building/DirectionInputModal';
@@ -147,6 +148,11 @@ export default function EditorPage() {
     updateSize();
     window.addEventListener('resize', updateSize);
     return () => window.removeEventListener('resize', updateSize);
+  }, []);
+
+  // 部材設定を（まだ読み込まれていなければ）DB からロード
+  useEffect(() => {
+    useHandrailSettingsStore.getState().loadHandrailSettings();
   }, []);
 
   // 図面データ読み込み

@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { supabase } from '@/lib/supabase/client';
 import { Project } from '@/types';
 
@@ -30,6 +31,8 @@ export default function ProjectsPage() {
 
   useEffect(() => {
     loadSession().then(() => loadProjects());
+    // 部材設定（手摺サイズの有効/無効）を DB からロード
+    useHandrailSettingsStore.getState().loadHandrailSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

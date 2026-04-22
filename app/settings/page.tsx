@@ -3,11 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { supabase } from '@/lib/supabase/client';
+import { ALL_HANDRAIL_SIZES } from '@/types';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user, profile, updateProfile } = useAuthStore();
+  const { enabledSizes, loading: handrailLoading, loadHandrailSettings, toggleSize } = useHandrailSettingsStore();
   const [companyName, setCompanyName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -15,6 +18,11 @@ export default function SettingsPage() {
   useEffect(() => {
     if (profile) setCompanyName(profile.company_name || '');
   }, [profile]);
+
+  // 部材設定を初回ロード
+  useEffect(() => {
+    loadHandrailSettings();
+  }, [loadHandrailSettings]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -85,6 +93,46 @@ export default function SettingsPage() {
             >
               {saving ? '保存中...' : saved ? '保存しました' : '保存'}
             </button>
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-sm text-dimension mb-2 font-bold">部材設定</h2>
+          <div className="bg-dark-surface border border-dark-border rounded-xl p-4">
+            <p className="text-xs text-dimension mb-3">
+              会社で保有している手摺サイズのみ ON にしてください。<br />
+              OFF のサイズは自動割付・パレットで使用されません。
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_HANDRAIL_SIZES.map((size) => {
+                const on = enabledSizes.includes(size);
+                const disabled = handrailLoading || (on && enabledSizes.length <= 1);
+                return (
+                  <label
+                    key={size}
+                    className={`flex items-center justify-between px-3 py-2 rounded-lg border transition-colors cursor-pointer ${
+                      on ? 'border-accent bg-accent/10' : 'border-dark-border bg-dark-bg'
+                    } ${disabled && !on ? 'opacity-40' : ''}`}
+                  >
+                    <span className={`text-sm font-mono font-bold ${on ? 'text-accent' : 'text-dimension'}`}>
+                      {size}mm
+                    </span>
+                    <input
+                      type="checkbox"
+                      checked={on}
+                      disabled={disabled && on}
+                      onChange={() => toggleSize(size)}
+                      className="w-5 h-5 accent-accent"
+                    />
+                  </label>
+                );
+              })}
+            </div>
+            {enabledSizes.length <= 1 && (
+              <p className="mt-2 text-[11px] text-yellow-500">
+                最低 1 サイズは ON にしておく必要があります
+              </p>
+            )}
           </div>
         </section>
 

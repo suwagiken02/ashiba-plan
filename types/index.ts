@@ -64,7 +64,18 @@ export type Obstacle = {
 };
 
 // === 手摺 ===
-export type HandrailLengthMm = 1800 | 1200 | 900 | 600 | 400 | 300 | 200;
+export type HandrailLengthMm = 1800 | 1500 | 1200 | 1000 | 900 | 800 | 600 | 500 | 400 | 300 | 200 | 100;
+
+/** 部材設定で選択できる全サイズ（降順） */
+export const ALL_HANDRAIL_SIZES: HandrailLengthMm[] = [1800, 1500, 1200, 1000, 900, 800, 600, 500, 400, 300, 200, 100];
+
+/** デフォルトで ON のサイズ */
+export const DEFAULT_ENABLED_SIZES: HandrailLengthMm[] = [1800, 1200, 900, 600, 400, 300, 200];
+
+export type HandrailSettings = {
+  enabledSizes: HandrailLengthMm[];
+};
+
 export type HandrailDirection = 'horizontal' | 'vertical' | number;
 
 export type Handrail = {
