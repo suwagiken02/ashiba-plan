@@ -177,9 +177,7 @@ type CanvasStore = {
   showInnerPost: boolean;
   setShowInnerPost: (show: boolean) => void;
 
-  // コーナーガイド・グリッド強弱
-  showCornerGuide: boolean;
-  toggleShowCornerGuide: () => void;
+  // グリッド強弱
   gridStrength: number;
   setGridStrength: (s: number) => void;
 
@@ -412,8 +410,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   showInnerPost: false,
   setShowInnerPost: (show) => set({ showInnerPost: show }),
 
-  showCornerGuide: false,
-  toggleShowCornerGuide: () => set({ showCornerGuide: !get().showCornerGuide }),
   gridStrength: 1,
   setGridStrength: (s) => set({ gridStrength: s }),
 

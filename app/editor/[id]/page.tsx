@@ -104,8 +104,6 @@ export default function EditorPage() {
     addObstacle,
     showDirectionGuide,
     toggleDirectionGuide,
-    showCornerGuide,
-    toggleShowCornerGuide,
     isMeasuring,
     toggleMeasuring,
     measureResultMm,
