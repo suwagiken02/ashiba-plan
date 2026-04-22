@@ -36,17 +36,25 @@ export default function ScaffoldStartModal({ onClose }: Props) {
     [enabledSizes],
   );
 
-  // 建物の辺情報を取得
+  // 対象階の選択（初期は 1F）
+  const [targetFloor, setTargetFloor] = useState<1 | 2>(1);
+
+  // 対象階に合致する最初の建物
+  const targetBuilding = useMemo(
+    () => canvasData.buildings.find(b => (b.floor ?? 1) === targetFloor) ?? null,
+    [canvasData.buildings, targetFloor],
+  );
+
+  // 建物の辺情報を取得（対象階の建物基準）
   const edgeInfo = useMemo(() => {
-    if (!canvasData.buildings.length) return null;
-    const building = canvasData.buildings[0];
-    const edges = getBuildingEdgesClockwise(building);
+    if (!targetBuilding) return null;
+    const edges = getBuildingEdgesClockwise(targetBuilding);
     if (edges.length < 3) return null;
     const pts = edges.map(e => e.p1);
     const cx = pts.reduce((s, p) => s + p.x, 0) / pts.length;
     const cy = pts.reduce((s, p) => s + p.y, 0) / pts.length;
     return { edges, pts, center: { x: cx, y: cy } };
-  }, [canvasData.buildings]);
+  }, [targetBuilding]);
 
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [face1Distance, setFace1Distance] = useState(900);
@@ -82,7 +90,7 @@ export default function ScaffoldStartModal({ onClose }: Props) {
   }, [edgeInfo, selectedIdx]);
 
   const handleConfirm = () => {
-    if (!edgeInfo || !canvasData.buildings.length) { onClose(); return; }
+    if (!edgeInfo || !targetBuilding) { onClose(); return; }
     const { edges, pts, center } = edgeInfo;
     const n = edges.length;
     const vtx = pts[selectedIdx % n];
@@ -103,6 +111,7 @@ export default function ScaffoldStartModal({ onClose }: Props) {
       face2DistanceMm: face2Distance,
       face1FirstHandrail: face1Handrail,
       face2FirstHandrail: face2Handrail,
+      floor: targetFloor,
     });
 
     const d1 = mmToGrid(face1Distance);
@@ -136,11 +145,13 @@ export default function ScaffoldStartModal({ onClose }: Props) {
       id: uuidv4(), x: h1x, y: h1y,
       lengthMm: face1Handrail, direction: 'horizontal',
       color: getHandrailColor(face1Handrail),
+      floor: targetFloor,
     });
     addHandrail({
       id: uuidv4(), x: h2x, y: h2y,
       lengthMm: face2Handrail, direction: 'vertical',
       color: getHandrailColor(face2Handrail),
+      floor: targetFloor,
     });
 
     onClose();
@@ -159,6 +170,33 @@ export default function ScaffoldStartModal({ onClose }: Props) {
         </div>
 
         <div className="p-4 space-y-6">
+          {/* 対象階 */}
+          <div>
+            <label className="block text-sm text-dimension mb-2">対象階</label>
+            <div className="flex gap-2">
+              {([1, 2] as const).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setTargetFloor(f)}
+                  className={`flex-1 py-2 rounded-lg text-sm font-bold border transition-colors ${
+                    targetFloor === f
+                      ? 'border-accent bg-accent/15 text-accent'
+                      : 'border-dark-border text-dimension hover:border-accent/50'
+                  }`}
+                >
+                  {f}F
+                </button>
+              ))}
+            </div>
+            {!targetBuilding && (
+              <p className="text-[11px] text-yellow-500 mt-2">
+                {targetFloor === 2 ? '2F建物が未作成です。' : '建物が未作成です。'}
+                躯体メニューから建物を先に作成してください。
+              </p>
+            )}
+          </div>
+
           {/* スタート頂点の選択 */}
           <div>
             <label className="block text-sm text-dimension mb-2">スタート角を選択</label>
@@ -223,8 +261,12 @@ export default function ScaffoldStartModal({ onClose }: Props) {
           </div>
 
           {/* 確定ボタン */}
-          <button type="button" onClick={handleConfirm}
-            className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg">
+          <button
+            type="button"
+            onClick={handleConfirm}
+            disabled={!targetBuilding}
+            className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg disabled:opacity-40 disabled:cursor-not-allowed"
+          >
             足場開始
           </button>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { Handrail, HandrailLengthMm, Point } from '@/types';
@@ -122,8 +122,24 @@ function formatRailsSummary(rails: HandrailLengthMm[]): string {
 export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props) {
   const { canvasData, addHandrails, removeElements } = useCanvasStore();
   const enabledSizes = useHandrailSettingsStore(s => s.enabledSizes);
-  const building = canvasData.buildings[0];
-  const scaffoldStart = canvasData.scaffoldStart;
+
+  // 対象階（1F / 2F / both=Phase3予定）
+  const [targetFloor, setTargetFloor] = useState<1 | 2>(
+    () => (canvasData.scaffoldStart?.floor ?? 1) as 1 | 2,
+  );
+
+  // 対象階の建物（最初に一致したもの）
+  const building = useMemo(
+    () => canvasData.buildings.find(b => (b.floor ?? 1) === targetFloor) ?? null,
+    [canvasData.buildings, targetFloor],
+  );
+
+  // scaffoldStart は対象階のものだけ有効扱い（別階のを引き継がない）
+  const scaffoldStart = useMemo(() => {
+    const ss = canvasData.scaffoldStart;
+    if (!ss) return undefined;
+    return (ss.floor ?? 1) === targetFloor ? ss : undefined;
+  }, [canvasData.scaffoldStart, targetFloor]);
 
   // 辺リストを取得
   const edges = useMemo(
@@ -162,6 +178,28 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     });
     return d;
   });
+
+  // 対象階切替時は distances をその階用に再構築
+  useEffect(() => {
+    const d: Record<number, number> = {};
+    edges.forEach(e => {
+      if (scaffoldStart) {
+        const n = edges.length;
+        const startIdx = scaffoldStart.startVertexIndex ?? 0;
+        const outEdge = edges[startIdx % n];
+        const inEdge = edges[(startIdx - 1 + n) % n];
+        const outIsH = outEdge.face === 'north' || outEdge.face === 'south';
+        const face1Edge = outIsH ? outEdge : inEdge;
+        const face2Edge = outIsH ? inEdge : outEdge;
+        if (e.index === face1Edge.index) { d[e.index] = scaffoldStart.face1DistanceMm; return; }
+        if (e.index === face2Edge.index) { d[e.index] = scaffoldStart.face2DistanceMm; return; }
+      }
+      d[e.index] = defaultDist;
+    });
+    setDistances(d);
+    setResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFloor, building?.id]);
 
   const [result, setResult] = useState<AutoLayoutResult | null>(null);
   const [selections, setSelections] = useState<Record<number, number>>({});
@@ -322,16 +360,18 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           lengthMm: p.lengthMm,
           direction: p.direction,
           color: getHandrailColor(p.lengthMm),
+          floor: targetFloor,
         });
       }
     }
 
     if (allHandrails.length === 0) return;
 
-    // 触れる既存手摺を検出
+    // 触れる既存手摺を検出（同じ階のみ。異なる階の手摺は干渉判定しない）
     const mmToG = (mm: number) => Math.round(mm / 10);
     const TOL = 2;
     const overlappingIds = canvasData.handrails.filter(existing => {
+      if ((existing.floor ?? 1) !== targetFloor) return false;
       return allHandrails.some(newH => {
         if (existing.direction !== newH.direction) return false;
         if (existing.direction === 'horizontal') {
@@ -394,6 +434,44 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         </div>
 
         <div className="p-4 space-y-4">
+          {/* 対象階 */}
+          <div>
+            <label className="block text-xs text-dimension mb-1.5">対象階</label>
+            <div className="flex gap-1.5">
+              {([1, 2] as const).map(f => (
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setTargetFloor(f)}
+                  className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-colors ${
+                    targetFloor === f
+                      ? 'border-accent bg-accent/15 text-accent'
+                      : 'border-dark-border text-dimension hover:border-accent/50'
+                  }`}
+                >
+                  {f}Fのみ
+                </button>
+              ))}
+              <button
+                type="button"
+                disabled
+                title="Phase 3 で実装予定"
+                className="flex-1 py-2 rounded-lg text-xs font-bold border border-dark-border text-dimension/60 opacity-50 cursor-not-allowed"
+              >
+                1F+2F <span className="text-[9px] opacity-80">(準備中)</span>
+              </button>
+            </div>
+          </div>
+
+          {!building && (
+            <p className="text-xs text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
+              {targetFloor === 2 ? '2F建物が未作成です。' : '建物が未作成です。'}
+              躯体メニューから建物を先に作成してください。
+            </p>
+          )}
+
+          {building && (
+            <>
           {/* プレビューSVG */}
           <PreviewSVG points={building.points} edges={edges} focusedIndex={focusedEdgeIndex}
             conflictHandrails={showConflictConfirm ? canvasData.handrails.filter(h => conflictIds.includes(h.id)) : undefined} />
@@ -540,6 +618,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 配置する
               </button>
             </div>
+          )}
+            </>
           )}
         </div>
       </div>
