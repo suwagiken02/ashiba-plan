@@ -6,6 +6,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { Handrail, HandrailLengthMm, Point } from '@/types';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import {
   getBuildingEdgesClockwise,
   computeAutoLayout,
@@ -120,6 +121,7 @@ function formatRailsSummary(rails: HandrailLengthMm[]): string {
 
 export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props) {
   const { canvasData, addHandrails, removeElements } = useCanvasStore();
+  const enabledSizes = useHandrailSettingsStore(s => s.enabledSizes);
   const building = canvasData.buildings[0];
   const scaffoldStart = canvasData.scaffoldStart;
 
@@ -217,7 +219,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
   const handleCalc = () => {
     if (!building) return;
-    const res = computeAutoLayout(building, distances, scaffoldStart);
+    const res = computeAutoLayout(building, distances, scaffoldStart, enabledSizes);
 
     // 端数が残る面を検出（固定面は除く）
     const problemEdges = res.edgeLayouts.filter(el =>
@@ -291,7 +293,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     } else {
       setDistanceSuggestions([]);
       if (!building) return;
-      const res = computeAutoLayout(building, currentDistances, scaffoldStart);
+      const res = computeAutoLayout(building, currentDistances, scaffoldStart, enabledSizes);
       setResult(res);
       const sel: Record<number, number> = {};
       res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });

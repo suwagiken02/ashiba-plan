@@ -139,20 +139,27 @@ export function getBuildingEdgesClockwise(building: BuildingShape): EdgeInfo[] {
 // 2. 残りの端数（< 1800mm）を小部材で埋める複数パターンを生成
 // 3. 端数が最小になるパターンを返す
 // ============================================================
-export function findBestEndCombinations(effectiveMm: number): LayoutCombination[] {
+export function findBestEndCombinations(
+  effectiveMm: number,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+): LayoutCombination[] {
   if (effectiveMm <= 0) return [{ rails: [], remainder: 0, count: 0 }];
+  // サイズが 0 件なら解なし（UI 側でその旨を通知する想定）
+  if (enabledSizes.length === 0) return [{ rails: [], remainder: effectiveMm, count: 0 }];
 
-  // 端数サイズ（1800mm以外、降順）
-  const FILLER_SIZES: HandrailLengthMm[] = [1200, 900, 600, 400, 300, 200];
+  // 降順ソート + baseSize（最大サイズを基準）と FILLER_SIZES（残り）に分離
+  const sizes: HandrailLengthMm[] = [...enabledSizes].sort((a, b) => b - a);
+  const baseSize = sizes[0];
+  const FILLER_SIZES: HandrailLengthMm[] = sizes.slice(1);
 
-  // 1800mm をできるだけ詰める
-  const num1800 = Math.floor(effectiveMm / 1800);
-  const leftover = effectiveMm - num1800 * 1800;
-  const base1800: HandrailLengthMm[] = Array(num1800).fill(1800 as HandrailLengthMm);
+  // baseSize をできるだけ詰める
+  const numBase = Math.floor(effectiveMm / baseSize);
+  const leftover = effectiveMm - numBase * baseSize;
+  const base1800: HandrailLengthMm[] = Array(numBase).fill(baseSize);
 
   // 端数がゼロなら完璧
   if (leftover === 0) {
-    return [{ rails: base1800, remainder: 0, count: num1800 }];
+    return [{ rails: base1800, remainder: 0, count: numBase }];
   }
 
   const results: LayoutCombination[] = [];
@@ -200,9 +207,9 @@ export function findBestEndCombinations(effectiveMm: number): LayoutCombination[
   }
 
   // ── パターンD: 端数を1本で賄えるサイズを試す ──
-  // 全サイズを試す（早期 break しない）。HANDRAIL_SIZES は降順 [1800,...,200] だが、
-  // 長側候補（rem < 0）を 0 に最も近づけるには最小 200 まで列挙する必要がある。
-  for (const size of HANDRAIL_SIZES) {
+  // 有効サイズ全てを試す（早期 break しない）。長側候補（rem < 0）を 0 に
+  // 最も近づけるには最小サイズまで列挙する必要がある。
+  for (const size of sizes) {
     const rem = leftover - size;
     addResult([...base1800, size], rem);
   }
@@ -235,11 +242,11 @@ export function findBestEndCombinations(effectiveMm: number): LayoutCombination[
     }
   }
 
-  // ── パターンF: 1800mm を1本減らして端数を広げる ──
-  if (num1800 > 0) {
-    const base1800m1: HandrailLengthMm[] = Array(num1800 - 1).fill(1800 as HandrailLengthMm);
-    const bigLeftover = leftover + 1800;
-    const fillerF = fillGreedy(bigLeftover, HANDRAIL_SIZES);
+  // ── パターンF: baseSize を1本減らして端数を広げる ──
+  if (numBase > 0) {
+    const base1800m1: HandrailLengthMm[] = Array(numBase - 1).fill(baseSize);
+    const bigLeftover = leftover + baseSize;
+    const fillerF = fillGreedy(bigLeftover, sizes);
     const totalF = fillerF.reduce((s, r) => s + r, 0);
     addResult([...base1800m1, ...fillerF], bigLeftover - totalF);
   }
@@ -294,6 +301,7 @@ export function computeAutoLayout(
   building: BuildingShape,
   distances: Record<number, number>,
   scaffoldStart?: ScaffoldStartConfig,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
 ): AutoLayoutResult {
   const edges = getBuildingEdgesClockwise(building);
   const n = edges.length;
@@ -383,7 +391,7 @@ export function computeAutoLayout(
 
     // 1mm精度の建物座標でも float 誤差で `=== 0` 判定が壊れるのを防ぐため整数 mm に正規化
     const effectiveMm = Math.round(Math.abs(cursorEnd - cursorStart) * 10);
-    const candidates = findBestEndCombinations(Math.max(0, effectiveMm));
+    const candidates = findBestEndCombinations(Math.max(0, effectiveMm), enabledSizes);
 
     edgeLayouts.push({
       edge,

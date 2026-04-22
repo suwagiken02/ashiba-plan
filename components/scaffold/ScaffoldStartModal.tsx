@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import NumInput from '@/components/ui/NumInput';
 import { StartCorner, HandrailLengthMm, Point } from '@/types';
 import { mmToGrid } from '@/lib/konva/gridUtils';
@@ -10,8 +11,6 @@ import { getHandrailColor } from '@/lib/konva/handrailColors';
 import { getBuildingEdgesClockwise, EdgeInfo } from '@/lib/konva/autoLayoutUtils';
 
 type Props = { onClose: () => void };
-
-const HANDRAIL_OPTIONS: HandrailLengthMm[] = [1800, 1200, 900];
 
 const FACE_LABEL: Record<string, string> = {
   north: '北面', south: '南面', east: '東面', west: '西面',
@@ -29,6 +28,13 @@ function vertexToCorner(vtx: Point, center: Point): StartCorner {
 
 export default function ScaffoldStartModal({ onClose }: Props) {
   const { setScaffoldStart, canvasData, addHandrail } = useCanvasStore();
+  const enabledSizes = useHandrailSettingsStore(s => s.enabledSizes);
+
+  // 部材設定で ON のサイズを降順で表示。OFF サイズは選択肢から除外。
+  const handrailOptions = useMemo<HandrailLengthMm[]>(
+    () => [...enabledSizes].sort((a, b) => b - a),
+    [enabledSizes],
+  );
 
   // 建物の辺情報を取得
   const edgeInfo = useMemo(() => {
@@ -45,8 +51,19 @@ export default function ScaffoldStartModal({ onClose }: Props) {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [face1Distance, setFace1Distance] = useState(900);
   const [face2Distance, setFace2Distance] = useState(900);
-  const [face1Handrail, setFace1Handrail] = useState<HandrailLengthMm>(1800);
-  const [face2Handrail, setFace2Handrail] = useState<HandrailLengthMm>(1800);
+  const [face1Handrail, setFace1Handrail] = useState<HandrailLengthMm>(
+    () => handrailOptions[0] ?? 1800,
+  );
+  const [face2Handrail, setFace2Handrail] = useState<HandrailLengthMm>(
+    () => handrailOptions[0] ?? 1800,
+  );
+
+  // enabledSizes 変化時に現在選択値が無効になった場合、最大サイズへ自動補正
+  useEffect(() => {
+    if (handrailOptions.length === 0) return;
+    if (!handrailOptions.includes(face1Handrail)) setFace1Handrail(handrailOptions[0]);
+    if (!handrailOptions.includes(face2Handrail)) setFace2Handrail(handrailOptions[0]);
+  }, [handrailOptions, face1Handrail, face2Handrail]);
 
   // 選択頂点に隣接する2辺のラベル
   const faceLabels = useMemo(() => {
@@ -178,10 +195,10 @@ export default function ScaffoldStartModal({ onClose }: Props) {
             <div className="space-y-3">
               <div>
                 <span className="text-xs text-dimension">{faceLabels.label1}</span>
-                <div className="flex gap-2 mt-1">
-                  {HANDRAIL_OPTIONS.map((len) => (
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  {handrailOptions.map((len) => (
                     <button key={`f1-${len}`} type="button" onClick={() => setFace1Handrail(len)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      className={`flex-1 min-w-[60px] py-2 rounded-lg text-sm font-medium border transition-colors ${
                         face1Handrail === len
                           ? 'border-accent bg-accent/15 text-accent'
                           : 'border-dark-border text-dimension hover:border-accent/50'
@@ -191,10 +208,10 @@ export default function ScaffoldStartModal({ onClose }: Props) {
               </div>
               <div>
                 <span className="text-xs text-dimension">{faceLabels.label2}</span>
-                <div className="flex gap-2 mt-1">
-                  {HANDRAIL_OPTIONS.map((len) => (
+                <div className="flex gap-2 mt-1 flex-wrap">
+                  {handrailOptions.map((len) => (
                     <button key={`f2-${len}`} type="button" onClick={() => setFace2Handrail(len)}
-                      className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                      className={`flex-1 min-w-[60px] py-2 rounded-lg text-sm font-medium border transition-colors ${
                         face2Handrail === len
                           ? 'border-accent bg-accent/15 text-accent'
                           : 'border-dark-border text-dimension hover:border-accent/50'
