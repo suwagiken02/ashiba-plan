@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
+import DarkModeInit from '@/components/DarkModeInit';
 
 export const metadata: Metadata = {
   title: 'Ashiba Plan - 足場平面図アプリ',
@@ -21,6 +22,7 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body className="bg-dark-bg text-canvas antialiased">
+        <DarkModeInit />
         {children}
       </body>
     </html>

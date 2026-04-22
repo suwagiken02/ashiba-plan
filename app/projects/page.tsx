@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { supabase } from '@/lib/supabase/client';
+import DarkModeToggle from '@/components/DarkModeToggle';
 import { Project } from '@/types';
 
 export default function ProjectsPage() {
@@ -157,7 +158,9 @@ export default function ProjectsPage() {
               <p className="text-xs text-dimension">{profile.company_name}</p>
             )}
           </div>
-          <div className="flex gap-2">
+          <div className="flex items-center gap-2">
+            {/* ダークモード切替（PC のみ。スマホはエディタ内の設定パネルで操作） */}
+            <DarkModeToggle />
             <button
               onClick={() => router.push('/settings')}
               className="px-3 py-2 text-sm text-dimension hover:text-canvas rounded-lg"

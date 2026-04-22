@@ -18,6 +18,7 @@ import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import ScaffoldMoveControlPanel from '@/components/scaffold/ScaffoldMoveControlPanel';
+import DarkModeToggle from '@/components/DarkModeToggle';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
@@ -383,6 +384,8 @@ export default function EditorPage() {
           >
             出力
           </button>
+          {/* ダークモード切替（PC のみ。スマホは下メニュー「設定」内のスイッチで操作） */}
+          <DarkModeToggle />
         </div>
       </header>
 

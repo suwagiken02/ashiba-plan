@@ -136,6 +136,7 @@ type CanvasStore = {
   // Dark mode
   isDarkMode: boolean;
   toggleDarkMode: () => void;
+  initDarkMode: () => void;
 
   // Duplicate mode
   isDuplicateMode: boolean;
@@ -361,6 +362,19 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({ isDarkMode: next });
     if (typeof document !== 'undefined') {
       document.body.classList.toggle('dark-mode', next);
+      try { localStorage.setItem('ashiba:darkMode', next ? '1' : '0'); } catch {}
+    }
+  },
+  /** アプリ起動時に localStorage から dark mode を復元する */
+  initDarkMode: () => {
+    if (typeof window === 'undefined') return;
+    try {
+      const saved = localStorage.getItem('ashiba:darkMode');
+      const dark = saved === '1';
+      set({ isDarkMode: dark });
+      document.body.classList.toggle('dark-mode', dark);
+    } catch {
+      // アクセス不可環境は無視
     }
   },
 
