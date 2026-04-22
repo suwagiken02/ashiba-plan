@@ -1,16 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { HandrailLengthMm, HandrailDirection, AntiWidth, ObstacleType } from '@/types';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
 import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints, snapObstacleToWall } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
 
-const HANDRAIL_LENGTHS: HandrailLengthMm[] = [1800, 1200, 900, 600, 400, 300, 200];
-const ANTI_LENGTHS: number[] = [1800, 1200, 900, 600, 400];
+/** アンチの既定サイズセット（手摺と intersect してパレット表示する） */
+const ANTI_BASE_LENGTHS: number[] = [1800, 1200, 900, 600, 400];
 
 const OBSTACLE_TYPES: { id: ObstacleType; label: string; color: string }[] = [
   { id: 'ecocute', label: 'エコキュート', color: '#B5D4F4' },
@@ -101,6 +102,17 @@ export default function PartSelector() {
     canvasData, setHandrailPreview, setSnapPoint,
     isDarkMode,
   } = useCanvasStore();
+  const enabledSizes = useHandrailSettingsStore(s => s.enabledSizes);
+  // 部材設定に連動したサイズリスト（降順）
+  const handrailLengths = useMemo<HandrailLengthMm[]>(
+    () => [...enabledSizes].sort((a, b) => b - a),
+    [enabledSizes],
+  );
+  // アンチは通常のサイズ 1800/1200/900/600/400 のうち、有効なものだけ
+  const antiLengths = useMemo<number[]>(
+    () => ANTI_BASE_LENGTHS.filter(l => (enabledSizes as number[]).includes(l)),
+    [enabledSizes],
+  );
   const [expanded, setExpanded] = useState(true);
   const [toolbarDrag, setToolbarDrag] = useState<ToolbarDrag | null>(null);
   const [direction, setDirection] = useState<'horizontal' | 'vertical'>('horizontal');
@@ -454,7 +466,7 @@ export default function PartSelector() {
 
   const handrailButtons = (
     <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
-      {HANDRAIL_LENGTHS.map((l) => (
+      {handrailLengths.map((l) => (
         <button key={`hr-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
           className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
         >{l}</button>
@@ -466,14 +478,14 @@ export default function PartSelector() {
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] text-amber-400 w-6 shrink-0">400</span>
-        <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{ANTI_LENGTHS.map((l) => (
+        <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{antiLengths.map((l) => (
           <button key={`a400-${l}`} onPointerDown={(e) => handleAntiDown(l, 400, direction, e)}
             className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-amber-500/20 text-amber-300 border border-amber-500/30">{l}</button>
         ))}</div>
       </div>
       <div className="flex items-center gap-1.5">
         <span className="text-[10px] text-yellow-400 w-6 shrink-0">250</span>
-        <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{ANTI_LENGTHS.map((l) => (
+        <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{antiLengths.map((l) => (
           <button key={`a250-${l}`} onPointerDown={(e) => handleAntiDown(l, 250, direction, e)}
             className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">{l}</button>
         ))}</div>
@@ -554,7 +566,7 @@ export default function PartSelector() {
                   </div>
                   {/* 長さプリセット（入替ボタンは下メニューの「足場→入れ替え」へ移動） */}
                   <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
-                    {HANDRAIL_LENGTHS.map((l) => (
+                    {handrailLengths.map((l) => (
                       <button key={`hr-m-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
                         className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
                       >{l}</button>
