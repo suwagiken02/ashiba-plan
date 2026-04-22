@@ -100,7 +100,6 @@ export default function PartSelector() {
     addHandrail, addAnti, addPost, addObstacle,
     canvasData, setHandrailPreview, setSnapPoint,
     isDarkMode,
-    isReorderMode, toggleReorderMode,
   } = useCanvasStore();
   const [expanded, setExpanded] = useState(true);
   const [toolbarDrag, setToolbarDrag] = useState<ToolbarDrag | null>(null);
@@ -553,19 +552,13 @@ export default function PartSelector() {
                         className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">-1°</button>
                     </div>
                   </div>
-                  {/* 長さプリセット + 入替ボタン */}
+                  {/* 長さプリセット（入替ボタンは下メニューの「足場→入れ替え」へ移動） */}
                   <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
                     {HANDRAIL_LENGTHS.map((l) => (
                       <button key={`hr-m-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
                         className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
                       >{l}</button>
                     ))}
-                    <button onClick={toggleReorderMode}
-                      className={`sm:hidden px-3 py-1.5 rounded-lg text-xs font-bold border transition-colors shrink-0 ${
-                        isReorderMode ? 'bg-accent text-white border-accent' : 'border-dark-border text-dimension'
-                      }`}>
-                      {isReorderMode ? '入替中' : '入替'}
-                    </button>
                   </div>
                 </div>
               )}
@@ -722,20 +715,7 @@ export default function PartSelector() {
                 <div className="flex-1 overflow-y-auto px-3 py-2">
                   {activeTab === 'handrail' && (
                     <div className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
-                        <button
-                          onClick={toggleReorderMode}
-                          className={`px-3 py-1 rounded-lg text-xs font-bold border transition-colors ${
-                            isReorderMode
-                              ? 'bg-accent text-white border-accent'
-                              : 'border-dark-border text-dimension'
-                          }`}
-                          title="手摺入れ替えモード"
-                        >
-                          {isReorderMode ? '入替中' : '入替'}
-                        </button>
-                      </div>
+                      <p className="text-xs text-dimension">ドラッグしてキャンバスに配置</p>
                       {angleSelector}
                       {handrailButtons}
                     </div>

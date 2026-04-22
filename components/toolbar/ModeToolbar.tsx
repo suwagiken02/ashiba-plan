@@ -6,7 +6,7 @@ import { ModeType } from '@/types';
 export default function ModeToolbar() {
   const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
-  const [showAutoMenu, setShowAutoMenu] = useState(false);
+  const [showAshibaMenu, setShowAshibaMenu] = useState(false);
   const [dismissedStage, setDismissedStage] = useState<string | null>(null);
 
   // 躯体グループ（建物・障害物）
@@ -16,8 +16,8 @@ export default function ModeToolbar() {
     { id: 'select' as const, label: '選択', icon: '↖', color: '#378ADD' },
     { id: 'kutai' as const, label: '躯体', icon: '⌂', color: '#4ECDC4' },
     { id: 'scaffold' as const, label: '足場開始', icon: '⚑', color: '#FF6B6B' },
+    { id: 'ashiba' as const, label: '足場', icon: '▦', color: '#FFD700' },
     { id: 'buzai' as const, label: '部材', icon: '━', color: '#FFA500' },
-    { id: 'auto' as const, label: '自動割付', icon: '⚡', color: '#FFD700' },
     { id: 'memo' as const, label: 'メモ', icon: 'T', color: '#DDA0DD' },
     { id: 'erase' as const, label: '消去', icon: '✕', color: '#EF4444' },
     { id: 'settings' as const, label: '設定', icon: '⚙', color: '#96CEB4' },
@@ -46,7 +46,7 @@ export default function ModeToolbar() {
     const stage = getCurrentStage();
     if (stage === 'kutai') setDismissedStage('kutai');
     if (stage === 'scaffold') setDismissedStage('scaffold');
-    if (stage === 'buzai' && (id === 'buzai' || id === 'auto')) setDismissedStage('buzai');
+    if (stage === 'buzai' && (id === 'buzai' || id === 'ashiba')) setDismissedStage('buzai');
     if (isMeasuring) toggleMeasuring();
     if (id === 'select' || id === 'erase') {
       setMode(id as ModeType);
@@ -58,8 +58,8 @@ export default function ModeToolbar() {
       useCanvasStore.getState().togglePartSelector();
     } else if (id === 'scaffold') {
       useCanvasStore.getState().setShowScaffoldStart(true);
-    } else if (id === 'auto') {
-      setShowAutoMenu(true);
+    } else if (id === 'ashiba') {
+      setShowAshibaMenu(true);
     } else if (id === 'settings') {
       if (window.innerWidth < 640) {
         useCanvasStore.getState().setShowSettings(true);
@@ -119,27 +119,52 @@ export default function ModeToolbar() {
         </>
       )}
 
-      {/* 自動配置メニュー */}
-      {showAutoMenu && (
+      {/* 足場メニュー */}
+      {showAshibaMenu && (
         <>
-          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowAutoMenu(false)} />
-          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3">
+          <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowAshibaMenu(false)} />
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3 flex-wrap justify-center max-w-[calc(100vw-32px)]">
+            {/* 移動（Phase 2で実装予定のプレースホルダ） */}
+            <button
+              onClick={() => {
+                alert('「移動」機能は実装中です');
+                setShowAshibaMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-dark-bg border-2 border-dark-border text-dimension hover:border-accent/50 transition-colors"
+            >
+              <span className="text-3xl mb-1">↔</span>
+              <span className="text-xs font-bold">移動</span>
+              <span className="text-[9px] opacity-60">実装中</span>
+            </button>
+            {/* 入れ替え（既存の toggleReorderMode を呼ぶ） */}
+            <button
+              onClick={() => {
+                useCanvasStore.getState().toggleReorderMode();
+                setShowAshibaMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">⇄</span>
+              <span className="text-xs font-bold">入れ替え</span>
+            </button>
+            {/* 自動配置（旧・自動割付） */}
             <button
               onClick={() => {
                 useCanvasStore.getState().setShowAutoLayout(true);
-                setShowAutoMenu(false);
+                setShowAshibaMenu(false);
               }}
-              className="flex flex-col items-center justify-center w-28 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
             >
               <span className="text-3xl mb-1">⚡</span>
-              <span className="text-xs font-bold">自動割付</span>
+              <span className="text-xs font-bold">自動配置</span>
             </button>
+            {/* 自動内柱配置（旧機能保持） */}
             <button
               onClick={() => {
                 useCanvasStore.getState().setShowInnerPost(true);
-                setShowAutoMenu(false);
+                setShowAshibaMenu(false);
               }}
-              className="flex flex-col items-center justify-center w-28 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
             >
               <span className="text-3xl mb-1">●</span>
               <span className="text-xs font-bold">自動内柱配置</span>
@@ -155,7 +180,7 @@ export default function ModeToolbar() {
             <button key={m.id} onClick={() => handleMainButton(m.id)}
               className={`flex-col items-center justify-center py-2 px-1 rounded-lg min-w-[36px] transition-colors flex ${
                 isActive(m.id) ? 'bg-accent text-white' : 'text-dimension hover:text-canvas'
-              } ${highlightId === m.id || (highlightId === 'buzai' && m.id === 'auto') ? 'animate-highlight' : ''}`}
+              } ${highlightId === m.id || (highlightId === 'buzai' && m.id === 'ashiba') ? 'animate-highlight' : ''}`}
             >
               <span className="text-base leading-none" style={{ color: isActive(m.id) ? 'white' : m.color }}>{m.icon}</span>
               <span className="text-[9px] mt-0.5">{m.label}</span>
