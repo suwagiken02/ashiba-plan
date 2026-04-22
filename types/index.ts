@@ -85,6 +85,8 @@ export type Handrail = {
   lengthMm: HandrailLengthMm;
   direction: HandrailDirection;
   color: string;
+  /** 所属階。undefined は 1F 相当（既存データ後方互換） */
+  floor?: 1 | 2;
 };
 
 // === 支柱 ===
@@ -92,6 +94,8 @@ export type Post = {
   id: string;
   x: number;
   y: number;
+  /** 所属階。undefined は 1F 相当 */
+  floor?: 1 | 2;
 };
 
 // === アンチ（踏板） ===
@@ -104,7 +108,14 @@ export type Anti = {
   width: AntiWidth;
   lengthMm: number;
   direction: 'horizontal' | 'vertical';
+  /** 所属階。undefined は 1F 相当 */
+  floor?: 1 | 2;
 };
+
+/** 部材の所属階を取得。floor 未設定は 1F 扱い（既存データ後方互換）。*/
+export function getFloor(item: { floor?: 1 | 2 }): 1 | 2 {
+  return item.floor ?? 1;
+}
 
 // === メモ ===
 export type MemoShape = 'rect' | 'cloud' | 'circle' | 'speech';
@@ -177,6 +188,8 @@ export type ScaffoldStartConfig = {
   /** 角に接する2面の最初の手摺の長さ(mm) */
   face1FirstHandrail: HandrailLengthMm;
   face2FirstHandrail: HandrailLengthMm;
+  /** 対象階。undefined は 1F 相当（既存データ後方互換） */
+  floor?: 1 | 2;
 };
 
 // === 出力設定 ===
