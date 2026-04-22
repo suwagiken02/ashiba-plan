@@ -107,6 +107,9 @@ type CanvasStore = {
   // Dimensions toggle
   showDimensions: boolean;
   toggleShowDimensions: () => void;
+  showDimensionLines: boolean;
+  toggleShowDimensionLines: () => void;
+  setShowDimensionLines: (v: boolean) => void;
   showGridGuide: boolean;
   toggleShowGridGuide: () => void;
   showPrintArea: boolean;
@@ -321,6 +324,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   showDimensions: true,
   toggleShowDimensions: () => set({ showDimensions: !get().showDimensions }),
+  showDimensionLines: false,
+  toggleShowDimensionLines: () => set({ showDimensionLines: !get().showDimensionLines }),
+  setShowDimensionLines: (v) => set({ showDimensionLines: v }),
   showGridGuide: false,
   toggleShowGridGuide: () => set({ showGridGuide: !get().showGridGuide }),
   showPrintArea: false,

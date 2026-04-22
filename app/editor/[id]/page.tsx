@@ -120,6 +120,8 @@ export default function EditorPage() {
     setMode,
     buildingInputMethod,
     setBuildingInputMethod,
+    showDimensionLines,
+    toggleShowDimensionLines,
   } = useCanvasStore();
   const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
@@ -129,7 +131,6 @@ export default function EditorPage() {
   const [showRoofModal, setShowRoofModal] = useState(false);
   const [showUdekiModal, setShowUdekiModal] = useState(false);
   const [showAutoLayoutModal, setShowAutoLayoutModal] = useState(false);
-  const [showDimensionLines, setShowDimensionLines] = useState(false);
   const [drawingTitle, setDrawingTitle] = useState('');
   const [siteName, setSiteName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -390,7 +391,7 @@ export default function EditorPage() {
       {/* キャンバスエリア */}
       <div ref={containerRef} data-canvas-container className="flex-1 relative overflow-hidden">
         {canvasSize.width > 0 && canvasSize.height > 0 && (
-          <GridCanvas width={canvasSize.width} height={canvasSize.height} showDimensionLines={showDimensionLines} />
+          <GridCanvas width={canvasSize.width} height={canvasSize.height} />
         )}
         <CompassWidget />
 
@@ -455,7 +456,7 @@ export default function EditorPage() {
 
           {/* 寸法線トグル（方位別スパン寸法） */}
           <button
-            onClick={() => setShowDimensionLines((v) => !v)}
+            onClick={toggleShowDimensionLines}
             className={`w-10 h-10 border rounded-xl flex items-center justify-center shadow-lg transition-colors ${
               showDimensionLines
                 ? 'bg-accent border-accent text-white'

@@ -26,12 +26,11 @@ import { getPrintAreaGrid } from '@/lib/export/pdfExport';
 type Props = {
   width: number;
   height: number;
-  showDimensionLines?: boolean;
 };
 
-export default function GridCanvas({ width, height, showDimensionLines = false }: Props) {
+export default function GridCanvas({ width, height }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide, showDimensionLines } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
