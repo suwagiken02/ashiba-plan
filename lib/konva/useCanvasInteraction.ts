@@ -500,26 +500,24 @@ export function useCanvasInteraction() {
         longPressTimer.current = setTimeout(() => setIsLongPress(true), 500);
       }
 
-      // post モード: クリックで支柱配置
+      // post モード: クリックで支柱配置（手摺端部にスナップ成功時のみ配置）
       if (s.mode === 'post') {
-        const snapRadius = 10;
-        let snapX = rawPos.x;
-        let snapY = rawPos.y;
+        const snapRadius = Math.max(Math.round(SNAP_PX / (INITIAL_GRID_PX * s.zoom)), 5);
         let bestDist = snapRadius;
+        let snapped: { x: number; y: number } | null = null;
         for (const h of s.canvasData.handrails) {
-          const endpoints = h.direction === 'horizontal'
-            ? [{ x: h.x, y: h.y }, { x: h.x + Math.round(h.lengthMm / 10), y: h.y }]
-            : [{ x: h.x, y: h.y }, { x: h.x, y: h.y + Math.round(h.lengthMm / 10) }];
-          for (const p of endpoints) {
+          const [p1, p2] = getHandrailEndpoints(h);
+          for (const p of [p1, p2]) {
             const d = Math.hypot(p.x - rawPos.x, p.y - rawPos.y);
             if (d < bestDist) {
               bestDist = d;
-              snapX = p.x;
-              snapY = p.y;
+              snapped = { x: p.x, y: p.y };
             }
           }
         }
-        s.addPost({ id: uuidv4(), x: snapX, y: snapY });
+        if (snapped) {
+          s.addPost({ id: uuidv4(), x: snapped.x, y: snapped.y });
+        }
         return;
       }
       // memo モード
