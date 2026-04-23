@@ -464,6 +464,20 @@ export default function PartSelector() {
           />
           <span className="text-[10px] text-dimension">°</span>
         </div>
+        <div className="flex gap-0.5">
+          <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) - 10)}
+            className="px-2 py-1 rounded text-xs font-bold bg-dark-bg text-dimension border border-dark-border hover:border-accent/50 transition-colors"
+          >-10°</button>
+          <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) - 1)}
+            className="px-2 py-1 rounded text-xs font-bold bg-dark-bg text-dimension border border-dark-border hover:border-accent/50 transition-colors"
+          >-1°</button>
+          <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) + 1)}
+            className="px-2 py-1 rounded text-xs font-bold bg-dark-bg text-dimension border border-dark-border hover:border-accent/50 transition-colors"
+          >+1°</button>
+          <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) + 10)}
+            className="px-2 py-1 rounded text-xs font-bold bg-dark-bg text-dimension border border-dark-border hover:border-accent/50 transition-colors"
+          >+10°</button>
+        </div>
       </div>
     </div>
   );
