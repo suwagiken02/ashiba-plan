@@ -52,12 +52,12 @@ export default function KidareLayer() {
       for (const ep of eps) {
         const dy = (ep.y - wallY) * sign;
         if (dy > 0 && dy < 200) {
-          const key = Math.round(ep.y);
+          const key = Math.round(ep.y * 10);   // 1mm 精度 = 0.1 grid
           candidates[key] = (candidates[key] ?? 0) + 1;
         }
       }
       for (const [k, v] of Object.entries(candidates)) {
-        if (v > bestCount) { bestCount = v; scaffoldCoord = Number(k); }
+        if (v > bestCount) { bestCount = v; scaffoldCoord = Number(k) / 10; }
       }
       if (scaffoldCoord === null) return;
 
@@ -94,12 +94,12 @@ export default function KidareLayer() {
       for (const ep of eps) {
         const dx = (ep.x - wallX) * sign;
         if (dx > 0 && dx < 200) {
-          const key = Math.round(ep.x);
+          const key = Math.round(ep.x * 10);   // 1mm 精度 = 0.1 grid
           candidates[key] = (candidates[key] ?? 0) + 1;
         }
       }
       for (const [k, v] of Object.entries(candidates)) {
-        if (v > bestCount) { bestCount = v; scaffoldCoord = Number(k); }
+        if (v > bestCount) { bestCount = v; scaffoldCoord = Number(k) / 10; }
       }
       if (scaffoldCoord === null) return;
 
