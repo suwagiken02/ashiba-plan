@@ -198,13 +198,15 @@ type CanvasStore = {
   selectedLineIds: string[];
   setSelectedLineIds: (ids: string[]) => void;
 
-  // 移動モード共通ステップ (選択移動の矢印ボタン step)
-  moveSelectStep: 1 | 10 | 100;
-  setMoveSelectStep: (s: 1 | 10 | 100) => void;
+  // 移動モード共通ステップ (選択移動の矢印ボタン step、mm 単位)
+  moveSelectStepMm: 1 | 10 | 100;
+  setMoveSelectStepMm: (s: 1 | 10 | 100) => void;
 
   // 選択移動モード (カテゴリ別 + 選択範囲の要素だけをまとめて移動)
   moveSelectMode: {
     active: boolean;
+    /** 3 ステップフローの現在位置 */
+    step: 'category' | 'select' | 'move';
     categories: {
       scaffold: boolean;   // handrails + posts + antis
       building: boolean;
@@ -219,6 +221,13 @@ type CanvasStore = {
     backup: CanvasData | null;
   };
   enterMoveSelectMode: () => void;
+  setMoveSelectStep: (step: 'category' | 'select' | 'move') => void;
+  /** category → select */
+  confirmCategorySelection: () => void;
+  /** select → move */
+  confirmRangeSelection: () => void;
+  /** select → category (選択リセット + canvasData 復元) */
+  backToCategory: () => void;
   setMoveSelectCategories: (categories: { scaffold: boolean; building: boolean; obstacle: boolean; memo: boolean }) => void;
   setMoveSelectIds: (ids: string[]) => void;
   toggleMoveSelectId: (id: string) => void;
@@ -462,13 +471,14 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   selectedLineIds: [],
   setSelectedLineIds: (ids) => set({ selectedLineIds: ids }),
 
-  // --- 移動モード共通 step ---
-  moveSelectStep: 10,
-  setMoveSelectStep: (s) => set({ moveSelectStep: s }),
+  // --- 移動モード共通 step (mm) ---
+  moveSelectStepMm: 10,
+  setMoveSelectStepMm: (s) => set({ moveSelectStepMm: s }),
 
   // --- 選択移動モード ---
   moveSelectMode: {
     active: false,
+    step: 'category',
     categories: { scaffold: true, building: false, obstacle: false, memo: false },
     selectedIds: [],
     dxMm: 0,
@@ -482,6 +492,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       moveSelectMode: {
         active: true,
+        step: 'category',
         categories: { scaffold: true, building: false, obstacle: false, memo: false },
         selectedIds: [],
         dxMm: 0,
@@ -490,6 +501,35 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       },
       mode: 'move-select',
       selectedIds: [],
+    });
+  },
+  setMoveSelectStep: (step) => {
+    const { moveSelectMode } = get();
+    set({ moveSelectMode: { ...moveSelectMode, step } });
+  },
+  confirmCategorySelection: () => {
+    const { moveSelectMode } = get();
+    set({ moveSelectMode: { ...moveSelectMode, step: 'select' } });
+  },
+  confirmRangeSelection: () => {
+    const { moveSelectMode } = get();
+    set({ moveSelectMode: { ...moveSelectMode, step: 'move' } });
+  },
+  backToCategory: () => {
+    const { moveSelectMode } = get();
+    const backup = moveSelectMode.backup;
+    // 既に何か動かしていたら backup に戻す（念のため）
+    if (backup) {
+      set({ canvasData: JSON.parse(JSON.stringify(backup)) });
+    }
+    set({
+      moveSelectMode: {
+        ...moveSelectMode,
+        step: 'category',
+        selectedIds: [],
+        dxMm: 0,
+        dyMm: 0,
+      },
     });
   },
   setMoveSelectCategories: (categories) => {
@@ -562,6 +602,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       moveSelectMode: {
         active: false,
+        step: 'category',
         categories: { scaffold: true, building: false, obstacle: false, memo: false },
         selectedIds: [],
         dxMm: 0,
@@ -581,6 +622,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     set({
       moveSelectMode: {
         active: false,
+        step: 'category',
         categories: { scaffold: true, building: false, obstacle: false, memo: false },
         selectedIds: [],
         dxMm: 0,
