@@ -8,8 +8,9 @@ import { Point } from '@/types';
 import { getEdgeOverhangs, computeOffsetPolygon } from '@/lib/konva/roofUtils';
 
 export default function BuildingLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds, isDarkMode } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode, isDarkMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
+  const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
   return (
     <Layer>
@@ -45,7 +46,7 @@ export default function BuildingLayer() {
         const flatPoints = building.points.flatMap((p) => [
           p.x * gridPx + panX, p.y * gridPx + panY,
         ]);
-        const isSelected = selectedIds.includes(building.id);
+        const isSelected = effectiveSelectedIds.includes(building.id);
         const is2F = building.floor === 2;
         const fillColor = is2F ? '#A0A0A0' : (isDarkMode ? '#555555' : '#3d3d3a');
         const strokeColor = isSelected ? '#FF6B35' : (is2F ? '#888888' : (isDarkMode ? '#888888' : '#1a1a18'));

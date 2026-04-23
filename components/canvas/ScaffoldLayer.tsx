@@ -13,8 +13,9 @@ const LINE_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DD
 const TOL = 3;
 
 export default function ScaffoldLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds, isDuplicateMode, highlightIds, isReorderMode } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode, isDuplicateMode, highlightIds, isReorderMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
+  const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
   // 同一ラインごとにグループ化してカラーインデックスを割り当て
   const lineColorMap = useMemo(() => {
@@ -67,7 +68,7 @@ export default function ScaffoldLayer() {
       {canvasData.antis.map((anti) => {
         const w = anti.direction === 'horizontal' ? mmToGrid(anti.lengthMm) : mmToGrid(anti.width);
         const h = anti.direction === 'horizontal' ? mmToGrid(anti.width) : mmToGrid(anti.lengthMm);
-        const isSelected = selectedIds.includes(anti.id);
+        const isSelected = effectiveSelectedIds.includes(anti.id);
 
         return (
           <React.Fragment key={anti.id}>
@@ -118,7 +119,7 @@ export default function ScaffoldLayer() {
       {/* 手摺 */}
       {canvasData.handrails.map((h) => {
         const [start, end] = getHandrailEndpoints(h);
-        const isSelected = selectedIds.includes(h.id);
+        const isSelected = effectiveSelectedIds.includes(h.id);
         const isHighlighted = highlightIds.includes(h.id);
         const defaultColor = getHandrailColor(h.lengthMm as HandrailLengthMm);
         const lineColor = lineColorMap.get(h.id);
@@ -197,7 +198,7 @@ export default function ScaffoldLayer() {
 
       {/* 支柱 */}
       {canvasData.posts.map((p) => {
-        const isSelected = selectedIds.includes(p.id);
+        const isSelected = effectiveSelectedIds.includes(p.id);
         return (
           <React.Fragment key={p.id}>
             <Circle

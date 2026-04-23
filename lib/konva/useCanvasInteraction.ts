@@ -9,11 +9,23 @@ import { snapToHandrail, snapHandrailPlacement, getHandrailEndpoints, snapToGrid
 import { getHandrailColor } from './handrailColors';
 import { getEdgeOverhangs, computeOffsetPolygon } from './roofUtils';
 import { mmToGrid as toMmGrid } from './gridUtils';
-import { Point, Handrail, HandrailDirection, HandrailLengthMm, Obstacle } from '@/types';
+import { Point, Handrail, HandrailDirection, HandrailLengthMm, Obstacle, CanvasData } from '@/types';
 
 const SNAP_PX = 80;
 const HIT_TOL = 25; // 手摺ヒット判定のグリッド許容差（250mm、タッチ操作対応）
 let lastTouchTime = 0;
+
+/** id からカテゴリを判別（move-select モード用） */
+type MoveSelectCat = 'scaffold' | 'building' | 'obstacle' | 'memo';
+function getCategoryFromId(id: string, canvasData: CanvasData): MoveSelectCat | null {
+  if (canvasData.handrails.some(h => h.id === id)) return 'scaffold';
+  if (canvasData.posts.some(p => p.id === id)) return 'scaffold';
+  if (canvasData.antis.some(a => a.id === id)) return 'scaffold';
+  if (canvasData.buildings.some(b => b.id === id)) return 'building';
+  if (canvasData.obstacles.some(o => o.id === id)) return 'obstacle';
+  if (canvasData.memos.some(m => m.id === id)) return 'memo';
+  return null;
+}
 
 /** クリック位置に最も近い手摺を見つける（距離がHIT_TOL以内） */
 function findHandrailAtPos(pos: Point, handrails: Handrail[]): Handrail | null {
@@ -234,6 +246,8 @@ export function useCanvasInteraction() {
   const isDuplicateMode = useRef(false); // 複製ボタンON/OFFの状態
   /** window レベルのドラッグ追跡用（キャンバス外でも動作） */
   const stageRef = useRef<Konva.Stage | null>(null);
+  // move-select: 空キャンバスで mousedown したかフラグ (ラバーバンド開始条件)
+  const moveSelectRubberBandArmed = useRef(false);
 
   // キャンバス外でのドラッグ追跡: window の pointer/touch イベントを使用
   useEffect(() => {
@@ -578,6 +592,23 @@ export function useCanvasInteraction() {
         if (target === stage) s.setSelectedIds([]);
         else if (target.id()) s.setSelectedIds([target.id()]);
       }
+
+      // move-select モード: 空キャンバスなら arm (ラバーバンド)、要素ならタップでトグル
+      if (s.mode === 'move-select' && !isDragging.current) {
+        const target = e.target;
+        if (target === stage) {
+          moveSelectRubberBandArmed.current = true;
+        } else if (target.id()) {
+          moveSelectRubberBandArmed.current = false;
+          const id = target.id();
+          const cat = getCategoryFromId(id, s.canvasData);
+          if (cat && s.moveSelectMode.categories[cat]) {
+            s.toggleMoveSelectId(id);
+            const { dxMm, dyMm } = useCanvasStore.getState().moveSelectMode;
+            s.shiftMoveSelected(dxMm, dyMm);
+          }
+        }
+      }
     },
     [toGrid, isLongPress]
   );
@@ -653,8 +684,11 @@ export function useCanvasInteraction() {
       // 手摺ドラッグ移動中は window イベントで処理するためスキップ
       if (movingElementId.current) return;
 
-      // select + longPress: 範囲選択矩形
-      if (s.mode === 'select' && isLongPress) {
+      // select + longPress または move-select (空キャンバス起点): 範囲選択矩形
+      const canRubberBand =
+        (s.mode === 'select' && isLongPress) ||
+        (s.mode === 'move-select' && moveSelectRubberBandArmed.current);
+      if (canRubberBand) {
         setSelectionRect({
           x: Math.min(dragStart.current.x, gridPos.x),
           y: Math.min(dragStart.current.y, gridPos.y),
@@ -720,6 +754,47 @@ export function useCanvasInteraction() {
         });
         s.setSelectedIds(ids);
         setSelectionRect(null);
+      }
+
+      // move-select: ラバーバンド確定 or 空タップで選択解除
+      if (s.mode === 'move-select' && moveSelectRubberBandArmed.current) {
+        const cats = s.moveSelectMode.categories;
+        if (selectionRect) {
+          const rect = selectionRect;
+          const inRect = (p: { x: number; y: number }) =>
+            p.x >= rect.x && p.y >= rect.y && p.x <= rect.x + rect.w && p.y <= rect.y + rect.h;
+          const ids: string[] = [];
+          if (cats.scaffold) {
+            s.canvasData.handrails.forEach((h) => { if (inRect(h)) ids.push(h.id); });
+            s.canvasData.posts.forEach((p) => { if (inRect(p)) ids.push(p.id); });
+            s.canvasData.antis.forEach((a) => { if (inRect(a)) ids.push(a.id); });
+          }
+          if (cats.building) {
+            s.canvasData.buildings.forEach((b) => {
+              // 建物はいずれかの頂点が矩形内なら選択
+              if (b.points.some(inRect)) ids.push(b.id);
+            });
+          }
+          if (cats.obstacle) {
+            s.canvasData.obstacles.forEach((o) => {
+              const cx = o.x + o.width / 2;
+              const cy = o.y + o.height / 2;
+              if (inRect({ x: cx, y: cy }) || (o.points && o.points.some(inRect))) ids.push(o.id);
+            });
+          }
+          if (cats.memo) {
+            s.canvasData.memos.forEach((m) => { if (inRect(m)) ids.push(m.id); });
+          }
+          s.setMoveSelectIds(ids);
+          setSelectionRect(null);
+        } else {
+          // 空キャンバスタップ (ドラッグなし) → 選択解除
+          s.clearMoveSelectIds();
+        }
+        // shift を再適用（新選択 or 解除に応じて backup からの差分を再計算）
+        const { dxMm, dyMm } = useCanvasStore.getState().moveSelectMode;
+        s.shiftMoveSelected(dxMm, dyMm);
+        moveSelectRubberBandArmed.current = false;
       }
 
       setIsLongPress(false);

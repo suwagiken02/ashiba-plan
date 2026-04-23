@@ -28,13 +28,14 @@ const OBSTACLE_LABELS: Record<ObstacleType, string> = {
 };
 
 export default function ObstacleLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
+  const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
   return (
     <Layer>
       {canvasData.obstacles.map((obs) => {
-        const isSelected = selectedIds.includes(obs.id);
+        const isSelected = effectiveSelectedIds.includes(obs.id);
         const color = OBSTACLE_COLORS[obs.type];
         const label = obs.label || OBSTACLE_LABELS[obs.type];
         const isCarport = obs.type === 'carport';

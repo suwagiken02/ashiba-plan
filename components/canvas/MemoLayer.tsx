@@ -24,13 +24,14 @@ function getShapePath(shape: MemoShape, w: number, h: number): string {
 }
 
 export default function MemoLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
+  const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
   return (
     <Layer>
       {canvasData.memos.map((memo) => {
-        const isSelected = selectedIds.includes(memo.id);
+        const isSelected = effectiveSelectedIds.includes(memo.id);
         const screenX = memo.x * gridPx + panX;
         const screenY = memo.y * gridPx + panY;
         const fontSize = Math.max(10, 12 * zoom);
