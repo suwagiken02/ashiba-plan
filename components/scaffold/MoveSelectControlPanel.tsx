@@ -36,8 +36,8 @@ export default function MoveSelectControlPanel() {
     mode,
     moveSelectMode,
     canvasData,
-    scaffoldMoveStep,
-    setScaffoldMoveStep,
+    moveSelectStep,
+    setMoveSelectStep,
     setMoveSelectCategories,
     setMoveSelectIds,
     clearMoveSelectIds,
@@ -65,7 +65,7 @@ export default function MoveSelectControlPanel() {
   if (mode !== 'move-select') return null;
 
   const { categories, selectedIds, dxMm, dyMm } = moveSelectMode;
-  const step = scaffoldMoveStep;
+  const step = moveSelectStep;
 
   /** カテゴリ切替: OFF 化時は該当カテゴリの selectedIds を除外、シフトを再適用 */
   const handleCategoryToggle = (cat: CategoryKey) => {
@@ -196,7 +196,7 @@ export default function MoveSelectControlPanel() {
         {STEP_OPTIONS.map((s) => (
           <button
             key={s}
-            onClick={() => setScaffoldMoveStep(s)}
+            onClick={() => setMoveSelectStep(s)}
             className={`flex-1 py-1 rounded-lg text-xs font-mono border transition-colors ${
               step === s ? 'bg-accent text-white border-accent' : 'border-dark-border text-dimension'
             }`}

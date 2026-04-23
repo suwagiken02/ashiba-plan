@@ -129,10 +129,10 @@ export default function ModeToolbar() {
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowAshibaMenu(false)} />
           <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3 flex-wrap justify-center max-w-[calc(100vw-32px)]">
-            {/* 移動（足場一括移動モードに入る） */}
+            {/* 移動（選択移動モードに入る: カテゴリ別＋選択範囲のみ移動） */}
             <button
               onClick={() => {
-                useCanvasStore.getState().enterScaffoldMoveMode();
+                useCanvasStore.getState().enterMoveSelectMode();
                 setShowAshibaMenu(false);
               }}
               className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
