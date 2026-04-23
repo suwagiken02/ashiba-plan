@@ -481,17 +481,17 @@ export default function PartSelector() {
   const antiButtons = (
     <div className="space-y-1">
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-amber-400 w-6 shrink-0">400</span>
+        <span className="text-[11px] text-amber-500 font-bold w-6 shrink-0">400</span>
         <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{antiLengths.map((l) => (
           <button key={`a400-${l}`} onPointerDown={(e) => handleAntiDown(l, 400, direction, e)}
-            className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-amber-500/20 text-amber-300 border border-amber-500/30">{l}</button>
+            className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-amber-600 text-white border border-amber-700">{l}</button>
         ))}</div>
       </div>
       <div className="flex items-center gap-1.5">
-        <span className="text-[10px] text-yellow-400 w-6 shrink-0">250</span>
+        <span className="text-[11px] text-yellow-600 font-bold w-6 shrink-0">250</span>
         <div className="flex gap-1 overflow-x-auto sm:flex-wrap">{antiLengths.map((l) => (
           <button key={`a250-${l}`} onPointerDown={(e) => handleAntiDown(l, 250, direction, e)}
-            className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">{l}</button>
+            className="px-2 py-1 rounded text-[11px] font-mono select-none touch-none shrink-0 bg-yellow-500 text-gray-900 border border-yellow-600">{l}</button>
         ))}</div>
       </div>
     </div>
