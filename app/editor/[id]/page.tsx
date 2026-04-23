@@ -18,7 +18,9 @@ import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import AlertDialog from '@/components/ui/AlertDialog';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
-import MoveSelectControlPanel from '@/components/scaffold/MoveSelectControlPanel';
+import MoveSelectCategoryModal from '@/components/scaffold/MoveSelectCategoryModal';
+import MoveSelectRangePanel from '@/components/scaffold/MoveSelectRangePanel';
+import MoveSelectMovePanel from '@/components/scaffold/MoveSelectMovePanel';
 import DarkModeToggle from '@/components/DarkModeToggle';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
@@ -555,8 +557,10 @@ export default function EditorPage() {
       {/* モードツールバー */}
       <ModeToolbar />
 
-      {/* 選択移動モードの中央コントロールパネル */}
-      <MoveSelectControlPanel />
+      {/* 選択移動モードの 3 ステップ UI (各コンポーネントが step に応じて表示制御) */}
+      <MoveSelectCategoryModal />
+      <MoveSelectRangePanel />
+      <MoveSelectMovePanel />
 
       {/* 壁方向入力の確定ボタン */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (
