@@ -103,7 +103,7 @@ export default function ProjectsPage() {
       }
 
       if (drawing) {
-        router.push(`/editor/${drawing.id}`);
+        setProjects(prev => [data, ...prev]);
       }
     } catch (e) {
       console.error('[createProject] unexpected error:', e);
