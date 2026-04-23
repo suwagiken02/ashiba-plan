@@ -74,7 +74,7 @@ export function isPointInPolygon(px: number, py: number, polygon: Point[]): bool
   return inside;
 }
 
-function isConvexCorner(prevEdge: EdgeInfo, currEdge: EdgeInfo): boolean {
+export function isConvexCorner(prevEdge: EdgeInfo, currEdge: EdgeInfo): boolean {
   const ax = prevEdge.p2.x - prevEdge.p1.x;
   const ay = prevEdge.p2.y - prevEdge.p1.y;
   const bx = currEdge.p2.x - currEdge.p1.x;

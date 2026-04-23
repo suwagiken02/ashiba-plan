@@ -12,6 +12,7 @@ import {
   computeAutoLayout,
   placeHandrailsForEdge,
   getEdgesNotCoveredBy,
+  isConvexCorner,
   AutoLayoutResult,
   EdgeInfo,
   EdgeLayout,
@@ -78,7 +79,12 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
           const mx = (s1.x + s2.x) / 2;
           const my = (s1.y + s2.y) / 2;
           const isFocused = focusedSubIndex === edge.index;
-          const labelDist = 14;
+          const N = subEdges.length;
+          const prevEdge = subEdges[(edge.index - 1 + N) % N];
+          const nextEdge = subEdges[(edge.index + 1) % N];
+          const concavePrev = !isConvexCorner(prevEdge, edge);
+          const concaveNext = !isConvexCorner(edge, nextEdge);
+          const labelDist = (concavePrev || concaveNext) ? 22 : 14;
           const lx = mx + edge.nx * labelDist;
           const ly = my + edge.ny * labelDist;
           return (
@@ -124,7 +130,12 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
           const my = (s1.y + s2.y) / 2;
           const isFocused = focusedIndex === edge.index;
 
-          const labelDist = 14;
+          const N = edges.length;
+          const prevEdge = edges[(edge.index - 1 + N) % N];
+          const nextEdge = edges[(edge.index + 1) % N];
+          const concavePrev = !isConvexCorner(prevEdge, edge);
+          const concaveNext = !isConvexCorner(edge, nextEdge);
+          const labelDist = (concavePrev || concaveNext) ? 22 : 14;
           const lx = mx + edge.nx * labelDist;
           const ly = my + edge.ny * labelDist;
 
