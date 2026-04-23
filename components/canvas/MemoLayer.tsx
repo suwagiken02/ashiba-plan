@@ -71,7 +71,7 @@ export default function MemoLayer() {
                 fill="rgba(55, 138, 221, 0.15)"
                 stroke={isSelected ? '#FF6B35' : '#378ADD'}
                 strokeWidth={isSelected ? 2.5 : 1.5}
-                listening={mode === 'select' || mode === 'erase'}
+                listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
                 id={memo.id}
               />
               <Text
@@ -111,7 +111,7 @@ export default function MemoLayer() {
                 stroke={isSelected ? '#378ADD' : '#ccc'}
                 strokeWidth={isSelected ? 2 : 0.5}
                 cornerRadius={4}
-                listening={mode === 'select' || mode === 'erase'}
+                listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
                 id={memo.id}
               />
               <Text
@@ -135,7 +135,7 @@ export default function MemoLayer() {
             text={memo.text}
             fontSize={fontSize}
             fill={isSelected ? '#378ADD' : '#555'}
-            listening={mode === 'select' || mode === 'erase'}
+            listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
             id={memo.id}
             draggable={mode === 'select'}
             onDragStart={() => useCanvasStore.getState().pushHistory()}

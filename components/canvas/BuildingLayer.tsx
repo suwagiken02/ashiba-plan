@@ -56,7 +56,7 @@ export default function BuildingLayer() {
             opacity={is2F ? 0.6 : 1}
             stroke={strokeColor}
             strokeWidth={isSelected ? 3 : 2}
-            listening={mode === 'select' || mode === 'erase'}
+            listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
             id={building.id}
           />
         );

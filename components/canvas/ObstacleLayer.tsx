@@ -55,7 +55,7 @@ export default function ObstacleLayer() {
                 opacity={0.7}
                 stroke={isSelected ? '#378ADD' : '#999'}
                 strokeWidth={isSelected ? 2 : 1}
-                listening={mode === 'select' || mode === 'erase'}
+                listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
                 id={obs.id}
                 draggable={mode === 'select'}
                 onDragStart={() => useCanvasStore.getState().pushHistory()}
@@ -107,7 +107,7 @@ export default function ObstacleLayer() {
                 opacity={0.7}
                 stroke={isSelected ? '#378ADD' : '#999'}
                 strokeWidth={isSelected ? 2 : 0.5}
-                listening={mode === 'select' || mode === 'erase'}
+                listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
                 id={obs.id}
                 draggable={mode === 'select'}
                 onDragStart={() => useCanvasStore.getState().pushHistory()}
@@ -157,7 +157,7 @@ export default function ObstacleLayer() {
               stroke={isSelected ? '#378ADD' : isCarport ? color : '#999'}
               strokeWidth={isSelected ? 2 : isCarport ? 1.5 : 0.5}
               dash={isCarport ? [8, 4] : undefined}
-              listening={mode === 'select' || mode === 'erase'}
+              listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
               id={obs.id}
               draggable={mode === 'select'}
               onDragStart={() => useCanvasStore.getState().pushHistory()}

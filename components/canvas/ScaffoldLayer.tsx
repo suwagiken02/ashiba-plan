@@ -81,7 +81,7 @@ export default function ScaffoldLayer() {
               cornerRadius={2}
               stroke={isSelected ? '#FF6B35' : (anti.width === 400 ? '#B45309' : '#A16207')}
               strokeWidth={isSelected ? 2 : 1.5}
-              listening={mode === 'select' || mode === 'erase'}
+              listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
               id={anti.id}
               draggable={mode === 'select'}
               onDragStart={() => useCanvasStore.getState().pushHistory()}
@@ -207,7 +207,7 @@ export default function ScaffoldLayer() {
               fill="#2c2c2a"
               stroke={isSelected ? '#FF6B35' : '#2c2c2a'}
               strokeWidth={isSelected ? 2 : 0}
-              listening={mode === 'select' || mode === 'erase'}
+              listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
               id={p.id}
               draggable={mode === 'select'}
               onDragStart={() => useCanvasStore.getState().pushHistory()}
