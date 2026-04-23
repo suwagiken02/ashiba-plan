@@ -209,6 +209,32 @@ type CanvasStore = {
   /** 全足場部材を平行移動（引数は mm 単位、内部で 1/10 してグリッドに反映） */
   shiftAllScaffolds: (dxMm: number, dyMm: number) => void;
 
+  // 選択移動モード (カテゴリ別 + 選択範囲の要素だけをまとめて移動)
+  moveSelectMode: {
+    active: boolean;
+    categories: {
+      scaffold: boolean;   // handrails + posts + antis
+      building: boolean;
+      obstacle: boolean;
+      memo: boolean;
+    };
+    selectedIds: string[];
+    /** backup からの累積シフト量 (mm) */
+    dxMm: number;
+    dyMm: number;
+    /** enter 時点の canvasData スナップショット (cancel 用) */
+    backup: CanvasData | null;
+  };
+  enterMoveSelectMode: () => void;
+  setMoveSelectCategories: (categories: { scaffold: boolean; building: boolean; obstacle: boolean; memo: boolean }) => void;
+  setMoveSelectIds: (ids: string[]) => void;
+  toggleMoveSelectId: (id: string) => void;
+  clearMoveSelectIds: () => void;
+  /** backup からの絶対シフト量を指定し、選択要素のみ動かす（mm 単位） */
+  shiftMoveSelected: (dxMm: number, dyMm: number) => void;
+  commitMoveSelectMode: () => void;
+  cancelMoveSelectMode: () => void;
+
   // 2F仮配置
   building2FDraft: {
     points: { x: number; y: number }[];
@@ -509,6 +535,132 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       isDirty: true,
     });
   },
+
+  // --- 選択移動モード ---
+  moveSelectMode: {
+    active: false,
+    categories: { scaffold: true, building: false, obstacle: false, memo: false },
+    selectedIds: [],
+    dxMm: 0,
+    dyMm: 0,
+    backup: null,
+  },
+  enterMoveSelectMode: () => {
+    const { canvasData } = get();
+    // 現在の（pre-move）状態を履歴に積む → commit 後に undo で戻せる
+    get().pushHistory();
+    set({
+      moveSelectMode: {
+        active: true,
+        categories: { scaffold: true, building: false, obstacle: false, memo: false },
+        selectedIds: [],
+        dxMm: 0,
+        dyMm: 0,
+        backup: JSON.parse(JSON.stringify(canvasData)),
+      },
+      mode: 'move-select',
+      selectedIds: [],
+    });
+  },
+  setMoveSelectCategories: (categories) => {
+    const { moveSelectMode } = get();
+    set({ moveSelectMode: { ...moveSelectMode, categories } });
+  },
+  setMoveSelectIds: (ids) => {
+    const { moveSelectMode } = get();
+    set({ moveSelectMode: { ...moveSelectMode, selectedIds: ids } });
+  },
+  toggleMoveSelectId: (id) => {
+    const { moveSelectMode } = get();
+    const exists = moveSelectMode.selectedIds.includes(id);
+    const selectedIds = exists
+      ? moveSelectMode.selectedIds.filter(x => x !== id)
+      : [...moveSelectMode.selectedIds, id];
+    set({ moveSelectMode: { ...moveSelectMode, selectedIds } });
+  },
+  clearMoveSelectIds: () => {
+    const { moveSelectMode } = get();
+    set({ moveSelectMode: { ...moveSelectMode, selectedIds: [] } });
+  },
+  shiftMoveSelected: (dxMm, dyMm) => {
+    const { moveSelectMode } = get();
+    const backup = moveSelectMode.backup;
+    if (!backup) return;
+    const sel = new Set(moveSelectMode.selectedIds);
+    const cats = moveSelectMode.categories;
+    const dx = dxMm / 10; // mm → grid
+    const dy = dyMm / 10;
+
+    const shifted: CanvasData = {
+      ...backup,
+      buildings: backup.buildings.map(b =>
+        cats.building && sel.has(b.id)
+          ? { ...b, points: b.points.map(p => ({ x: p.x + dx, y: p.y + dy })) }
+          : b
+      ),
+      handrails: backup.handrails.map(h =>
+        cats.scaffold && sel.has(h.id) ? { ...h, x: h.x + dx, y: h.y + dy } : h
+      ),
+      posts: backup.posts.map(p =>
+        cats.scaffold && sel.has(p.id) ? { ...p, x: p.x + dx, y: p.y + dy } : p
+      ),
+      antis: backup.antis.map(a =>
+        cats.scaffold && sel.has(a.id) ? { ...a, x: a.x + dx, y: a.y + dy } : a
+      ),
+      obstacles: backup.obstacles.map(o =>
+        cats.obstacle && sel.has(o.id)
+          ? {
+              ...o,
+              x: o.x + dx,
+              y: o.y + dy,
+              ...(o.points ? { points: o.points.map(p => ({ x: p.x + dx, y: p.y + dy })) } : {}),
+            }
+          : o
+      ),
+      memos: backup.memos.map(m =>
+        cats.memo && sel.has(m.id) ? { ...m, x: m.x + dx, y: m.y + dy } : m
+      ),
+    };
+
+    set({
+      canvasData: shifted,
+      moveSelectMode: { ...moveSelectMode, dxMm, dyMm },
+      isDirty: true,
+    });
+  },
+  commitMoveSelectMode: () => {
+    set({
+      moveSelectMode: {
+        active: false,
+        categories: { scaffold: true, building: false, obstacle: false, memo: false },
+        selectedIds: [],
+        dxMm: 0,
+        dyMm: 0,
+        backup: null,
+      },
+      mode: 'select',
+      isDirty: true,
+    });
+  },
+  cancelMoveSelectMode: () => {
+    const { moveSelectMode } = get();
+    const backup = moveSelectMode.backup;
+    if (backup) {
+      set({ canvasData: backup });
+    }
+    set({
+      moveSelectMode: {
+        active: false,
+        categories: { scaffold: true, building: false, obstacle: false, memo: false },
+        selectedIds: [],
+        dxMm: 0,
+        dyMm: 0,
+        backup: null,
+      },
+      mode: 'select',
+    });
+  },
+
   reorderHandrails: (lineIds: string[], newOrder: string[]) => {
     const { canvasData } = get();
     const lineGroup = canvasData.handrails.filter(h => lineIds.includes(h.id));
