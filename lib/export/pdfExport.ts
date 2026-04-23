@@ -206,7 +206,7 @@ export const exportToPdf = async (
       }
       stage.batchDraw();
 
-      const pixelRatio = Math.max(2, Math.ceil(drawableWidthPt / pw));
+      const pixelRatio = Math.max(2, Math.ceil(paperDim.width / pw));
       const dataUrl = stage.toDataURL({
         x: rectX,
         y: rectY,
@@ -224,23 +224,14 @@ export const exportToPdf = async (
       const imageBytes = await fetch(dataUrl).then((res) => res.arrayBuffer());
       const pngImage = await pdfDoc.embedPng(imageBytes);
 
-      // 描画可能エリアにフィット
-      const imgAspect = pw / ph;
-      const areaAspect = drawableWidthPt / drawableHeightPt;
-      let imgWidth: number, imgHeight: number;
-      if (imgAspect > areaAspect) {
-        imgWidth = drawableWidthPt;
-        imgHeight = drawableWidthPt / imgAspect;
-      } else {
-        imgHeight = drawableHeightPt;
-        imgWidth = drawableHeightPt * imgAspect;
-      }
-
+      // 紙面全体に原寸で埋め込む（縮尺保証、余白0）
+      // 印刷枠の widthGrid/heightGrid は paper.width/height × factor/10 で定義されており、
+      // アスペクト比が paper と一致するので歪みなく fit する
       page.drawImage(pngImage, {
-        x: drawableX + (drawableWidthPt - imgWidth) / 2,
-        y: drawableY + (drawableHeightPt - imgHeight) / 2,
-        width: imgWidth,
-        height: imgHeight,
+        x: 0,
+        y: 0,
+        width: paperDim.width,
+        height: paperDim.height,
       });
     } else {
       // 印刷枠なし: ステージ全体をキャプチャ（フォールバック）
