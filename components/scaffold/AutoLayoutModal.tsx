@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { Handrail, HandrailLengthMm, Point } from '@/types';
+import { Handrail, HandrailLengthMm, Point, ScaffoldStartConfig } from '@/types';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
@@ -21,7 +21,7 @@ import {
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
-function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeIndex, subPoints, subEdges, subHighlightIndices, focusedSubIndex }: {
+function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeIndex, subPoints, subEdges, subHighlightIndices, focusedSubIndex, scaffoldStart }: {
   points: Point[];
   edges: EdgeInfo[];
   focusedIndex: number | null;
@@ -35,6 +35,8 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
   subHighlightIndices?: Set<number>;
   /** サブ建物でフォーカスされた辺（離れ入力 focus 時） */
   focusedSubIndex?: number | null;
+  /** スタート角マーカー表示用（主建物 points 側） */
+  scaffoldStart?: ScaffoldStartConfig;
 }) {
   if (points.length < 3) return null;
 
@@ -154,6 +156,27 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
             </React.Fragment>
           );
         })}
+        {/* スタート角★マーカー（最前面） */}
+        {scaffoldStart && scaffoldStart.startVertexIndex !== undefined && points.length > 0 && (() => {
+          const idx = scaffoldStart.startVertexIndex! % points.length;
+          const svgPt = toSvg(points[idx]);
+          return (
+            <text
+              x={svgPt.x}
+              y={svgPt.y}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={20}
+              fontWeight="bold"
+              fill="#FFD700"
+              stroke="#000"
+              strokeWidth={0.8}
+              style={{ paintOrder: 'stroke' }}
+            >
+              ★
+            </text>
+          );
+        })()}
       </svg>
     </>
   );
@@ -649,6 +672,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             subEdges={targetFloor === 'both' ? edges1FAll : undefined}
             subHighlightIndices={targetFloor === 'both' ? uncoveredIdxSet1F : undefined}
             focusedSubIndex={focusedSubEdgeIndex}
+            scaffoldStart={scaffoldStart}
           />
 
           {/* 各辺の離れ入力 */}
@@ -950,6 +974,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                   edges={edges}
                   focusedIndex={suggestion.edgeIndex}
                   blinkEdgeIndex={suggestion.edgeIndex}
+                  scaffoldStart={scaffoldStart}
                 />
               </div>
 
