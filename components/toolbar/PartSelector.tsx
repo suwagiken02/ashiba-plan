@@ -121,6 +121,9 @@ export default function PartSelector() {
   const trashRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const mobilePanelRef = useRef<HTMLDivElement>(null);
+  // スマホ手摺プレビュー: タップ判定用（pointerdown 時の座標と 5px 以上動いたかのフラグ）
+  const previewTapStartRef = useRef<{ x: number; y: number } | null>(null);
+  const previewDraggedRef = useRef(false);
 
   // --- フローティングパネル状態 ---
   const defaultW = 600;
@@ -530,9 +533,35 @@ export default function PartSelector() {
                     <div className="shrink-0 relative">
                       <svg
                         width={ap.W} height={ap.H}
-                        className="bg-dark-bg rounded-lg border border-dark-border cursor-grab active:cursor-grabbing select-none"
+                        className="bg-dark-bg rounded-lg border border-dark-border cursor-pointer active:opacity-80 select-none"
                         style={{ touchAction: 'none' }}
-                        onPointerDown={(e) => handleHandrailDown(selectedHandrailLength, handrailAngle, e)}
+                        onPointerDown={(e) => {
+                          previewTapStartRef.current = { x: e.clientX, y: e.clientY };
+                          previewDraggedRef.current = false;
+                          handleHandrailDown(selectedHandrailLength, handrailAngle, e);
+                        }}
+                        onPointerMove={(e) => {
+                          const s = previewTapStartRef.current;
+                          if (!s) return;
+                          if (Math.hypot(e.clientX - s.x, e.clientY - s.y) >= 5) {
+                            previewDraggedRef.current = true;
+                          }
+                        }}
+                        onPointerUp={() => {
+                          if (previewTapStartRef.current && !previewDraggedRef.current) {
+                            setHandrailAngle((prev) => {
+                              if (prev === 'horizontal') return 'vertical';
+                              if (prev === 'vertical') return 'horizontal';
+                              return 'horizontal';
+                            });
+                          }
+                          previewTapStartRef.current = null;
+                          previewDraggedRef.current = false;
+                        }}
+                        onPointerCancel={() => {
+                          previewTapStartRef.current = null;
+                          previewDraggedRef.current = false;
+                        }}
                       >
                         <line x1={ap.cx - ap.dx} y1={ap.cy - ap.dy} x2={ap.cx + ap.dx} y2={ap.cy + ap.dy}
                           stroke="#378ADD" strokeWidth={3} strokeLinecap="round" />
