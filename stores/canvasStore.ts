@@ -228,6 +228,8 @@ type CanvasStore = {
   confirmRangeSelection: () => void;
   /** select → category (選択リセット + canvasData 復元) */
   backToCategory: () => void;
+  /** move → select (移動をリセット、選択は維持) */
+  backToSelect: () => void;
   setMoveSelectCategories: (categories: { scaffold: boolean; building: boolean; obstacle: boolean; memo: boolean }) => void;
   setMoveSelectIds: (ids: string[]) => void;
   toggleMoveSelectId: (id: string) => void;
@@ -527,6 +529,22 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ...moveSelectMode,
         step: 'category',
         selectedIds: [],
+        dxMm: 0,
+        dyMm: 0,
+      },
+    });
+  },
+  backToSelect: () => {
+    const { moveSelectMode } = get();
+    const backup = moveSelectMode.backup;
+    // 移動は巻き戻すが selectedIds は維持（再調整を想定）
+    if (backup) {
+      set({ canvasData: JSON.parse(JSON.stringify(backup)) });
+    }
+    set({
+      moveSelectMode: {
+        ...moveSelectMode,
+        step: 'select',
         dxMm: 0,
         dyMm: 0,
       },
