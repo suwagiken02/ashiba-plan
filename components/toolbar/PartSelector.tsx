@@ -117,6 +117,7 @@ export default function PartSelector() {
   const [toolbarDrag, setToolbarDrag] = useState<ToolbarDrag | null>(null);
   const [direction, setDirection] = useState<'horizontal' | 'vertical'>('horizontal');
   const [handrailAngle, setHandrailAngle] = useState<number | 'horizontal' | 'vertical'>('horizontal');
+  const [showAngleModal, setShowAngleModal] = useState(false);
   const [trashHover, setTrashHover] = useState(false);
   const trashRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
@@ -527,79 +528,87 @@ export default function PartSelector() {
 
             <div className="px-3 py-2">
               {activeTab === 'handrail' && (
-                <div className="space-y-2">
-                  {/* スマホ用: プレビュー+角度操作 */}
-                  <div className="flex items-center gap-3 sm:hidden">
-                    <div className="shrink-0 relative">
-                      <svg
-                        width={ap.W} height={ap.H}
-                        className="bg-dark-bg rounded-lg border border-dark-border cursor-pointer active:opacity-80 select-none"
-                        style={{ touchAction: 'none' }}
-                        onPointerDown={(e) => {
-                          previewTapStartRef.current = { x: e.clientX, y: e.clientY };
-                          previewDraggedRef.current = false;
-                          handleHandrailDown(selectedHandrailLength, handrailAngle, e);
-                        }}
-                        onPointerMove={(e) => {
-                          const s = previewTapStartRef.current;
-                          if (!s) return;
-                          if (Math.hypot(e.clientX - s.x, e.clientY - s.y) >= 5) {
-                            previewDraggedRef.current = true;
-                          }
-                        }}
-                        onPointerUp={() => {
-                          if (previewTapStartRef.current && !previewDraggedRef.current) {
-                            setHandrailAngle((prev) => {
-                              if (prev === 'horizontal') return 'vertical';
-                              if (prev === 'vertical') return 'horizontal';
-                              return 'horizontal';
-                            });
-                          }
-                          previewTapStartRef.current = null;
-                          previewDraggedRef.current = false;
-                        }}
-                        onPointerCancel={() => {
-                          previewTapStartRef.current = null;
-                          previewDraggedRef.current = false;
-                        }}
+                <div className="relative -my-[10px]">
+                  {/* 角度モーダル: パネル上側にせり上がる */}
+                  {showAngleModal && (
+                    <div className="absolute bottom-full left-0 right-0 mb-2 z-10 bg-dark-surface border border-dark-border rounded-lg shadow-lg p-2">
+                      <div className="grid grid-cols-4 gap-2">
+                        <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) + 10)}
+                          className="py-2 rounded-lg text-xs font-bold bg-dark-bg border border-dark-border text-canvas">+10°</button>
+                        <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) + 1)}
+                          className="py-2 rounded-lg text-xs font-bold bg-dark-bg border border-dark-border text-canvas">+1°</button>
+                        <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) - 10)}
+                          className="py-2 rounded-lg text-xs font-bold bg-dark-bg border border-dark-border text-canvas">-10°</button>
+                        <button onClick={() => setHandrailAngle((prev) => (typeof prev === 'number' ? prev : 0) - 1)}
+                          className="py-2 rounded-lg text-xs font-bold bg-dark-bg border border-dark-border text-canvas">-1°</button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* メインレイアウト: [プレビュー+角度ボタン縦並び] | サイズ2行グリッド */}
+                  <div className="flex items-stretch gap-2">
+                    {/* 左: プレビュー(上) + 角度ボタン(下、10px) 縦並び */}
+                    <div className="flex flex-col shrink-0">
+                      <div className="w-20 h-20">
+                        <svg
+                          width={ap.W} height={ap.H}
+                          className="block bg-dark-bg rounded-lg border border-dark-border cursor-pointer active:opacity-80 select-none"
+                          style={{ touchAction: 'none' }}
+                          onPointerDown={(e) => {
+                            previewTapStartRef.current = { x: e.clientX, y: e.clientY };
+                            previewDraggedRef.current = false;
+                            handleHandrailDown(selectedHandrailLength, handrailAngle, e);
+                          }}
+                          onPointerMove={(e) => {
+                            const s = previewTapStartRef.current;
+                            if (!s) return;
+                            if (Math.hypot(e.clientX - s.x, e.clientY - s.y) >= 5) {
+                              previewDraggedRef.current = true;
+                            }
+                          }}
+                          onPointerUp={() => {
+                            if (previewTapStartRef.current && !previewDraggedRef.current) {
+                              setHandrailAngle((prev) => {
+                                if (prev === 'horizontal') return 'vertical';
+                                if (prev === 'vertical') return 'horizontal';
+                                return 'horizontal';
+                              });
+                            }
+                            previewTapStartRef.current = null;
+                            previewDraggedRef.current = false;
+                          }}
+                          onPointerCancel={() => {
+                            previewTapStartRef.current = null;
+                            previewDraggedRef.current = false;
+                          }}
+                        >
+                          <line x1={ap.cx - ap.dx} y1={ap.cy - ap.dy} x2={ap.cx + ap.dx} y2={ap.cy + ap.dy}
+                            stroke="#378ADD" strokeWidth={3} strokeLinecap="round" />
+                          <circle cx={ap.cx - ap.dx} cy={ap.cy - ap.dy} r={3} fill="#378ADD" />
+                          <circle cx={ap.cx + ap.dx} cy={ap.cy + ap.dy} r={3} fill="#378ADD" />
+                        </svg>
+                      </div>
+                      <button
+                        onClick={() => setShowAngleModal((v) => !v)}
+                        className={`w-20 h-[20px] flex-none min-h-0 text-[8px] leading-none whitespace-nowrap overflow-hidden flex items-center justify-center rounded border transition-colors ${showAngleModal ? 'bg-accent text-white border-accent' : 'bg-dark-bg text-canvas border-dark-border'}`}
                       >
-                        <line x1={ap.cx - ap.dx} y1={ap.cy - ap.dy} x2={ap.cx + ap.dx} y2={ap.cy + ap.dy}
-                          stroke="#378ADD" strokeWidth={3} strokeLinecap="round" />
-                        <circle cx={ap.cx - ap.dx} cy={ap.cy - ap.dy} r={3} fill="#378ADD" />
-                        <circle cx={ap.cx + ap.dx} cy={ap.cy + ap.dy} r={3} fill="#378ADD" />
-                      </svg>
-                      {typeof handrailAngle === 'number' && (
-                        <div className="absolute top-1 left-1/2 -translate-x-1/2 text-[10px] text-dimension font-mono">
-                          {handrailAngle}°
-                        </div>
-                      )}
-                    </div>
-                    <div className="flex-1 grid grid-cols-3 gap-1">
-                      <button onClick={() => setHandrailAngle('horizontal')}
-                        className={`py-2 rounded-lg text-[11px] font-bold border ${handrailAngle === 'horizontal' ? 'bg-accent text-white border-accent' : 'bg-dark-bg border-dark-border text-canvas'}`}>
-                        横
+                        <span className="whitespace-nowrap leading-none">角度</span>
                       </button>
-                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c + 10); }}
-                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">+10°</button>
-                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c + 1); }}
-                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">+1°</button>
-                      <button onClick={() => setHandrailAngle('vertical')}
-                        className={`py-2 rounded-lg text-[11px] font-bold border ${handrailAngle === 'vertical' ? 'bg-accent text-white border-accent' : 'bg-dark-bg border-dark-border text-canvas'}`}>
-                        縦
-                      </button>
-                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c - 10); }}
-                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">-10°</button>
-                      <button onClick={() => { const c = typeof handrailAngle === 'number' ? handrailAngle : 0; setHandrailAngle(c - 1); }}
-                        className="py-2 rounded-lg text-[11px] font-bold bg-dark-bg border border-dark-border text-canvas hover:bg-accent/20 hover:border-accent">-1°</button>
                     </div>
-                  </div>
-                  {/* 長さプリセット（入替ボタンは下メニューの「足場→入れ替え」へ移動） */}
-                  <div className="flex gap-1.5 overflow-x-auto sm:flex-wrap">
-                    {handrailLengths.map((l) => (
-                      <button key={`hr-m-${l}`} onClick={() => setSelectedHandrailLength(l)} onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
-                        className={`px-2 py-1.5 rounded-lg text-xs font-mono select-none touch-none shrink-0 ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
-                      >{l}</button>
-                    ))}
+
+                    {/* 右: サイズ2行グリッド、列数 = ceil(N/2) */}
+                    <div
+                      className="flex-1 grid grid-rows-2 gap-1"
+                      style={{ gridTemplateColumns: `repeat(${Math.max(1, Math.ceil(handrailLengths.length / 2))}, minmax(0, 1fr))` }}
+                    >
+                      {handrailLengths.map((l) => (
+                        <button key={`hr-m-${l}`}
+                          onClick={() => setSelectedHandrailLength(l)}
+                          onPointerDown={(e) => handleHandrailDown(l, handrailAngle, e)}
+                          className={`w-full h-full rounded-lg text-[10px] font-mono select-none touch-none ${selectedHandrailLength === l ? 'bg-handrail text-white' : 'bg-dark-bg text-canvas border border-dark-border'}`}
+                        >{l}</button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               )}
