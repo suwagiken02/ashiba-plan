@@ -1,7 +1,9 @@
 'use client';
 import React, { useState } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { MemoShape } from '@/types';
+import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
 
 type Props = { onClose: () => void };
 
@@ -30,6 +32,29 @@ export default function MemoCreateModal({ onClose }: Props) {
     useCanvasStore.getState().setMemoDraft(settings);
     useCanvasStore.getState().setLastMemoSettings(settings);
     useCanvasStore.getState().setMode('memo');
+    onClose();
+  };
+
+  /** スマホ用: キャンバス画面中央へ即配置 */
+  const handlePlaceAtCenter = () => {
+    if (!text.trim()) return;
+    const settings = { shape, text, angle, scaleX: scaleX / 100, scaleY: scaleY / 100 };
+    const s = useCanvasStore.getState();
+    const gridPx = INITIAL_GRID_PX * s.zoom;
+    const cx = Math.round((s.canvasSize.width / 2 - s.panX) / gridPx);
+    const cy = Math.round((s.canvasSize.height / 2 - s.panY) / gridPx);
+    s.addMemo({
+      id: uuidv4(),
+      x: cx,
+      y: cy,
+      text: settings.text,
+      style: settings.shape,
+      shape: settings.shape,
+      angle: settings.angle,
+      scaleX: settings.scaleX,
+      scaleY: settings.scaleY,
+    });
+    s.setLastMemoSettings(settings);
     onClose();
   };
 
@@ -131,8 +156,14 @@ export default function MemoCreateModal({ onClose }: Props) {
           <button onClick={onClose} className="flex-1 py-2.5 border border-dark-border rounded-xl text-sm text-dimension">
             キャンセル
           </button>
+          {/* スマホ: 中央に即配置 */}
+          <button onClick={handlePlaceAtCenter} disabled={!text.trim()}
+            className="sm:hidden flex-1 py-2.5 bg-accent text-white rounded-xl text-sm font-bold disabled:opacity-50">
+            中央に配置
+          </button>
+          {/* PC: 配置モードへ切替 (ドラッグ or クリックで配置) */}
           <button onClick={handleDragStart} disabled={!text.trim()}
-            className="flex-1 py-2.5 bg-accent text-white rounded-xl text-sm font-bold disabled:opacity-50">
+            className="hidden sm:block flex-1 py-2.5 bg-accent text-white rounded-xl text-sm font-bold disabled:opacity-50">
             配置モードへ
           </button>
         </div>

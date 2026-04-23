@@ -111,6 +111,9 @@ type CanvasStore = {
   showDimensionLines: boolean;
   toggleShowDimensionLines: () => void;
   setShowDimensionLines: (v: boolean) => void;
+  /** キャンバス描画エリアのピクセルサイズ（EditorPage から同期） */
+  canvasSize: { width: number; height: number };
+  setCanvasSize: (size: { width: number; height: number }) => void;
   showGridGuide: boolean;
   toggleShowGridGuide: () => void;
   showPrintArea: boolean;
@@ -329,6 +332,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   showDimensionLines: false,
   toggleShowDimensionLines: () => set({ showDimensionLines: !get().showDimensionLines }),
   setShowDimensionLines: (v) => set({ showDimensionLines: v }),
+  canvasSize: { width: 0, height: 0 },
+  setCanvasSize: (size) => set({ canvasSize: size }),
   showGridGuide: false,
   toggleShowGridGuide: () => set({ showGridGuide: !get().showGridGuide }),
   showPrintArea: false,

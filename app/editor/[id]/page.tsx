@@ -122,8 +122,9 @@ export default function EditorPage() {
     setBuildingInputMethod,
     showDimensionLines,
     toggleShowDimensionLines,
+    canvasSize,
+    setCanvasSize,
   } = useCanvasStore();
-  const [canvasSize, setCanvasSize] = useState({ width: 0, height: 0 });
   const [showBuildingModal, setShowBuildingModal] = useState(false);
   const [showBuilding2FModal, setShowBuilding2FModal] = useState(false);
   const [showExportModal, setShowExportModal] = useState(false);
