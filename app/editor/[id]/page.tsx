@@ -16,6 +16,7 @@ import ScaffoldStartModal from '@/components/scaffold/ScaffoldStartModal';
 import RoofSettingsModal from '@/components/building/RoofSettingsModal';
 import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
+import AlertDialog from '@/components/ui/AlertDialog';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import ScaffoldMoveControlPanel from '@/components/scaffold/ScaffoldMoveControlPanel';
 import DarkModeToggle from '@/components/DarkModeToggle';
@@ -124,6 +125,8 @@ export default function EditorPage() {
     toggleShowDimensionLines,
     canvasSize,
     setCanvasSize,
+    alertMessage,
+    setAlertMessage,
   } = useCanvasStore();
   const [showBuildingModal, setShowBuildingModal] = useState(false);
   const [showBuilding2FModal, setShowBuilding2FModal] = useState(false);
@@ -641,6 +644,9 @@ export default function EditorPage() {
       )}
       {(showUdekiModal || showInnerPost) && (
         <UdekiModal onClose={() => { setShowUdekiModal(false); setShowInnerPost(false); }} />
+      )}
+      {alertMessage && (
+        <AlertDialog message={alertMessage} onClose={() => setAlertMessage(null)} />
       )}
       {(showAutoLayoutModal || showAutoLayout) && (
         <AutoLayoutModal onClose={() => { setShowAutoLayoutModal(false); setShowAutoLayout(false); }} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />

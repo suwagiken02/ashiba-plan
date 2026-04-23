@@ -162,6 +162,9 @@ type CanvasStore = {
   setShowScaffoldStart: (show: boolean) => void;
   showAutoLayout: boolean;
   setShowAutoLayout: (show: boolean) => void;
+  /** 共通警告ダイアログのメッセージ (null=非表示) */
+  alertMessage: string | null;
+  setAlertMessage: (msg: string | null) => void;
   showBuildingModal: boolean;
   setShowBuildingModal: (show: boolean) => void;
   showBuilding2FModal: boolean;
@@ -402,6 +405,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setShowScaffoldStart: (show) => set({ showScaffoldStart: show }),
   showAutoLayout: false,
   setShowAutoLayout: (show) => set({ showAutoLayout: show }),
+  alertMessage: null,
+  setAlertMessage: (msg) => set({ alertMessage: msg }),
   showBuildingModal: false,
   setShowBuildingModal: (show) => set({ showBuildingModal: show }),
   showBuilding2FModal: false,

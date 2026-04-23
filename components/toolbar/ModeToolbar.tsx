@@ -57,7 +57,12 @@ export default function ModeToolbar() {
     } else if (id === 'buzai') {
       useCanvasStore.getState().togglePartSelector();
     } else if (id === 'scaffold') {
-      useCanvasStore.getState().setShowScaffoldStart(true);
+      const s = useCanvasStore.getState();
+      if (s.canvasData.buildings.length === 0) {
+        s.setAlertMessage('建物がありません。先に躯体メニューから建物を作成してください');
+        return;
+      }
+      s.setShowScaffoldStart(true);
     } else if (id === 'ashiba') {
       setShowAshibaMenu(true);
     } else if (id === 'settings') {
@@ -149,7 +154,13 @@ export default function ModeToolbar() {
             {/* 自動配置（旧・自動割付） */}
             <button
               onClick={() => {
-                useCanvasStore.getState().setShowAutoLayout(true);
+                const s = useCanvasStore.getState();
+                if (s.canvasData.buildings.length === 0) {
+                  s.setAlertMessage('建物がありません。先に躯体メニューから建物を作成してください');
+                  setShowAshibaMenu(false);
+                  return;
+                }
+                s.setShowAutoLayout(true);
                 setShowAshibaMenu(false);
               }}
               className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
