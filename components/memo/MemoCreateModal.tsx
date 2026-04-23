@@ -55,6 +55,7 @@ export default function MemoCreateModal({ onClose }: Props) {
       scaleY: settings.scaleY,
     });
     s.setLastMemoSettings(settings);
+    s.setMode('select');
     onClose();
   };
 

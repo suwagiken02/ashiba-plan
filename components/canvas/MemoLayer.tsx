@@ -55,6 +55,16 @@ export default function MemoLayer() {
               rotation={ang}
               offsetX={w / 2}
               offsetY={h / 2}
+              draggable={mode === 'select'}
+              onDragStart={() => useCanvasStore.getState().pushHistory()}
+              onDragEnd={(e) => {
+                const dx = Math.round((e.target.x() - screenX) / gridPx);
+                const dy = Math.round((e.target.y() - screenY) / gridPx);
+                e.target.x(screenX); e.target.y(screenY);
+                if (dx !== 0 || dy !== 0) {
+                  useCanvasStore.getState().moveElement(memo.id, dx, dy);
+                }
+              }}
             >
               <Path
                 data={getShapePath(memo.shape, w, h)}
@@ -127,6 +137,16 @@ export default function MemoLayer() {
             fill={isSelected ? '#378ADD' : '#555'}
             listening={mode === 'select' || mode === 'erase'}
             id={memo.id}
+            draggable={mode === 'select'}
+            onDragStart={() => useCanvasStore.getState().pushHistory()}
+            onDragEnd={(e) => {
+              const dx = Math.round((e.target.x() - screenX) / gridPx);
+              const dy = Math.round((e.target.y() - screenY) / gridPx);
+              e.target.x(screenX); e.target.y(screenY);
+              if (dx !== 0 || dy !== 0) {
+                useCanvasStore.getState().moveElement(memo.id, dx, dy);
+              }
+            }}
           />
         );
       })}
