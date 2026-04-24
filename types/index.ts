@@ -74,6 +74,28 @@ export const DEFAULT_ENABLED_SIZES: HandrailLengthMm[] = [1800, 1200, 900, 600, 
 
 export type HandrailSettings = {
   enabledSizes: HandrailLengthMm[];
+  priorityConfig: PriorityConfig;
+};
+
+/** 優先部材リスト設定 */
+export type PriorityConfig = {
+  /** 部材の並び順（上が第1優先） */
+  order: HandrailLengthMm[];
+  /** 先頭 N 個がメイン部材 */
+  mainCount: number;
+  /** 次の N 個がサブ部材 */
+  subCount: number;
+  /** 次の N 個が調整部材 */
+  adjustCount: number;
+  // 残りは除外（自動割付では使わない）
+};
+
+/** 新規ユーザー向けデフォルト優先設定 */
+export const DEFAULT_PRIORITY_CONFIG: PriorityConfig = {
+  order: [1800, 1500, 1200, 1000, 900, 800, 600, 500, 400, 300, 200, 100],
+  mainCount: 1,
+  subCount: 6,
+  adjustCount: 5,
 };
 
 export type HandrailDirection = 'horizontal' | 'vertical' | number;

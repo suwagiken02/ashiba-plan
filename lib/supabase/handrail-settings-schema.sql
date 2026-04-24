@@ -30,3 +30,12 @@ create policy "Shared: anyone can update handrail_settings"
 insert into handrail_settings (owner_id, enabled_sizes)
 select null, '[1800,1200,900,600,400,300,200]'::jsonb
 where not exists (select 1 from handrail_settings where owner_id is null);
+
+-- 優先部材リスト機能（自動割付用）
+alter table handrail_settings
+  add column if not exists priority_config jsonb not null default '{
+    "order": [1800, 1500, 1200, 1000, 900, 800, 600, 500, 400, 300, 200, 100],
+    "mainCount": 1,
+    "subCount": 6,
+    "adjustCount": 5
+  }'::jsonb;
