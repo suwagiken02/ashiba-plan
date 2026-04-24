@@ -363,6 +363,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [selections, setSelections] = useState<Record<number, number>>({});
   const [focusedEdgeIndex, setFocusedEdgeIndex] = useState<number | null>(null);
   const [showConflictConfirm, setShowConflictConfirm] = useState(false);
+  const [showLockedAlert, setShowLockedAlert] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
   const [distanceSuggestions, setDistanceSuggestions] = useState<{
@@ -379,6 +380,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
   const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
   const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
+
+  const getDistance = (idx: number) => distances[idx] ?? defaultDist;
+
+  const setDistance = (idx: number, value: number) => {
+    setDistances(prev => ({ ...prev, [idx]: value }));
+    setResult(null);
+  };
 
   // 問題辺の effectiveMm は「隣接2辺の離れ」で決まる（自身の離れは無関係）。
   // 修正する離れは問題辺の隣接非L辺（= prev か next の非L字側）を対象にする。
@@ -490,6 +498,32 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     const sel: Record<number, number> = {};
     res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
     setSelections(sel);
+  };
+
+  const handleSuggestionAccept = (newDist: number) => {
+    const suggestion = distanceSuggestions[currentSuggestionIdx];
+    const newDistances = { ...distances, [suggestion.edgeIndex]: newDist };
+    setDistances(newDistances);
+    proceedToNextSuggestion(newDistances);
+  };
+
+  const handleSuggestionSkip = () => {
+    proceedToNextSuggestion(distances);
+  };
+
+  const proceedToNextSuggestion = (currentDistances: Record<number, number>) => {
+    const nextIdx = currentSuggestionIdx + 1;
+    if (nextIdx < distanceSuggestions.length) {
+      setCurrentSuggestionIdx(nextIdx);
+    } else {
+      setDistanceSuggestions([]);
+      if (!building) return;
+      const res = computeAutoLayout(building, currentDistances, scaffoldStart, enabledSizes, priorityConfig);
+      setResult(res);
+      const sel: Record<number, number> = {};
+      res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
+      setSelections(sel);
+    }
   };
 
   const handlePlace = () => {
@@ -725,6 +759,54 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             scaffoldStart={scaffoldStart}
           />
 
+          {/* 各辺の離れ入力 */}
+          <div>
+            <p className="text-sm text-dimension mb-2">各辺の離れ (mm)</p>
+            <div className="space-y-1.5">
+              {edges.map(edge => (
+                <div key={edge.index} className="flex items-center gap-2">
+                  <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold ${
+                    focusedEdgeIndex === edge.index ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
+                  }`}>
+                    {edge.label}
+                  </span>
+                  <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
+                  {lockedEdgeIndices.has(edge.index) ? (
+                    <div className="relative flex-1">
+                      <input
+                        type="number"
+                        value={getDistance(edge.index)}
+                        disabled
+                        className="w-full bg-dark-bg border border-dark-border rounded-lg px-2 py-1.5 text-sm font-mono opacity-50 cursor-not-allowed"
+                      />
+                      <div
+                        className="absolute inset-0 cursor-not-allowed"
+                        onClick={() => setShowLockedAlert(true)}
+                      />
+                    </div>
+                  ) : (
+                    // NumInput: 内部テキストstate + blur/Enterでコミット。
+                    // これにより入力途中の "9" や空欄を許容し、Backspace で自由に編集可能。
+                    <NumInput
+                      value={getDistance(edge.index)}
+                      onChange={v => setDistance(edge.index, Math.max(0, v))}
+                      onFocus={() => setFocusedEdgeIndex(edge.index)}
+                      onBlur={() => setFocusedEdgeIndex(null)}
+                      min={0} step={1}
+                      className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
+                        focusedEdgeIndex === edge.index ? 'border-accent' : 'border-dark-border'
+                      }`}
+                    />
+                  )}
+                  {lockedEdgeIndices.has(edge.index) && (
+                    <span className="text-[10px] text-dimension bg-dark-bg px-1.5 py-0.5 rounded border border-dark-border shrink-0">固定</span>
+                  )}
+                  <span className="text-[10px] text-dimension w-16 text-right shrink-0">{edge.lengthMm}mm</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           {scaffoldStart && (
             <p className="text-[10px] text-dimension">
               スタート角: {scaffoldStart.corner.toUpperCase()} /
@@ -732,6 +814,50 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               face2={scaffoldStart.face2FirstHandrail}mm
             </p>
           )}
+
+          {/* 1F下屋辺の離れ入力（1F+2F同時モード・下屋辺あり時のみ表示） */}
+          {targetFloor === 'both' && uncoveredEdges1F.length > 0 && (
+            <div>
+              <p className="text-sm text-dimension mb-2 flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" />
+                1F 下屋辺の離れ (mm)
+                <span className="text-[10px] text-dimension/70">({uncoveredEdges1F.length} 本)</span>
+              </p>
+              <div className="space-y-1.5">
+                {uncoveredEdges1F.map(edge => (
+                  <div key={`sub-${edge.index}`} className="flex items-center gap-2">
+                    <span className={`w-8 h-6 flex items-center justify-center rounded text-xs font-bold ${
+                      focusedSubEdgeIndex === edge.index ? 'bg-green-500 text-white' : 'bg-dark-bg text-green-400'
+                    }`}>
+                      1{edge.label}
+                    </span>
+                    <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
+                    <NumInput
+                      value={distances1F[edge.index] ?? 900}
+                      onChange={v => {
+                        setDistances1F(prev => ({ ...prev, [edge.index]: Math.max(0, v) }));
+                        setResultSub(null);
+                      }}
+                      onFocus={() => setFocusedSubEdgeIndex(edge.index)}
+                      onBlur={() => setFocusedSubEdgeIndex(null)}
+                      min={0} step={1}
+                      className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
+                        focusedSubEdgeIndex === edge.index ? 'border-green-500' : 'border-dark-border'
+                      }`}
+                    />
+                    <span className="text-[10px] text-dimension w-16 text-right shrink-0">{edge.lengthMm}mm</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 計算ボタン */}
+          <button onClick={handleCalc}
+            className="w-full py-2.5 bg-dark-bg border border-accent text-accent font-bold rounded-xl text-sm hover:bg-accent/10 transition-colors"
+          >
+            計算する
+          </button>
 
           {/* 計算結果 */}
           {result && (
