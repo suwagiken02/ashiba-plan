@@ -120,17 +120,19 @@ function SortableRow({ size, section, enabled }: { size: HandrailLengthMm; secti
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.6 : 1,
+    opacity: isDragging ? 0.9 : 1,
+    touchAction: 'none',
   };
 
   const bgClass = enabled ? 'bg-white' : 'bg-gray-200';
   const textClass = enabled ? 'text-gray-900' : 'text-gray-400';
+  const dragClass = isDragging ? 'shadow-lg z-10' : '';
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center h-10 ${bgClass} border rounded-md overflow-hidden select-none`}
+      className={`flex items-center h-10 ${bgClass} border rounded-md overflow-hidden select-none ${dragClass}`}
     >
       <div className={`w-1 self-stretch ${SECTION_BAR_COLOR[section]}`} />
       <button
@@ -138,7 +140,7 @@ function SortableRow({ size, section, enabled }: { size: HandrailLengthMm; secti
         {...attributes}
         {...listeners}
         aria-label="ドラッグハンドル"
-        className="w-8 h-10 flex items-center justify-center text-gray-500 cursor-grab active:cursor-grabbing touch-none"
+        className="w-10 md:w-8 h-10 flex items-center justify-center text-gray-500 cursor-grab active:cursor-grabbing touch-none"
       >
         ≡
       </button>
@@ -155,8 +157,11 @@ function SortableSeparator({ kind }: { kind: SeparatorKind }) {
   const style: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
-    opacity: isDragging ? 0.6 : 1,
+    opacity: isDragging ? 0.9 : 1,
+    touchAction: 'none',
   };
+
+  const dragClass = isDragging ? 'shadow-lg z-10' : '';
 
   return (
     <div
@@ -164,9 +169,9 @@ function SortableSeparator({ kind }: { kind: SeparatorKind }) {
       style={style}
       {...attributes}
       {...listeners}
-      className="flex items-center h-7 bg-gray-100 rounded cursor-grab active:cursor-grabbing touch-none select-none"
+      className={`flex items-center h-9 md:h-7 bg-gray-100 rounded cursor-grab active:cursor-grabbing touch-none select-none ${dragClass}`}
     >
-      <span className="w-6 h-6 flex items-center justify-center text-gray-500 opacity-50">≡</span>
+      <span className="w-10 md:w-6 h-6 flex items-center justify-center text-gray-500 opacity-50">≡</span>
       <span className="flex-1 text-xs text-gray-600 font-medium text-center pr-6">
         {SEP_LABEL[kind]}
       </span>
@@ -181,7 +186,7 @@ export default function DraggablePriorityList() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 150, tolerance: 5 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   const items = buildItems(priorityConfig);
@@ -203,7 +208,7 @@ export default function DraggablePriorityList() {
   };
 
   return (
-    <div className="flex flex-col gap-1 max-w-sm">
+    <div className="flex flex-col gap-1 w-full md:max-w-sm">
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
           {items.map((it) =>
