@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { Handrail, HandrailLengthMm, Point, ScaffoldStartConfig } from '@/types';
+import { Handrail, HandrailLengthMm, Point, ScaffoldStartConfig, PhaseDFlowState, PhaseDCandidate } from '@/types';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
@@ -17,6 +17,14 @@ import {
   EdgeInfo,
   EdgeLayout,
 } from '@/lib/konva/autoLayoutUtils';
+import {
+  initPhaseDFlowState,
+  getCurrentCandidates,
+  confirmCurrentEdge,
+  rollbackCurrentStep,
+  getCurrentEdgeIndex,
+  getStartDistanceForCurrentEdge,
+} from '@/lib/konva/phaseDFlow';
 
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
@@ -369,6 +377,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [phaseDMode, setPhaseDMode] = useState(false);
   const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
   const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
+  const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -1037,14 +1046,174 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 <button
                   className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
                   onClick={() => {
-                    // Phase D-4 で実装: sequential モードへ遷移
-                    alert('Step 1（順次決定）は Phase D-4 で実装予定');
-                    // setPhaseDStep('sequential');
+                    if (!phaseDLockedInfo) return;
+                    const initialState = initPhaseDFlowState({
+                      edgeIndices: edges.map(e => e.index),
+                      lockedEdgeIndices,
+                      startDistances: phaseDLockedInfo,
+                      desiredDistances: phaseDDesiredDistances,
+                    });
+                    setPhaseDFlowState(initialState);
+                    setPhaseDStep('sequential');
                   }}
                 >
                   次へ（順次決定へ）
                 </button>
               </div>
+            </div>
+          )}
+
+          {phaseDStep === 'sequential' && phaseDFlowState && (
+            <div className="flex flex-col gap-3 p-3">
+              <div className="text-sm font-semibold">
+                🚧 Step 1: 順次決定 ({phaseDFlowState.currentStep + 1}/{phaseDFlowState.edgeOrder.length}面)
+              </div>
+
+              {(() => {
+                const currentEdgeIdx = getCurrentEdgeIndex(phaseDFlowState);
+                if (currentEdgeIdx === null) {
+                  // 全完了
+                  return (
+                    <div className="flex flex-col gap-2">
+                      <div className="text-sm text-green-600 font-medium">✅ 全辺の決定が完了しました</div>
+                      <div className="flex justify-end gap-2">
+                        <button
+                          className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
+                          onClick={() => {
+                            setPhaseDStep('input');
+                            setPhaseDFlowState(null);
+                          }}
+                        >
+                          入力に戻る
+                        </button>
+                        <button
+                          className="px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
+                          onClick={() => {
+                            alert('配置処理は Phase D-5 で実装予定');
+                          }}
+                        >
+                          配置する
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                const currentEdge = edges.find(e => e.index === currentEdgeIdx);
+                if (!currentEdge) return null;
+
+                const startDist = getStartDistanceForCurrentEdge(phaseDFlowState);
+                const desired = phaseDFlowState.desiredDistances[currentEdgeIdx] ?? 900;
+                const candidates = getCurrentCandidates(
+                  phaseDFlowState,
+                  currentEdge.lengthMm,
+                  enabledSizes,
+                  priorityConfig,
+                );
+
+                if (!candidates) return <div>候補の生成中...</div>;
+
+                const handleSelect = (candidate: PhaseDCandidate) => {
+                  const newState = confirmCurrentEdge(phaseDFlowState, candidate);
+                  setPhaseDFlowState(newState);
+                };
+
+                return (
+                  <>
+                    <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
+                      <div>面: <span className="font-semibold">{currentEdge.label}</span>（{currentEdge.face}）</div>
+                      <div>辺長: {Math.round(currentEdge.lengthMm)}mm / 始点離れ: {startDist}mm</div>
+                      <div>希望終点離れ: <span className="font-semibold text-blue-500">{desired}mm</span></div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                      {candidates.exact && (
+                        <button
+                          className="flex flex-col items-start gap-1 p-3 border-2 border-green-500 bg-green-50 dark:bg-green-900/20 rounded hover:bg-green-100 dark:hover:bg-green-900/30"
+                          onClick={() => handleSelect(candidates.exact!)}
+                        >
+                          <div className="text-xs font-semibold text-green-700 dark:text-green-400">🎯 ぴったり候補</div>
+                          <div className="text-sm">{candidates.exact.rails.join(' + ')}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            終点離れ: {candidates.exact.endDistanceMm}mm (±0)
+                          </div>
+                        </button>
+                      )}
+
+                      {candidates.larger && (
+                        <button
+                          className="flex flex-col items-start gap-1 p-3 border border-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                          onClick={() => handleSelect(candidates.larger!)}
+                        >
+                          <div className="text-xs font-semibold text-blue-700 dark:text-blue-400">⬆️ 大きい側</div>
+                          <div className="text-sm">{candidates.larger.rails.join(' + ')}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            終点離れ: {candidates.larger.endDistanceMm}mm (+{candidates.larger.diffFromDesired})
+                          </div>
+                        </button>
+                      )}
+
+                      {candidates.smaller && (
+                        <button
+                          className="flex flex-col items-start gap-1 p-3 border border-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded hover:bg-orange-100 dark:hover:bg-orange-900/30"
+                          onClick={() => handleSelect(candidates.smaller!)}
+                        >
+                          <div className="text-xs font-semibold text-orange-700 dark:text-orange-400">⬇️ 小さい側</div>
+                          <div className="text-sm">{candidates.smaller.rails.join(' + ')}</div>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            終点離れ: {candidates.smaller.endDistanceMm}mm ({candidates.smaller.diffFromDesired})
+                          </div>
+                        </button>
+                      )}
+
+                      {!candidates.exact && !candidates.larger && !candidates.smaller && (
+                        <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
+                          ⚠️ 候補が見つかりませんでした。希望離れを見直してください。
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex justify-between gap-2 mt-2">
+                      <button
+                        className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded disabled:opacity-50"
+                        disabled={Object.keys(phaseDFlowState.decisions).length === 0}
+                        onClick={() => {
+                          const rolled = rollbackCurrentStep(phaseDFlowState);
+                          setPhaseDFlowState(rolled);
+                        }}
+                      >
+                        ← 前の辺
+                      </button>
+                      <button
+                        className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
+                        onClick={() => {
+                          setPhaseDStep('input');
+                          setPhaseDFlowState(null);
+                        }}
+                      >
+                        入力に戻る
+                      </button>
+                    </div>
+
+                    {/* 確定済みの履歴表示 */}
+                    {Object.keys(phaseDFlowState.decisions).length > 0 && (
+                      <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
+                        <div className="text-xs font-semibold mb-2">確定済み</div>
+                        <div className="flex flex-col gap-1">
+                          {Object.entries(phaseDFlowState.decisions).map(([idx, dec]) => {
+                            const edge = edges.find(e => e.index === Number(idx));
+                            return (
+                              <div key={idx} className="text-xs text-gray-600 dark:text-gray-400">
+                                {edge?.label}: {dec.selectedCandidate.rails.join('+')} → 終点離れ {dec.endDistanceMm}mm
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
           )}
             </>
