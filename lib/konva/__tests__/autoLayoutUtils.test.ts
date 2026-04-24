@@ -4,6 +4,7 @@ import {
   getSectionOfSize,
   getScoreOfSize,
   scoreCombination,
+  generateEdgeCandidatesForPhaseD,
 } from '../autoLayoutUtils';
 import type { HandrailLengthMm, PriorityConfig } from '@/types';
 
@@ -221,5 +222,55 @@ describe('findBestEndCombinations - 900 中心の現場設定', () => {
     const first = result[0];
     expect(first.remainder).toBe(0);
     expect(first.rails).toEqual([900, 900, 900, 900]);
+  });
+});
+
+describe('generateEdgeCandidatesForPhaseD', () => {
+  it('3600mm辺、始点900、希望終点850 → exact なしで larger/smaller 両方返す', () => {
+    const result = generateEdgeCandidatesForPhaseD(3600, 900, 850);
+    // exact は存在しないはず
+    expect(result.exact).toBeNull();
+    // larger と smaller が存在するはず
+    expect(result.larger).not.toBeNull();
+    expect(result.smaller).not.toBeNull();
+    // larger の終点離れは 850 より大きい
+    expect(result.larger!.endDistanceMm).toBeGreaterThan(850);
+    // smaller の終点離れは 850 より小さい
+    expect(result.smaller!.endDistanceMm).toBeLessThan(850);
+  });
+
+  it('3600mm辺、始点900、希望終点900 → exact がある（1800×3 で 900mm ちょうど）', () => {
+    const result = generateEdgeCandidatesForPhaseD(3600, 900, 900);
+    // 1800×2 + 900 = 4500、4500 - 3600 - 900 = 0、でも終点離れ 0 になるので除外される
+    // 代わりに 1800×3 = 5400、5400 - 3600 - 900 = 900、ぴったり
+    expect(result.exact).not.toBeNull();
+    expect(result.exact!.endDistanceMm).toBe(900);
+  });
+
+  it('師匠の例: 3600四方の↑面で希望850→900(+50)と800(-50)が候補', () => {
+    const result = generateEdgeCandidatesForPhaseD(3600, 900, 850);
+    // larger は 900 付近
+    expect(result.larger?.endDistanceMm).toBeCloseTo(900, 0);
+    // smaller は 800 付近
+    expect(result.smaller?.endDistanceMm).toBeCloseTo(800, 0);
+  });
+
+  it('priorityConfig 使用時、スコア最大化される', () => {
+    const config: PriorityConfig = {
+      order: [1800, 1200, 900, 600, 400, 300, 200],
+      mainCount: 1,
+      subCount: 3,
+      adjustCount: 3,
+    };
+    const result = generateEdgeCandidatesForPhaseD(
+      3600,
+      900,
+      850,
+      [1800, 1200, 900, 600, 400, 300, 200],
+      config,
+    );
+    // スコアが計算されているはず
+    if (result.larger) expect(result.larger.score).toBeGreaterThan(0);
+    if (result.smaller) expect(result.smaller.score).toBeGreaterThan(0);
   });
 });

@@ -247,3 +247,29 @@ export type Drawing = {
   created_at: string;
   updated_at: string;
 };
+
+// === Phase D: 順次決定フロー ===
+
+/** Phase D: 1辺の候補1つ分 */
+export type PhaseDCandidate = {
+  /** 割付合計 mm（sum of rails）*/
+  railsTotalMm: number;
+  /** 計算された終点離れ mm */
+  endDistanceMm: number;
+  /** 希望離れとの差（mm、符号付き、正=希望より大きい側、負=小さい側）*/
+  diffFromDesired: number;
+  /** priorityConfig による平均スコア（priorityConfig なしなら 0）*/
+  score: number;
+  /** 候補の割付（既存の LayoutCombination.rails と同じ）*/
+  rails: HandrailLengthMm[];
+};
+
+/** Phase D: 1辺の候補群（exact / larger / smaller の3枠） */
+export type PhaseDEdgeCandidates = {
+  /** 模範解（希望にぴったり）。存在しない場合は null */
+  exact: PhaseDCandidate | null;
+  /** 希望より大きい側の代表候補。存在しない場合は null */
+  larger: PhaseDCandidate | null;
+  /** 希望より小さい側の代表候補。存在しない場合は null */
+  smaller: PhaseDCandidate | null;
+};

@@ -1,4 +1,4 @@
-import { Point, BuildingShape, HandrailLengthMm, ScaffoldStartConfig, PriorityConfig } from '@/types';
+import { Point, BuildingShape, HandrailLengthMm, ScaffoldStartConfig, PriorityConfig, PhaseDCandidate, PhaseDEdgeCandidates } from '@/types';
 import { mmToGrid } from './gridUtils';
 
 // === 使用可能な手摺長さ（mm） ===
@@ -690,4 +690,125 @@ function generatePriorityPatterns(
   }
 
   return patterns;
+}
+
+// ============================================================
+// Phase D: 1辺の候補を「exact / larger / smaller」の3枠で返す純粋関数
+// ============================================================
+/**
+ * Phase D: 1辺の候補を生成する。
+ *
+ * 仕様:
+ * - 終点離れ = 割付合計 - 辺長 - 始点離れ
+ * - 希望離れにぴったりな候補（exact）が存在すれば exact のみ返す
+ * - 無ければ larger/smaller それぞれで「希望との距離 <= 100mm ならスコア優先、超えるなら距離優先」で選定
+ */
+export function generateEdgeCandidatesForPhaseD(
+  edgeLengthMm: number,
+  startDistanceMm: number,
+  desiredEndDistanceMm: number,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  priorityConfig?: PriorityConfig,
+  options?: {
+    /** 大小判定の同スコア許容範囲 (デフォルト 100mm) */
+    exactToleranceMm?: number;
+    /** 候補生成時の effectiveMm 探索範囲（希望±何mm、デフォルト 500）*/
+    searchRangeMm?: number;
+  },
+): PhaseDEdgeCandidates {
+  const tolerance = options?.exactToleranceMm ?? 100;
+  const range = options?.searchRangeMm ?? 500;
+
+  // 1. 希望終点離れから逆算した割付合計を中心に、±rangeMm で探索
+  const centerTotal = edgeLengthMm + startDistanceMm + desiredEndDistanceMm;
+
+  // 2. findBestEndCombinations を複数回呼んで候補を集める
+  const collectedRails: { rails: HandrailLengthMm[]; total: number }[] = [];
+
+  for (let delta = -range; delta <= range; delta += 50) {
+    const targetTotal = centerTotal + delta;
+    if (targetTotal <= 0) continue;
+
+    const results = findBestEndCombinations(targetTotal, enabledSizes, priorityConfig);
+    for (const r of results) {
+      const total = r.rails.reduce((a, b) => a + b, 0);
+      // 重複除去（同じ total かつ 同じ rails 構成）
+      const keySorted = JSON.stringify(r.rails.slice().sort((a, b) => a - b));
+      const dup = collectedRails.some(
+        (c) =>
+          c.total === total &&
+          JSON.stringify(c.rails.slice().sort((a, b) => a - b)) === keySorted,
+      );
+      if (!dup) {
+        collectedRails.push({ rails: r.rails, total });
+      }
+    }
+  }
+
+  // 3. 各候補の終点離れを計算
+  const phaseDCandidates: PhaseDCandidate[] = collectedRails
+    .map((c) => {
+      const endDist = c.total - edgeLengthMm - startDistanceMm;
+      const diff = endDist - desiredEndDistanceMm;
+      const score = priorityConfig ? scoreCombination(c.rails, priorityConfig) : 0;
+      return {
+        railsTotalMm: c.total,
+        endDistanceMm: endDist,
+        diffFromDesired: diff,
+        score,
+        rails: c.rails,
+      };
+    })
+    .filter((c) => c.endDistanceMm > 0); // 終点離れ 0 以下は除外
+
+  // 4. 3グループに分類
+  const exactGroup = phaseDCandidates.filter((c) => c.diffFromDesired === 0);
+  const largerGroup = phaseDCandidates.filter((c) => c.diffFromDesired > 0);
+  const smallerGroup = phaseDCandidates.filter((c) => c.diffFromDesired < 0);
+
+  // 5. exact は1つあれば終了（スコア最大）
+  if (exactGroup.length > 0) {
+    const exact = exactGroup.reduce((best, cur) =>
+      cur.score > best.score ? cur : best,
+    );
+    return { exact, larger: null, smaller: null };
+  }
+
+  // 6. larger/smaller からそれぞれ選定
+  const pickByRule = (group: PhaseDCandidate[]): PhaseDCandidate | null => {
+    if (group.length === 0) return null;
+    // 許容範囲内の候補
+    const inTolerance = group.filter((c) => Math.abs(c.diffFromDesired) <= tolerance);
+    if (inTolerance.length > 0) {
+      // スコア最大、同着なら距離最小、同着なら本数最小
+      return inTolerance.reduce((best, cur) => {
+        if (cur.score > best.score + 1e-9) return cur;
+        if (Math.abs(cur.score - best.score) < 1e-9) {
+          if (Math.abs(cur.diffFromDesired) < Math.abs(best.diffFromDesired)) return cur;
+          if (
+            Math.abs(cur.diffFromDesired) === Math.abs(best.diffFromDesired) &&
+            cur.rails.length < best.rails.length
+          )
+            return cur;
+        }
+        return best;
+      });
+    }
+    // 許容範囲外なら距離最小（同着はスコア最大）
+    return group.reduce((best, cur) => {
+      if (Math.abs(cur.diffFromDesired) < Math.abs(best.diffFromDesired)) return cur;
+      if (
+        Math.abs(cur.diffFromDesired) === Math.abs(best.diffFromDesired) &&
+        cur.score > best.score
+      )
+        return cur;
+      return best;
+    });
+  };
+
+  return {
+    exact: null,
+    larger: pickByRule(largerGroup),
+    smaller: pickByRule(smallerGroup),
+  };
 }
