@@ -162,3 +162,64 @@ describe('scoreCombination', () => {
     expect(scoreCombination([], config)).toBe(0);
   });
 });
+
+describe('findBestEndCombinations - priorityConfig 優先評価', () => {
+  const config: PriorityConfig = {
+    order: [1800, 1200, 900, 600, 400, 300, 200],
+    mainCount: 1,
+    subCount: 3,
+    adjustCount: 3,
+  };
+
+  it('1500mm → 900+600 が第1候補', () => {
+    const result = findBestEndCombinations(1500, DEFAULT_SIZES, config);
+    expect(result.length).toBeGreaterThan(0);
+    const first = result[0];
+    expect(first.remainder).toBe(0);
+    expect(first.rails.slice().sort((a, b) => b - a)).toEqual([900, 600]);
+  });
+
+  it('2100mm → 1200+900 が第1候補', () => {
+    const result = findBestEndCombinations(2100, DEFAULT_SIZES, config);
+    const first = result[0];
+    expect(first.remainder).toBe(0);
+    expect(first.rails.slice().sort((a, b) => b - a)).toEqual([1200, 900]);
+  });
+
+  it('2400mm → 1800+600 が第1候補（1200+1200より優先）', () => {
+    const result = findBestEndCombinations(2400, DEFAULT_SIZES, config);
+    const first = result[0];
+    expect(first.remainder).toBe(0);
+    expect(first.rails.slice().sort((a, b) => b - a)).toEqual([1800, 600]);
+  });
+
+  it('1800mm → 1800単独（変化なし）', () => {
+    const result = findBestEndCombinations(1800, DEFAULT_SIZES, config);
+    const first = result[0];
+    expect(first.remainder).toBe(0);
+    expect(first.rails).toEqual([1800]);
+  });
+});
+
+describe('findBestEndCombinations - 900 中心の現場設定', () => {
+  const config: PriorityConfig = {
+    order: [900, 1800, 1200, 600, 400, 300, 200],
+    mainCount: 1,
+    subCount: 3,
+    adjustCount: 3,
+  };
+
+  it('1500mm → 900+600 が第1候補（第1優先の900を使う）', () => {
+    const result = findBestEndCombinations(1500, DEFAULT_SIZES, config);
+    const first = result[0];
+    expect(first.remainder).toBe(0);
+    expect(first.rails.slice().sort((a, b) => b - a)).toEqual([900, 600]);
+  });
+
+  it('3600mm → 900×4 が第1候補', () => {
+    const result = findBestEndCombinations(3600, DEFAULT_SIZES, config);
+    const first = result[0];
+    expect(first.remainder).toBe(0);
+    expect(first.rails).toEqual([900, 900, 900, 900]);
+  });
+});

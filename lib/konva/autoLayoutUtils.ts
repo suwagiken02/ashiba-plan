@@ -160,8 +160,8 @@ export function findBestEndCombinations(
   const leftover = effectiveMm - numBase * baseSize;
   const base1800: HandrailLengthMm[] = Array(numBase).fill(baseSize);
 
-  // 端数がゼロなら完璧
-  if (leftover === 0) {
+  // 端数がゼロなら完璧（priorityConfig あり時は追加パターンを検討するため早期 return しない）
+  if (leftover === 0 && !priorityConfig) {
     return [{ rails: base1800, remainder: 0, count: numBase }];
   }
 
@@ -272,12 +272,38 @@ export function findBestEndCombinations(
   // それぞれの最良候補を選び、候補A/Bダイアログで提示する。
   //   Short: remainder >= 0 の中で最小（端数最小）
   //   Long : remainder < 0 の中で最大（突出最小、つまり 0 に近い負）
-  const shorts = results
-    .filter(r => r.remainder >= 0)
-    .sort((a, b) => (a.remainder - b.remainder) || (a.count - b.count));
-  const longs = results
-    .filter(r => r.remainder < 0)
-    .sort((a, b) => (b.remainder - a.remainder) || (a.count - b.count));
+  let shorts: LayoutCombination[];
+  let longs: LayoutCombination[];
+
+  if (!priorityConfig) {
+    // 既存動作（変更なし）
+    shorts = results
+      .filter(r => r.remainder >= 0)
+      .sort((a, b) => (a.remainder - b.remainder) || (a.count - b.count));
+    longs = results
+      .filter(r => r.remainder < 0)
+      .sort((a, b) => (b.remainder - a.remainder) || (a.count - b.count));
+  } else {
+    // 【Phase 5-C】priorityConfig ありの優先度評価ソート
+    // 1. |remainder| 最小  2. 平均スコア最大  3. 最低ランク部材を避ける（最小スコア最大）  4. 本数最小
+    const pc = priorityConfig;
+    const sortByPriority = (a: LayoutCombination, b: LayoutCombination): number => {
+      const remDiff = Math.abs(a.remainder) - Math.abs(b.remainder);
+      if (remDiff !== 0) return remDiff;
+      const scoreA = scoreCombination(a.rails, pc);
+      const scoreB = scoreCombination(b.rails, pc);
+      const scoreDiff = scoreB - scoreA;
+      if (Math.abs(scoreDiff) > 1e-9) return scoreDiff;
+      // avg タイブレーク: 最低スコアが高い方 (= 優先度の低い部材を使っていない方) を優先
+      const minA = Math.min(...a.rails.map(r => getScoreOfSize(r, pc)));
+      const minB = Math.min(...b.rails.map(r => getScoreOfSize(r, pc)));
+      const minDiff = minB - minA;
+      if (Math.abs(minDiff) > 1e-9) return minDiff;
+      return a.count - b.count;
+    };
+    shorts = results.filter(r => r.remainder >= 0).slice().sort(sortByPriority);
+    longs = results.filter(r => r.remainder < 0).slice().sort(sortByPriority);
+  }
 
   const out: LayoutCombination[] = [];
   if (shorts[0]) out.push(shorts[0]);
