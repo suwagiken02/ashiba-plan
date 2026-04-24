@@ -1,0 +1,209 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`findBestEndCombinations - ベースライン > 0mm 1`] = `
+[
+  {
+    "count": 0,
+    "rails": [],
+    "remainder": 0,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 100mm 未満の微小辺 1`] = `
+[
+  {
+    "count": 0,
+    "rails": [],
+    "remainder": 50,
+  },
+  {
+    "count": 1,
+    "rails": [
+      200,
+    ],
+    "remainder": -150,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 1500mm 端数 1`] = `
+[
+  {
+    "count": 2,
+    "rails": [
+      1200,
+      300,
+    ],
+    "remainder": 0,
+  },
+  {
+    "count": 2,
+    "rails": [
+      1200,
+      400,
+    ],
+    "remainder": -100,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 1800 と 900 のみ有効 1`] = `
+[
+  {
+    "count": 2,
+    "rails": [
+      1800,
+      1800,
+    ],
+    "remainder": 0,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 1800mm ぴったり 1`] = `
+[
+  {
+    "count": 1,
+    "rails": [
+      1800,
+    ],
+    "remainder": 0,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 2100mm 端数 1`] = `
+[
+  {
+    "count": 2,
+    "rails": [
+      1800,
+      300,
+    ],
+    "remainder": 0,
+  },
+  {
+    "count": 2,
+    "rails": [
+      1800,
+      400,
+    ],
+    "remainder": -100,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 2400mm 端数 1`] = `
+[
+  {
+    "count": 2,
+    "rails": [
+      1800,
+      600,
+    ],
+    "remainder": 0,
+  },
+  {
+    "count": 3,
+    "rails": [
+      1800,
+      400,
+      300,
+    ],
+    "remainder": -100,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 3000mm 端数 1`] = `
+[
+  {
+    "count": 2,
+    "rails": [
+      1800,
+      1200,
+    ],
+    "remainder": 0,
+  },
+  {
+    "count": 3,
+    "rails": [
+      1800,
+      900,
+      400,
+    ],
+    "remainder": -100,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 5400mm 端数 1`] = `
+[
+  {
+    "count": 3,
+    "rails": [
+      1800,
+      1800,
+      1800,
+    ],
+    "remainder": 0,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 10000mm 長辺 1`] = `
+[
+  {
+    "count": 7,
+    "rails": [
+      1800,
+      1800,
+      1800,
+      1800,
+      1800,
+      600,
+      400,
+    ],
+    "remainder": 0,
+  },
+  {
+    "count": 7,
+    "rails": [
+      1800,
+      1800,
+      1800,
+      1800,
+      1800,
+      900,
+      200,
+    ],
+    "remainder": -100,
+  },
+]
+`;
+
+exports[`findBestEndCombinations - ベースライン > 大物禁止（900 以下のみ） 1`] = `
+[
+  {
+    "count": 4,
+    "rails": [
+      900,
+      900,
+      900,
+      300,
+    ],
+    "remainder": 0,
+  },
+  {
+    "count": 4,
+    "rails": [
+      900,
+      900,
+      900,
+      400,
+    ],
+    "remainder": -100,
+  },
+]
+`;
