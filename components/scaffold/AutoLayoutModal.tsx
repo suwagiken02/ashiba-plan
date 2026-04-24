@@ -200,6 +200,7 @@ function formatRailsSummary(rails: HandrailLengthMm[]): string {
 export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props) {
   const { canvasData, addHandrails, removeElements } = useCanvasStore();
   const enabledSizes = useHandrailSettingsStore(s => s.enabledSizes);
+  const priorityConfig = useHandrailSettingsStore(s => s.priorityConfig);
 
   // 対象階（1F / 2F / both = 1F+2F同時）
   const [targetFloor, setTargetFloor] = useState<1 | 2 | 'both'>(
@@ -388,7 +389,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const handleCalc = () => {
     if (!building) return;
     // プライマリ計算（1Fのみ→1F全周 / 2Fのみ→2F全周 / both→2F全周）
-    const res = computeAutoLayout(building, distances, scaffoldStart, enabledSizes);
+    const res = computeAutoLayout(building, distances, scaffoldStart, enabledSizes, priorityConfig);
 
     // 1F+2F 同時モード: 1F のうち 2F で覆われていない辺（下屋辺）を計算
     if (targetFloor === 'both' && building1F && building2F && uncoveredEdges1F.length > 0) {
@@ -397,7 +398,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       getBuildingEdgesClockwise(building1F).forEach(e => {
         d1[e.index] = distances1F[e.index] ?? 900;
       });
-      const res1 = computeAutoLayout(building1F, d1, undefined, enabledSizes);
+      const res1 = computeAutoLayout(building1F, d1, undefined, enabledSizes, priorityConfig);
       // 下屋辺だけに edgeLayouts を絞り込む
       const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
       const filtered = res1.edgeLayouts.filter(el => uncoveredIdxSet.has(el.edge.index));
@@ -483,7 +484,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     } else {
       setDistanceSuggestions([]);
       if (!building) return;
-      const res = computeAutoLayout(building, currentDistances, scaffoldStart, enabledSizes);
+      const res = computeAutoLayout(building, currentDistances, scaffoldStart, enabledSizes, priorityConfig);
       setResult(res);
       const sel: Record<number, number> = {};
       res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });

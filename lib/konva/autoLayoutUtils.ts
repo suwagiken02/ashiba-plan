@@ -1,4 +1,4 @@
-import { Point, BuildingShape, HandrailLengthMm, ScaffoldStartConfig } from '@/types';
+import { Point, BuildingShape, HandrailLengthMm, ScaffoldStartConfig, PriorityConfig } from '@/types';
 import { mmToGrid } from './gridUtils';
 
 // === 使用可能な手摺長さ（mm） ===
@@ -142,6 +142,10 @@ export function getBuildingEdgesClockwise(building: BuildingShape): EdgeInfo[] {
 export function findBestEndCombinations(
   effectiveMm: number,
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  // priorityConfig: Phase 5 で評価関数（main/sub/adjust 優先、除外スキップ）に使用予定
+  // Phase 4 時点では受け取るだけで未使用
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  priorityConfig?: PriorityConfig,
 ): LayoutCombination[] {
   if (effectiveMm <= 0) return [{ rails: [], remainder: 0, count: 0 }];
   // サイズが 0 件なら解なし（UI 側でその旨を通知する想定）
@@ -302,6 +306,9 @@ export function computeAutoLayout(
   distances: Record<number, number>,
   scaffoldStart?: ScaffoldStartConfig,
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  // priorityConfig: Phase 5 で findBestEndCombinations の評価関数に使用予定
+  // Phase 4 時点では受け取って findBestEndCombinations に素通しするだけ
+  priorityConfig?: PriorityConfig,
 ): AutoLayoutResult {
   const edges = getBuildingEdgesClockwise(building);
   const n = edges.length;
@@ -391,7 +398,7 @@ export function computeAutoLayout(
 
     // 1mm精度の建物座標でも float 誤差で `=== 0` 判定が壊れるのを防ぐため整数 mm に正規化
     const effectiveMm = Math.round(Math.abs(cursorEnd - cursorStart) * 10);
-    const candidates = findBestEndCombinations(Math.max(0, effectiveMm), enabledSizes);
+    const candidates = findBestEndCombinations(Math.max(0, effectiveMm), enabledSizes, priorityConfig);
 
     edgeLayouts.push({
       edge,
