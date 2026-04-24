@@ -1066,7 +1066,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           {phaseDStep === 'sequential' && phaseDFlowState && (
             <div className="flex flex-col gap-3 p-3">
               <div className="text-sm font-semibold">
-                🚧 Step 1: 順次決定 ({phaseDFlowState.currentStep + 1}/{phaseDFlowState.edgeOrder.length}面)
+                🚧 Step 1: 順次決定 ({phaseDFlowState.currentStep < 0 ? phaseDFlowState.edgeOrder.length : phaseDFlowState.currentStep + 1}/{phaseDFlowState.edgeOrder.length}面)
               </div>
 
               {(() => {
@@ -1133,7 +1133,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           onClick={() => handleSelect(candidates.exact!)}
                         >
                           <div className="text-xs font-semibold text-green-700 dark:text-green-400">🎯 ぴったり候補</div>
-                          <div className="text-sm">{candidates.exact.rails.join(' + ')}</div>
+                          <div className="text-sm font-medium text-green-900 dark:text-green-100">{candidates.exact.rails.join(' + ')}</div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             終点離れ: {candidates.exact.endDistanceMm}mm (±0)
                           </div>
@@ -1146,7 +1146,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           onClick={() => handleSelect(candidates.larger!)}
                         >
                           <div className="text-xs font-semibold text-blue-700 dark:text-blue-400">⬆️ 大きい側</div>
-                          <div className="text-sm">{candidates.larger.rails.join(' + ')}</div>
+                          <div className="text-sm font-medium text-blue-900 dark:text-blue-100">{candidates.larger.rails.join(' + ')}</div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             終点離れ: {candidates.larger.endDistanceMm}mm (+{candidates.larger.diffFromDesired})
                           </div>
@@ -1159,7 +1159,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           onClick={() => handleSelect(candidates.smaller!)}
                         >
                           <div className="text-xs font-semibold text-orange-700 dark:text-orange-400">⬇️ 小さい側</div>
-                          <div className="text-sm">{candidates.smaller.rails.join(' + ')}</div>
+                          <div className="text-sm font-medium text-orange-900 dark:text-orange-100">{candidates.smaller.rails.join(' + ')}</div>
                           <div className="text-xs text-gray-600 dark:text-gray-400">
                             終点離れ: {candidates.smaller.endDistanceMm}mm ({candidates.smaller.diffFromDesired})
                           </div>
