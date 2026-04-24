@@ -24,6 +24,7 @@ import {
   rollbackCurrentStep,
   getCurrentEdgeIndex,
   getStartDistanceForCurrentEdge,
+  isFlowCompleted,
 } from '@/lib/konva/phaseDFlow';
 
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
@@ -623,6 +624,66 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setShowConflictConfirm(false);
   };
 
+  // 【Phase D】decisions から距離 Record を構築
+  const buildPhaseDDistances = (state: PhaseDFlowState): Record<number, number> => {
+    const result: Record<number, number> = {};
+    // 固定辺
+    result[state.startDistances.face1EdgeIndex] = state.startDistances.face1DistanceMm;
+    result[state.startDistances.face2EdgeIndex] = state.startDistances.face2DistanceMm;
+    // 決定済み
+    for (const [idxStr, dec] of Object.entries(state.decisions)) {
+      result[Number(idxStr)] = dec.startDistanceMm;
+    }
+    return result;
+  };
+
+  // 【Phase D】配置ハンドラ
+  const handlePhaseDPlace = () => {
+    if (!phaseDFlowState || !building) return;
+    if (!isFlowCompleted(phaseDFlowState)) {
+      alert('まだ全辺の決定が完了していません');
+      return;
+    }
+
+    // Phase D の decisions から distances を構築
+    const phaseDDistances = buildPhaseDDistances(phaseDFlowState);
+
+    // 既存の computeAutoLayout で配置計算
+    const res = computeAutoLayout(
+      building,
+      phaseDDistances,
+      scaffoldStart,
+      enabledSizes,
+      priorityConfig,
+    );
+
+    // 配置処理
+    const mainFloor: 1 | 2 = targetFloor === 1 ? 1 : 2;
+    const newHandrails: Handrail[] = [];
+    for (const el of res.edgeLayouts) {
+      if (el.candidates.length === 0) continue;
+      // Phase D では candidate[0] を使う（selections 未使用）
+      const rails = el.candidates[0].rails;
+      if (rails.length === 0) continue;
+      const placements = placeHandrailsForEdge(el, rails);
+      for (const p of placements) {
+        newHandrails.push({
+          id: uuidv4(),
+          x: p.x,
+          y: p.y,
+          lengthMm: p.lengthMm,
+          direction: p.direction,
+          color: getHandrailColor(p.lengthMm),
+          floor: mainFloor,
+        });
+      }
+    }
+
+    // canvas に追加（干渉判定は Phase D-6 以降で検討）
+    addHandrails(newHandrails);
+    onClose();
+  };
+
   if (!building) {
     return (
       <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50" onClick={onClose}>
@@ -1088,9 +1149,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                         </button>
                         <button
                           className="px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
-                          onClick={() => {
-                            alert('配置処理は Phase D-5 で実装予定');
-                          }}
+                          onClick={handlePhaseDPlace}
                         >
                           配置する
                         </button>
