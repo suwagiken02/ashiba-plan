@@ -612,6 +612,19 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     onClose();
   };
 
+  const handleConflictOk = () => {
+    useCanvasStore.getState().setHighlightIds([]);
+    removeElements(conflictIds);
+    addHandrails(pendingHandrails);
+    setShowConflictConfirm(false);
+    onClose();
+  };
+
+  const handleConflictCancel = () => {
+    useCanvasStore.getState().setHighlightIds([]);
+    setShowConflictConfirm(false);
+  };
+
   // 【Phase D】decisions から距離 Record を構築
   const buildPhaseDDistances = (state: PhaseDFlowState): Record<number, number> => {
     const result: Record<number, number> = {};
@@ -1253,6 +1266,110 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         </div>
       </div>
 
+      {showConflictConfirm && (
+        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-[60] w-[90vw] max-w-sm bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4">
+          <p className="text-sm font-bold mb-1">干渉する既存部材があります</p>
+          <p className="text-xs text-dimension mb-4">
+            オレンジ色の部材（{conflictIds.length}本）が自動配置と干渉しています。削除して配置しますか？
+          </p>
+          <div className="flex gap-2">
+            <button
+              onClick={handleConflictCancel}
+              className="flex-1 py-2 border border-dark-border rounded-xl text-sm text-dimension"
+            >
+              キャンセル
+            </button>
+            <button
+              onClick={handleConflictOk}
+              className="flex-1 py-2 bg-accent text-white font-bold rounded-xl text-sm"
+            >
+              削除して配置
+            </button>
+          </div>
+        </div>
+      )}
+
+      {distanceSuggestions.length > 0 && currentSuggestionIdx < distanceSuggestions.length && (() => {
+        const suggestion = distanceSuggestions[currentSuggestionIdx];
+        const currentRemainder = result?.edgeLayouts.find(el => el.edge.index === suggestion.edgeIndex)?.candidates[0]?.remainder;
+        return (
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/30" />
+            <div className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg z-10">
+              <div className="px-4 py-3 border-b border-dark-border">
+                <p className="font-bold text-sm">離れの調整提案</p>
+                <p className="text-xs text-dimension mt-0.5">{currentSuggestionIdx + 1} / {distanceSuggestions.length} 面</p>
+              </div>
+
+              <div className="px-4 pt-3">
+                <PreviewSVG
+                  points={building!.points}
+                  edges={edges}
+                  focusedIndex={suggestion.edgeIndex}
+                  blinkEdgeIndex={suggestion.edgeIndex}
+                  scaffoldStart={scaffoldStart}
+                />
+              </div>
+
+              <div className="px-4 py-3 space-y-3">
+                <p className="text-sm">
+                  <span className="font-bold">{suggestion.edgeLabel}面</span>（現在の離れ: {suggestion.currentDist}mm）で
+                  <span className="text-yellow-400 font-bold"> 端数{currentRemainder ?? '?'}mm </span>が発生しています。
+                </p>
+                <p className="text-xs text-dimension">以下の離れに変更すると端数0になります：</p>
+                <div className="flex flex-wrap gap-2">
+                  {suggestion.suggestions.map((dist) => (
+                    <button key={dist} onClick={() => handleSuggestionAccept(dist)}
+                      className="px-4 py-2 bg-accent/15 border border-accent text-accent font-bold rounded-xl text-sm hover:bg-accent/25 transition-colors"
+                    >
+                      {dist}mm
+                      <span className="text-[10px] ml-1 opacity-70">({dist > suggestion.currentDist ? '+' : ''}{dist - suggestion.currentDist})</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <button onClick={handleSuggestionSkip}
+                    className="flex-1 py-2.5 border border-dark-border text-dimension rounded-xl text-sm"
+                  >
+                    変更せず次へ
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {showLockedAlert && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowLockedAlert(false)} />
+          <div className="relative bg-dark-surface border border-dark-border rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+            <p className="font-bold text-sm mb-2">変更できません</p>
+            <p className="text-xs text-dimension leading-relaxed mb-4">
+              この面の離れは足場開始設定で確定された数値です。<br />
+              変更する場合は「足場開始」ボタンから再設定してください。
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowLockedAlert(false)}
+                className="flex-1 py-2.5 border border-dark-border text-dimension font-bold rounded-xl text-sm"
+              >
+                OK
+              </button>
+              <button
+                onClick={() => {
+                  setShowLockedAlert(false);
+                  onClose();
+                  onOpenScaffoldStart();
+                }}
+                className="flex-1 py-2.5 bg-accent text-white font-bold rounded-xl text-sm"
+              >
+                再設定する
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
