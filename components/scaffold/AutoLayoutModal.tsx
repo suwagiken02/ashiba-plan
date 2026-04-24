@@ -12,7 +12,6 @@ import {
   computeAutoLayout,
   placeHandrailsForEdge,
   getEdgesNotCoveredBy,
-  isConvexCorner,
   AutoLayoutResult,
   EdgeInfo,
   EdgeLayout,
@@ -28,168 +27,6 @@ import {
 } from '@/lib/konva/phaseDFlow';
 
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
-
-/** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
-function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeIndex, subPoints, subEdges, subHighlightIndices, focusedSubIndex, scaffoldStart }: {
-  points: Point[];
-  edges: EdgeInfo[];
-  focusedIndex: number | null;
-  conflictHandrails?: { x: number; y: number; lengthMm: number; direction: 'horizontal' | 'vertical' | number }[];
-  blinkEdgeIndex?: number;
-  /** 1F+2F同時モード用: サブ建物（= 1F）の points */
-  subPoints?: Point[];
-  /** サブ建物の全辺情報（ラベル付与用） */
-  subEdges?: EdgeInfo[];
-  /** サブ建物で強調する辺の index 集合（= 下屋辺） */
-  subHighlightIndices?: Set<number>;
-  /** サブ建物でフォーカスされた辺（離れ入力 focus 時） */
-  focusedSubIndex?: number | null;
-  /** スタート角マーカー表示用（主建物 points 側） */
-  scaffoldStart?: ScaffoldStartConfig;
-}) {
-  if (points.length < 3) return null;
-
-  // 1F と 2F の points を合わせたバウンディングボックスで描画スケール算出
-  const allX = [...points.map(p => p.x), ...(subPoints?.map(p => p.x) ?? [])];
-  const allY = [...points.map(p => p.y), ...(subPoints?.map(p => p.y) ?? [])];
-  const minX = Math.min(...allX), minY = Math.min(...allY);
-  const bw = (Math.max(...allX) - minX) || 1;
-  const bh = (Math.max(...allY) - minY) || 1;
-
-  const pad = 32, svgW = 280, svgH = 180;
-  const scale = Math.min((svgW - pad * 2) / bw, (svgH - pad * 2) / bh);
-  const offsetX = pad + ((svgW - pad * 2) - bw * scale) / 2;
-  const offsetY = pad + ((svgH - pad * 2) - bh * scale) / 2;
-  const toSvg = (p: Point) => ({ x: offsetX + (p.x - minX) * scale, y: offsetY + (p.y - minY) * scale });
-
-  const svgPts = points.map(toSvg);
-  const pathD = svgPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ' Z';
-
-  // サブ建物（1F）のパス
-  const subSvgPts = subPoints?.map(toSvg);
-  const subPathD = subSvgPts
-    ? subSvgPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ') + ' Z'
-    : null;
-
-  return (
-    <>
-      <style>{`@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} } .conflict-rail{animation:blink 0.8s ease-in-out infinite}`}</style>
-      <svg width={svgW} height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} className="mx-auto block">
-        {/* サブ建物（1F）を背景に薄いアウトラインで描画 */}
-        {subPathD && (
-          <path d={subPathD} fill="rgba(160,160,170,0.15)" stroke="#888" strokeWidth={1} strokeDasharray="4 3" />
-        )}
-
-        {/* 主建物（2F または単一建物） */}
-        <path d={pathD} fill="#3d3d3a" stroke="#1a1a18" strokeWidth={2} />
-
-        {/* サブ建物の強調辺（= 下屋辺） */}
-        {subEdges && subHighlightIndices && subEdges.filter(e => subHighlightIndices.has(e.index)).map(edge => {
-          const s1 = toSvg(edge.p1);
-          const s2 = toSvg(edge.p2);
-          const mx = (s1.x + s2.x) / 2;
-          const my = (s1.y + s2.y) / 2;
-          const isFocused = focusedSubIndex === edge.index;
-          const N = subEdges.length;
-          const prevEdge = subEdges[(edge.index - 1 + N) % N];
-          const nextEdge = subEdges[(edge.index + 1) % N];
-          const concavePrev = !isConvexCorner(prevEdge, edge);
-          const concaveNext = !isConvexCorner(edge, nextEdge);
-          const labelDist = (concavePrev || concaveNext) ? 22 : 14;
-          const lx = mx + edge.nx * labelDist;
-          const ly = my + edge.ny * labelDist;
-          return (
-            <React.Fragment key={`sub-${edge.index}`}>
-              <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
-                stroke={isFocused ? '#fbbf24' : '#10b981'} strokeWidth={isFocused ? 5 : 3} strokeLinecap="round" />
-              <text x={lx} y={ly}
-                textAnchor="middle" dominantBaseline="central"
-                fill={isFocused ? '#fbbf24' : '#10b981'}
-                fontWeight="bold"
-                fontSize={11} fontFamily="monospace"
-              >{`1${edge.label}`}</text>
-            </React.Fragment>
-          );
-        })}
-
-        {conflictHandrails?.map((h, i) => {
-          const mmToG = (mm: number) => Math.round(mm / 10);
-          const s1 = toSvg({ x: h.x, y: h.y });
-          const s2 = h.direction === 'horizontal'
-            ? toSvg({ x: h.x + mmToG(h.lengthMm), y: h.y })
-            : toSvg({ x: h.x, y: h.y + mmToG(h.lengthMm) });
-          return (
-            <line key={`c${i}`}
-              x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
-              stroke="#FF6B35" strokeWidth={4} strokeLinecap="round"
-              className="conflict-rail"
-            />
-          );
-        })}
-        {blinkEdgeIndex !== undefined && edges.filter(e => e.index === blinkEdgeIndex).map(edge => {
-          const s1 = toSvg(edge.p1);
-          const s2 = toSvg(edge.p2);
-          return (
-            <line key={`blink-${edge.index}`} x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
-              stroke="#FF6B35" strokeWidth={6} strokeLinecap="round" className="conflict-rail" />
-          );
-        })}
-        {edges.map(edge => {
-          const s1 = toSvg(edge.p1);
-          const s2 = toSvg(edge.p2);
-          const mx = (s1.x + s2.x) / 2;
-          const my = (s1.y + s2.y) / 2;
-          const isFocused = focusedIndex === edge.index;
-
-          const N = edges.length;
-          const prevEdge = edges[(edge.index - 1 + N) % N];
-          const nextEdge = edges[(edge.index + 1) % N];
-          const concavePrev = !isConvexCorner(prevEdge, edge);
-          const concaveNext = !isConvexCorner(edge, nextEdge);
-          const labelDist = (concavePrev || concaveNext) ? 22 : 14;
-          const lx = mx + edge.nx * labelDist;
-          const ly = my + edge.ny * labelDist;
-
-          return (
-            <React.Fragment key={edge.index}>
-              {isFocused && (
-                <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
-                  stroke="#378ADD" strokeWidth={4} strokeLinecap="round" />
-              )}
-              <text x={lx} y={ly}
-                textAnchor="middle" dominantBaseline="central"
-                fill={isFocused ? '#378ADD' : '#ccc'}
-                fontWeight={isFocused ? 'bold' : 'normal'}
-                fontSize={isFocused ? 14 : 12} fontFamily="monospace"
-              >{edge.label}</text>
-            </React.Fragment>
-          );
-        })}
-        {/* スタート角★マーカー（最前面） */}
-        {scaffoldStart && scaffoldStart.startVertexIndex !== undefined && points.length > 0 && (() => {
-          const idx = scaffoldStart.startVertexIndex! % points.length;
-          const svgPt = toSvg(points[idx]);
-          return (
-            <text
-              x={svgPt.x}
-              y={svgPt.y}
-              textAnchor="middle"
-              dominantBaseline="central"
-              fontSize={20}
-              fontWeight="bold"
-              fill="#FFD700"
-              stroke="#000"
-              strokeWidth={0.8}
-              style={{ paintOrder: 'stroke' }}
-            >
-              ★
-            </text>
-          );
-        })()}
-      </svg>
-    </>
-  );
-}
 
 const FACE_LABEL: Record<string, string> = {
   north: '北', south: '南', east: '東', west: '西',
@@ -359,9 +196,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [distances1F, setDistances1F] = useState<Record<number, number>>({});
   // 「1F+2F同時」モード専用: 1F下屋辺の候補選択 index
   const [selectionsSub, setSelectionsSub] = useState<Record<number, number>>({});
-  const [focusedSubEdgeIndex, setFocusedSubEdgeIndex] = useState<number | null>(null);
   const [selections, setSelections] = useState<Record<number, number>>({});
-  const [focusedEdgeIndex, setFocusedEdgeIndex] = useState<number | null>(null);
   const [showConflictConfirm, setShowConflictConfirm] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
@@ -650,7 +485,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || distanceSuggestions.length > 0) ? undefined : onClose}>
+    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between z-10">
           <h2 className="font-bold text-lg">自動割付</h2>
@@ -709,185 +544,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           )}
 
           {building && (
-            <>
-          {!phaseDMode ? (
-            <>
-          {/* プレビューSVG（bothモードでは 1F を背景、下屋辺を緑で強調） */}
-          <PreviewSVG
-            points={building.points}
-            edges={edges}
-            focusedIndex={focusedEdgeIndex}
-            conflictHandrails={showConflictConfirm ? canvasData.handrails.filter(h => conflictIds.includes(h.id)) : undefined}
-            subPoints={targetFloor === 'both' && building1F ? building1F.points : undefined}
-            subEdges={targetFloor === 'both' ? edges1FAll : undefined}
-            subHighlightIndices={targetFloor === 'both' ? uncoveredIdxSet1F : undefined}
-            focusedSubIndex={focusedSubEdgeIndex}
-            scaffoldStart={scaffoldStart}
-          />
-
-          {scaffoldStart && (
-            <p className="text-[10px] text-dimension">
-              スタート角: {scaffoldStart.corner.toUpperCase()} /
-              face1={scaffoldStart.face1FirstHandrail}mm /
-              face2={scaffoldStart.face2FirstHandrail}mm
-            </p>
-          )}
-
-          {/* 計算結果 */}
-          {result && (
-            <div className="space-y-2">
-              <p className="text-sm font-bold text-canvas">
-                {targetFloor === 'both' ? '割付結果 (2F全周)' : '割付結果'}
-              </p>
-
-              {result.edgeLayouts.map((el, i) => {
-                const selIdx = selections[i] ?? 0;
-                const candidate = el.candidates[selIdx];
-                if (!candidate) return null;
-
-                return (
-                  <div key={i} className="bg-dark-bg rounded-xl p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className="text-sm font-bold">
-                        {el.edge.label} ({FACE_LABEL[el.edge.face]})
-                        {el.locked && <span className="text-[10px] text-dimension ml-1">L字固定</span>}
-                      </span>
-                      <span className="text-[10px] text-dimension">
-                        辺長 {el.edgeLengthMm}mm / 有効 {el.effectiveMm}mm
-                      </span>
-                    </div>
-
-                    {candidate.rails.length > 0 ? (
-                      <>
-                        <p className="text-xs text-canvas font-mono mb-1">
-                          {formatRailsSummary(candidate.rails)}
-                        </p>
-                        <div className="flex flex-wrap gap-1 mb-1">
-                          {candidate.rails.map((r, ri) => (
-                            <span key={ri} className="px-1.5 py-0.5 bg-handrail/20 text-handrail text-[11px] font-mono rounded">
-                              {r}
-                            </span>
-                          ))}
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-xs text-dimension">手摺なし</p>
-                    )}
-
-                    <div className="flex items-center justify-between">
-                      <span className={`text-[11px] font-mono ${
-                        candidate.remainder === 0 ? 'text-green-400' :
-                        candidate.remainder < 0 ? 'text-red-400' : 'text-yellow-400'
-                      }`}>
-                        端数: {candidate.remainder >= 0 ? '+' : ''}{candidate.remainder}mm
-                        {candidate.remainder < 0 && ' (突出)'}
-                      </span>
-                      <span className="text-[10px] text-dimension">{candidate.count}本</span>
-                    </div>
-
-                    {el.candidates.length > 1 && (
-                      <div className="mt-2 pt-2 border-t border-dark-border">
-                        <p className="text-[10px] text-dimension mb-1">候補：</p>
-                        <div className="flex flex-wrap gap-1">
-                          {el.candidates.map((c, ci) => (
-                            <button key={ci}
-                              onClick={() => setSelections(prev => ({ ...prev, [i]: ci }))}
-                              className={`px-2 py-1 rounded text-[10px] font-mono border transition-colors ${
-                                selIdx === ci
-                                  ? 'border-accent bg-accent/15 text-accent'
-                                  : 'border-dark-border text-dimension hover:border-accent/50'
-                              }`}
-                            >
-                              {formatRailsSummary(c.rails)} / {c.remainder >= 0 ? '+' : ''}{c.remainder}mm
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-
-              {/* 1F 下屋辺の結果（bothモード + 下屋あり時のみ） */}
-              {targetFloor === 'both' && resultSub && resultSub.edgeLayouts.length > 0 && (
-                <div className="pt-3 mt-3 border-t border-dark-border space-y-2">
-                  <p className="text-sm font-bold text-green-400">
-                    割付結果 (1F 下屋辺)
-                  </p>
-                  {resultSub.edgeLayouts.map((el) => {
-                    const selIdx = selectionsSub[el.edge.index] ?? 0;
-                    const candidate = el.candidates[selIdx];
-                    if (!candidate) return null;
-                    return (
-                      <div key={`sub-${el.edge.index}`} className="bg-dark-bg rounded-xl p-3 border-l-2 border-green-500">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className="text-sm font-bold text-green-400">
-                            1{el.edge.label} ({FACE_LABEL[el.edge.face]})
-                          </span>
-                          <span className="text-[10px] text-dimension">
-                            辺長 {el.edgeLengthMm}mm / 有効 {el.effectiveMm}mm
-                          </span>
-                        </div>
-                        {candidate.rails.length > 0 ? (
-                          <>
-                            <p className="text-xs text-canvas font-mono mb-1">
-                              {formatRailsSummary(candidate.rails)}
-                            </p>
-                            <div className="flex flex-wrap gap-1 mb-1">
-                              {candidate.rails.map((r, ri) => (
-                                <span key={ri} className="px-1.5 py-0.5 bg-green-500/20 text-green-300 text-[11px] font-mono rounded">
-                                  {r}
-                                </span>
-                              ))}
-                            </div>
-                          </>
-                        ) : (
-                          <p className="text-xs text-dimension">手摺なし</p>
-                        )}
-                        <div className="flex items-center justify-between">
-                          <span className={`text-[11px] font-mono ${
-                            candidate.remainder === 0 ? 'text-green-400' :
-                            candidate.remainder < 0 ? 'text-red-400' : 'text-yellow-400'
-                          }`}>
-                            端数: {candidate.remainder >= 0 ? '+' : ''}{candidate.remainder}mm
-                            {candidate.remainder < 0 && ' (突出)'}
-                          </span>
-                          <span className="text-[10px] text-dimension">{candidate.count}本</span>
-                        </div>
-                        {el.candidates.length > 1 && (
-                          <div className="mt-2 pt-2 border-t border-dark-border">
-                            <p className="text-[10px] text-dimension mb-1">候補：</p>
-                            <div className="flex flex-wrap gap-1">
-                              {el.candidates.map((c, ci) => (
-                                <button key={ci}
-                                  onClick={() => setSelectionsSub(prev => ({ ...prev, [el.edge.index]: ci }))}
-                                  className={`px-2 py-1 rounded text-[10px] font-mono border transition-colors ${
-                                    selIdx === ci
-                                      ? 'border-green-500 bg-green-500/15 text-green-400'
-                                      : 'border-dark-border text-dimension hover:border-green-500/50'
-                                  }`}
-                                >
-                                  {formatRailsSummary(c.rails)} / {c.remainder >= 0 ? '+' : ''}{c.remainder}mm
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              <button onClick={handlePlace}
-                className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg"
-              >
-                配置する
-              </button>
-            </div>
-          )}
-            </>
-          ) : (
             <>
           {/* 【Phase D】繋がる離れ提案モード */}
           {phaseDStep === 'input' && (
@@ -1119,8 +775,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 );
               })()}
             </div>
-          )}
-            </>
           )}
             </>
           )}
