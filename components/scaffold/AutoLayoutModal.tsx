@@ -59,6 +59,18 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return getEdgesNotCoveredBy(building1F, building2F);
   }, [targetFloor, building1F, building2F]);
 
+  // bothモード時、プレビュー用に 1F 全辺（ラベル A/B/C/D...）
+  const edges1FAll = useMemo(() => {
+    if (targetFloor !== 'both' || !building1F) return [];
+    return getBuildingEdgesClockwise(building1F);
+  }, [targetFloor, building1F]);
+
+  // 下屋辺の index セット（プレビュー強調 & 下屋入力 UI で利用）
+  const uncoveredIdxSet1F = useMemo(
+    () => new Set(uncoveredEdges1F.map(e => e.index)),
+    [uncoveredEdges1F],
+  );
+
   // scaffoldStart は対象階のものだけ有効扱い（別階のを引き継がない）
   // both モードは 2F 主表示なので 2F の scaffoldStart を使用
   const scaffoldStart = useMemo(() => {
@@ -103,10 +115,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     };
   }, [scaffoldStart, edges]);
 
-  // 【Phase D】繋がる離れ提案モード（常時有効。従来モード削除後も互換目的で const を残置）
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // 【Phase D】繋がる離れ提案モード（常時有効。従来モードのコードは残すが UI からはアクセス不可）
   const phaseDMode = true;
-  const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential'>('input');
+  const setPhaseDMode = (_: boolean) => {}; // no-op、既存呼び出し箇所のエラー回避
+  const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
   const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
   const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
 
@@ -298,7 +310,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               <div className="flex justify-end gap-2 mt-2">
                 <button
                   className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
-                  onClick={onClose}
+                  onClick={() => setPhaseDMode(false)}
                 >
                   キャンセル
                 </button>
