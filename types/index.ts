@@ -200,7 +200,13 @@ export type CanvasData = {
   antis: Anti[];
   memos: Memo[];
   compass: { angle: number };
+  /** @deprecated 後方互換。新規は scaffoldStart1F / scaffoldStart2F を使用。
+   *  normalize 時に scaffoldStart1F / 2F と同期される。 */
   scaffoldStart?: ScaffoldStartConfig;
+  /** 1F のスタート角（1F+2F 両方保持可能）*/
+  scaffoldStart1F?: ScaffoldStartConfig;
+  /** 2F のスタート角（1F+2F 両方保持可能）*/
+  scaffoldStart2F?: ScaffoldStartConfig;
   /** マグネットピン（undefined は既存プロジェクト互換、実行時は [] に正規化）*/
   magnetPins?: MagnetPin[];
 };

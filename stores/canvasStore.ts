@@ -36,10 +36,23 @@ const createEmptyCanvasData = (): CanvasData => ({
 });
 
 /** 互換: 旧プロジェクトで欠落しているフィールドを補完する */
-const normalizeCanvasData = (data: CanvasData): CanvasData => ({
-  ...data,
-  magnetPins: data.magnetPins ?? [],
-});
+const normalizeCanvasData = (data: CanvasData): CanvasData => {
+  const normalized: CanvasData = {
+    ...data,
+    magnetPins: data.magnetPins ?? [],
+  };
+  // 旧 scaffoldStart → scaffoldStart1F / scaffoldStart2F への移行。
+  // 既に 1F/2F 側が入っていればそちらを優先（二重上書きしない）。
+  if (data.scaffoldStart) {
+    const floor = data.scaffoldStart.floor ?? 1;
+    if (floor === 1 && !normalized.scaffoldStart1F) {
+      normalized.scaffoldStart1F = data.scaffoldStart;
+    } else if (floor === 2 && !normalized.scaffoldStart2F) {
+      normalized.scaffoldStart2F = data.scaffoldStart;
+    }
+  }
+  return normalized;
+};
 
 type HistoryState = {
   past: CanvasData[];
@@ -299,6 +312,10 @@ type CanvasStore = {
   moveElement: (id: string, dx: number, dy: number) => void;
   setCompassAngle: (angle: number) => void;
   setScaffoldStart: (config: ScaffoldStartConfig) => void;
+  setScaffoldStart1F: (config: ScaffoldStartConfig | undefined) => void;
+  setScaffoldStart2F: (config: ScaffoldStartConfig | undefined) => void;
+  removeScaffoldStart1F: () => void;
+  removeScaffoldStart2F: () => void;
   zoomToFitBuildings: (viewportWidth: number, viewportHeight: number, marginMm?: number) => void;
   resetCanvas: () => void;
 };
@@ -964,8 +981,46 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setScaffoldStart: (config) => {
     const { canvasData, pushHistory } = get();
     pushHistory();
+    // 後方互換: scaffoldStart 本体を更新しつつ、floor に応じて
+    // scaffoldStart1F / scaffoldStart2F にも同じ値を振り分ける。
+    const floor = config.floor ?? 1;
+    const next: CanvasData = { ...canvasData, scaffoldStart: config };
+    if (floor === 1) {
+      next.scaffoldStart1F = config;
+    } else {
+      next.scaffoldStart2F = config;
+    }
+    set({ canvasData: next, isDirty: true });
+  },
+  setScaffoldStart1F: (config) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
     set({
-      canvasData: { ...canvasData, scaffoldStart: config },
+      canvasData: { ...canvasData, scaffoldStart1F: config },
+      isDirty: true,
+    });
+  },
+  setScaffoldStart2F: (config) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: { ...canvasData, scaffoldStart2F: config },
+      isDirty: true,
+    });
+  },
+  removeScaffoldStart1F: () => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: { ...canvasData, scaffoldStart1F: undefined },
+      isDirty: true,
+    });
+  },
+  removeScaffoldStart2F: () => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: { ...canvasData, scaffoldStart2F: undefined },
       isDirty: true,
     });
   },
