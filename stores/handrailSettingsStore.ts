@@ -28,6 +28,49 @@ function sanitize(raw: unknown): HandrailLengthMm[] {
   return raw.filter((v): v is HandrailLengthMm => typeof v === 'number' && valid.has(v));
 }
 
+/** チェック ON/OFF に応じて priorityConfig を調整
+ *  - OFF: order から該当サイズを除外末尾に移動、元セクションの Count を -1
+ *  - ON: 未登録なら除外末尾に追加、登録済みなら位置維持
+ */
+function adjustPriorityOnToggle(
+  cfg: PriorityConfig,
+  size: HandrailLengthMm,
+  nowEnabled: boolean,
+): PriorityConfig {
+  const { order, mainCount, subCount, adjustCount } = cfg;
+  const idx = order.indexOf(size);
+  const mainEnd = mainCount;
+  const subEnd = mainCount + subCount;
+  const adjustEnd = mainCount + subCount + adjustCount;
+
+  if (nowEnabled) {
+    // ON
+    if (idx >= 0) return cfg; // 既に order にあれば位置維持
+    return {
+      ...cfg,
+      order: [...order, size],
+    };
+  }
+
+  // OFF
+  if (idx < 0) return cfg; // もともと order に無い
+  let newMain = mainCount;
+  let newSub = subCount;
+  let newAdjust = adjustCount;
+  if (idx < mainEnd) newMain--;
+  else if (idx < subEnd) newSub--;
+  else if (idx < adjustEnd) newAdjust--;
+  // 除外セクションから OFF する場合は Count 変化なし
+
+  const filtered = order.filter((s) => s !== size);
+  return {
+    order: [...filtered, size] as HandrailLengthMm[],
+    mainCount: newMain,
+    subCount: newSub,
+    adjustCount: newAdjust,
+  };
+}
+
 export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get) => ({
   enabledSizes: [...DEFAULT_ENABLED_SIZES],
   priorityConfig: { ...DEFAULT_PRIORITY_CONFIG, order: [...DEFAULT_PRIORITY_CONFIG.order] },
@@ -127,12 +170,21 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
   },
 
   toggleSize: async (size) => {
-    const { enabledSizes, saveHandrailSettings } = get();
-    const next = enabledSizes.includes(size)
+    const { enabledSizes, priorityConfig, saveHandrailSettings, savePriorityConfig } = get();
+    const wasOn = enabledSizes.includes(size);
+    const next = wasOn
       ? enabledSizes.filter(s => s !== size)
       : [...enabledSizes, size];
     // 全OFF防止: 少なくとも 1 つは必ず残す
     if (next.length === 0) return;
+
+    // priorityConfig を連動調整（OFF→除外末尾へ、ON→除外末尾に追加）
+    const nextConfig = adjustPriorityOnToggle(priorityConfig, size, !wasOn);
+
+    // 2 リクエストで保存（enabled_sizes と priority_config は別カラムのため直列 UPDATE）
     await saveHandrailSettings(next);
+    if (nextConfig !== priorityConfig) {
+      await savePriorityConfig(nextConfig);
+    }
   },
 }));
