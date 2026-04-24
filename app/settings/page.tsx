@@ -6,6 +6,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { supabase } from '@/lib/supabase/client';
 import { ALL_HANDRAIL_SIZES } from '@/types';
+import DraggablePriorityList from '@/components/settings/DraggablePriorityList';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -14,6 +15,7 @@ export default function SettingsPage() {
   const [companyName, setCompanyName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<'enabled' | 'priority'>('enabled');
 
   useEffect(() => {
     if (profile) setCompanyName(profile.company_name || '');
@@ -98,7 +100,32 @@ export default function SettingsPage() {
 
         <section>
           <h2 className="text-sm text-dimension mb-2 font-bold">部材設定</h2>
+
+          {/* タブ切替 */}
+          <div className="flex gap-2 mb-3">
+            <button
+              type="button"
+              onClick={() => setActiveTab('enabled')}
+              className={`flex-none h-9 px-3 rounded-md text-sm font-bold transition-colors ${
+                activeTab === 'enabled' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              使用部材
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('priority')}
+              className={`flex-none h-9 px-3 rounded-md text-sm font-bold transition-colors ${
+                activeTab === 'priority' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              自動割付優先
+            </button>
+          </div>
+
           <div className="bg-dark-surface border border-dark-border rounded-xl p-4">
+            {activeTab === 'enabled' && (
+              <>
             <p className="text-xs text-dimension mb-3">
               会社で保有している手摺サイズのみ ON にしてください。<br />
               OFF のサイズは自動割付・パレットで使用されません。
@@ -132,6 +159,17 @@ export default function SettingsPage() {
               <p className="mt-2 text-[11px] text-yellow-500">
                 最低 1 サイズは ON にしておく必要があります
               </p>
+            )}
+              </>
+            )}
+
+            {activeTab === 'priority' && (
+              <div className="flex flex-col gap-2">
+                <div className="text-sm text-gray-600">
+                  ドラッグで並べ替えできます。上が優先度高。
+                </div>
+                <DraggablePriorityList />
+              </div>
             )}
           </div>
         </section>
