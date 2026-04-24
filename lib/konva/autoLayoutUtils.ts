@@ -142,9 +142,8 @@ export function getBuildingEdgesClockwise(building: BuildingShape): EdgeInfo[] {
 export function findBestEndCombinations(
   effectiveMm: number,
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
-  // priorityConfig: Phase 5 で評価関数（main/sub/adjust 優先、除外スキップ）に使用予定
-  // Phase 4 時点では受け取るだけで未使用
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  // priorityConfig: Phase 5-B 以降、渡されれば優先部材パターンを追加候補として合流する
+  // 未指定なら既存の A〜G パターンのみで動作（互換性完全維持）
   priorityConfig?: PriorityConfig,
 ): LayoutCombination[] {
   if (effectiveMm <= 0) return [{ rails: [], remainder: 0, count: 0 }];
@@ -258,6 +257,15 @@ export function findBestEndCombinations(
   // 結果がなければフォールバック
   if (results.length === 0) {
     addResult(base1800, leftover);
+  }
+
+  // 【Phase 5-B】priorityConfig が渡されていれば、優先リストに基づく追加パターンを合流
+  // addResult 経由で results に追加されるため、seen セットで重複除去、以降の選出ロジックは既存通り
+  if (priorityConfig) {
+    const extra = generatePriorityPatterns(effectiveMm, enabledSizes, priorityConfig);
+    for (const p of extra) {
+      addResult(p.rails, p.remainder);
+    }
   }
 
   // 有効長より短い側（+remainder = 不足）/ 長い側（-remainder = 突出）
@@ -559,4 +567,101 @@ export function scoreCombination(
     total += getScoreOfSize(r, priorityConfig);
   }
   return total / rails.length;
+}
+
+/**
+ * 優先リストの各部材を baseSize としたパターンを生成する。
+ * 除外セクションの部材は使わない。
+ * Phase 5-B 時点では候補に追加するのみ、ソート基準は既存のまま。
+ */
+function generatePriorityPatterns(
+  effectiveMm: number,
+  enabledSizes: HandrailLengthMm[],
+  priorityConfig: PriorityConfig,
+): LayoutCombination[] {
+  // 除外セクションを除いた使用可能部材を優先順 (main→sub→adjust) で取得
+  const usableSizes: HandrailLengthMm[] = [];
+  const totalInSections =
+    priorityConfig.mainCount + priorityConfig.subCount + priorityConfig.adjustCount;
+  for (let i = 0; i < totalInSections && i < priorityConfig.order.length; i++) {
+    const size = priorityConfig.order[i];
+    if (enabledSizes.includes(size)) {
+      usableSizes.push(size);
+    }
+  }
+
+  if (usableSizes.length === 0) return [];
+
+  const patterns: LayoutCombination[] = [];
+
+  // 各 usableSize を baseSize として試す
+  for (const baseSize of usableSizes) {
+    const baseCount = Math.floor(effectiveMm / baseSize);
+    if (baseCount === 0) continue; // baseSize が長すぎる場合はスキップ
+
+    const leftover = effectiveMm - baseSize * baseCount;
+
+    // パターン 1: baseSize のみで埋める（端数は残す）
+    patterns.push({
+      rails: Array(baseCount).fill(baseSize),
+      remainder: leftover,
+      count: baseCount,
+    });
+
+    // パターン 2: baseSize を1本減らして、端数を他の部材で埋める
+    if (baseCount >= 1) {
+      const targetLeftover = leftover + baseSize;
+      const fillers = usableSizes.filter((s) => s !== baseSize);
+
+      // 単一部材で埋める
+      for (const s of fillers) {
+        const n = Math.floor(targetLeftover / s);
+        if (n > 0) {
+          const rem = targetLeftover - s * n;
+          patterns.push({
+            rails: [...Array(baseCount - 1).fill(baseSize), ...Array(n).fill(s)],
+            remainder: rem,
+            count: baseCount - 1 + n,
+          });
+        }
+      }
+
+      // 2部材の組み合わせで埋める（s1 + s2）
+      for (let i = 0; i < fillers.length; i++) {
+        for (let j = i; j < fillers.length; j++) {
+          const s1 = fillers[i];
+          const s2 = fillers[j];
+          if (s1 + s2 <= targetLeftover + 50) { // 50mm の許容
+            const rem = targetLeftover - s1 - s2;
+            const rails = [...Array(baseCount - 1).fill(baseSize), s1, s2].sort(
+              (a, b) => b - a,
+            ) as HandrailLengthMm[];
+            patterns.push({
+              rails,
+              remainder: rem,
+              count: baseCount - 1 + 2,
+            });
+          }
+        }
+      }
+    }
+  }
+
+  // 優先部材のみで小部材 2 本の組み合わせパターン（baseSize 不使用、短辺向け）
+  for (let i = 0; i < usableSizes.length; i++) {
+    for (let j = i; j < usableSizes.length; j++) {
+      const s1 = usableSizes[i];
+      const s2 = usableSizes[j];
+      if (s1 + s2 <= effectiveMm + 50) {
+        const rem = effectiveMm - s1 - s2;
+        patterns.push({
+          rails: [s1, s2].sort((a, b) => b - a) as HandrailLengthMm[],
+          remainder: rem,
+          count: 2,
+        });
+      }
+    }
+  }
+
+  return patterns;
 }
