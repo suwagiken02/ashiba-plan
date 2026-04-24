@@ -1,16 +1,20 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { Handrail, HandrailLengthMm, PhaseDFlowState, PhaseDCandidate } from '@/types';
+import { Handrail, HandrailLengthMm, Point, ScaffoldStartConfig, PhaseDFlowState, PhaseDCandidate } from '@/types';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
+import NumInput from '@/components/ui/NumInput';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import {
   getBuildingEdgesClockwise,
   computeAutoLayout,
   placeHandrailsForEdge,
   getEdgesNotCoveredBy,
+  AutoLayoutResult,
+  EdgeInfo,
+  EdgeLayout,
 } from '@/lib/konva/autoLayoutUtils';
 import {
   initPhaseDFlowState,
@@ -24,8 +28,23 @@ import {
 
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
+const FACE_LABEL: Record<string, string> = {
+  north: '北', south: '南', east: '東', west: '西',
+};
+
+/** 手摺リストを "1800×3 + 600×1" 形式に整形 */
+function formatRailsSummary(rails: HandrailLengthMm[]): string {
+  if (rails.length === 0) return 'なし';
+  const counts: Record<number, number> = {};
+  for (const r of rails) counts[r] = (counts[r] ?? 0) + 1;
+  const entries = Object.entries(counts)
+    .map(([k, v]) => [Number(k), v] as [number, number])
+    .sort((a, b) => b[0] - a[0]);
+  return entries.map(([len, cnt]) => `${len}×${cnt}`).join(' + ');
+}
+
 export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props) {
-  const { canvasData, addHandrails } = useCanvasStore();
+  const { canvasData, addHandrails, removeElements } = useCanvasStore();
   const enabledSizes = useHandrailSettingsStore(s => s.enabledSizes);
   const priorityConfig = useHandrailSettingsStore(s => s.priorityConfig);
 
@@ -115,12 +134,284 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     };
   }, [scaffoldStart, edges]);
 
+  // 各辺の離れ（mm）: edgeIndex → number
+  const defaultDist = scaffoldStart?.face1DistanceMm ?? 900;
+  const [distances, setDistances] = useState<Record<number, number>>(() => {
+    const d: Record<number, number> = {};
+    edges.forEach(e => {
+      if (scaffoldStart) {
+        const n = edges.length;
+        const startIdx = scaffoldStart.startVertexIndex ?? 0;
+        const outEdge = edges[startIdx % n];
+        const inEdge = edges[(startIdx - 1 + n) % n];
+        const outIsH = outEdge.face === 'north' || outEdge.face === 'south';
+        const face1Edge = outIsH ? outEdge : inEdge;
+        const face2Edge = outIsH ? inEdge : outEdge;
+        if (e.index === face1Edge.index) { d[e.index] = scaffoldStart.face1DistanceMm; return; }
+        if (e.index === face2Edge.index) { d[e.index] = scaffoldStart.face2DistanceMm; return; }
+      }
+      d[e.index] = defaultDist;
+    });
+    return d;
+  });
+
+  // 下屋辺の変化時に distances1F を初期化（デフォルト 900mm）。
+  // 既に入力があれば保持。
+  useEffect(() => {
+    setDistances1F(prev => {
+      const next: Record<number, number> = {};
+      uncoveredEdges1F.forEach(e => {
+        next[e.index] = prev[e.index] ?? 900;
+      });
+      return next;
+    });
+  }, [uncoveredEdges1F]);
+
+  // 対象階切替時は distances をその階用に再構築
+  useEffect(() => {
+    const d: Record<number, number> = {};
+    edges.forEach(e => {
+      if (scaffoldStart) {
+        const n = edges.length;
+        const startIdx = scaffoldStart.startVertexIndex ?? 0;
+        const outEdge = edges[startIdx % n];
+        const inEdge = edges[(startIdx - 1 + n) % n];
+        const outIsH = outEdge.face === 'north' || outEdge.face === 'south';
+        const face1Edge = outIsH ? outEdge : inEdge;
+        const face2Edge = outIsH ? inEdge : outEdge;
+        if (e.index === face1Edge.index) { d[e.index] = scaffoldStart.face1DistanceMm; return; }
+        if (e.index === face2Edge.index) { d[e.index] = scaffoldStart.face2DistanceMm; return; }
+      }
+      d[e.index] = defaultDist;
+    });
+    setDistances(d);
+    setResult(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetFloor, building?.id]);
+
+  const [result, setResult] = useState<AutoLayoutResult | null>(null);
+  // 「1F+2F同時」モード専用: サブ階層（= 1F 下屋辺）の割付結果
+  const [resultSub, setResultSub] = useState<AutoLayoutResult | null>(null);
+  // 「1F+2F同時」モード専用: 1F下屋辺用の離れ（edgeIndex → mm）
+  const [distances1F, setDistances1F] = useState<Record<number, number>>({});
+  // 「1F+2F同時」モード専用: 1F下屋辺の候補選択 index
+  const [selectionsSub, setSelectionsSub] = useState<Record<number, number>>({});
+  const [selections, setSelections] = useState<Record<number, number>>({});
+  const [showConflictConfirm, setShowConflictConfirm] = useState(false);
+  const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
+  const [conflictIds, setConflictIds] = useState<string[]>([]);
+  const [distanceSuggestions, setDistanceSuggestions] = useState<{
+    edgeIndex: number;
+    edgeLabel: string;
+    currentDist: number;
+    suggestions: number[];
+  }[]>([]);
+  const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
+
   // 【Phase D】繋がる離れ提案モード（常時有効。従来モードのコードは残すが UI からはアクセス不可）
   const phaseDMode = true;
   const setPhaseDMode = (_: boolean) => {}; // no-op、既存呼び出し箇所のエラー回避
   const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
   const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
   const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
+
+  // 問題辺の effectiveMm は「隣接2辺の離れ」で決まる（自身の離れは無関係）。
+  // 修正する離れは問題辺の隣接非L辺（= prev か next の非L字側）を対象にする。
+  // 新離れ = 隣接非L辺の現在離れ - 問題辺のremainder
+  //   remainder > 0 (不足) → 新離れ = 現在離れ - remainder（隣接離れを縮める）
+  //   remainder < 0 (突出) → 新離れ = 現在離れ + |remainder|（隣接離れを伸ばす）
+  // 戻り値は "どの辺を調整するか" も含む。
+  const findDistanceSuggestions = (el: EdgeLayout): {
+    adjustEdgeIndex: number; adjustLabel: string; currentDist: number; newDists: number[];
+  } | null => {
+    const edgeIdx = edges.findIndex(e => e.index === el.edge.index);
+    if (edgeIdx < 0) return null;
+    const nE = edges.length;
+    const prevE = edges[(edgeIdx - 1 + nE) % nE];
+    const nextE = edges[(edgeIdx + 1) % nE];
+    // 隣接辺のうち L字固定でない側を調整対象とする
+    let adjE: typeof prevE | null = null;
+    if (!lockedEdgeIndices.has(prevE.index)) adjE = prevE;
+    else if (!lockedEdgeIndices.has(nextE.index)) adjE = nextE;
+    if (!adjE) return null; // 両隣が L字固定 → 調整不能
+    const currentDist = distances[adjE.index] ?? 900;
+    const newDists: number[] = [];
+    for (const cand of el.candidates) {
+      if (cand.remainder === 0) continue;
+      const newDist = Math.round(currentDist - cand.remainder);
+      if (newDist > 0 && newDist !== currentDist && !newDists.includes(newDist)) {
+        newDists.push(newDist);
+      }
+    }
+    if (newDists.length === 0) return null;
+    return { adjustEdgeIndex: adjE.index, adjustLabel: adjE.label, currentDist, newDists: newDists.slice(0, 2) };
+  };
+
+  const handleCalc = () => {
+    if (!building) return;
+    // プライマリ計算（1Fのみ→1F全周 / 2Fのみ→2F全周 / both→2F全周）
+    const res = computeAutoLayout(building, distances, scaffoldStart, enabledSizes, priorityConfig);
+
+    // 1F+2F 同時モード: 1F のうち 2F で覆われていない辺（下屋辺）を計算
+    if (targetFloor === 'both' && building1F && building2F && uncoveredEdges1F.length > 0) {
+      // 1F 全辺の離れを用意（下屋辺は UI で編集された値、その他はデフォルト 900mm）
+      const d1: Record<number, number> = {};
+      getBuildingEdgesClockwise(building1F).forEach(e => {
+        d1[e.index] = distances1F[e.index] ?? 900;
+      });
+      const res1 = computeAutoLayout(building1F, d1, undefined, enabledSizes, priorityConfig);
+      // 下屋辺だけに edgeLayouts を絞り込む
+      const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
+      const filtered = res1.edgeLayouts.filter(el => uncoveredIdxSet.has(el.edge.index));
+      setResultSub({ edgeLayouts: filtered });
+      // 選択 index を初期化
+      const sel: Record<number, number> = {};
+      filtered.forEach(el => { sel[el.edge.index] = 0; });
+      setSelectionsSub(sel);
+    } else {
+      setResultSub(null);
+      setSelectionsSub({});
+    }
+
+    // 端数が残る面を検出（固定面は除く）
+    const problemEdges = res.edgeLayouts.filter(el =>
+      !el.locked &&
+      el.candidates[0]?.remainder !== 0 &&
+      !lockedEdgeIndices.has(el.edge.index)
+    );
+
+    console.log('[handleCalc] problemEdges:', problemEdges.map(el => ({
+      label: el.edge.label,
+      remainder: el.candidates[0]?.remainder,
+      locked: el.locked,
+      lockedByIndex: lockedEdgeIndices.has(el.edge.index),
+    })));
+
+    if (problemEdges.length > 0) {
+      const seen = new Set<string>();
+      const suggestions = problemEdges
+        .map(el => {
+          const r = findDistanceSuggestions(el);
+          if (!r) return null;
+          // 同じ隣接非L辺を複数の問題辺が指す場合は重複排除
+          const key = `${r.adjustEdgeIndex}|${r.newDists.join(',')}`;
+          if (seen.has(key)) return null;
+          seen.add(key);
+          return {
+            edgeIndex: r.adjustEdgeIndex,
+            edgeLabel: r.adjustLabel,
+            currentDist: r.currentDist,
+            suggestions: r.newDists,
+          };
+        })
+        .filter((s): s is NonNullable<typeof s> => s !== null);
+
+      console.log('[handleCalc] suggestions:', suggestions.map(s => ({
+        label: s.edgeLabel,
+        currentDist: s.currentDist,
+        suggestions: s.suggestions,
+      })));
+
+      if (suggestions.length > 0) {
+        setDistanceSuggestions(suggestions);
+        setCurrentSuggestionIdx(0);
+        setResult(res); // 現在の結果も表示
+        return;
+      }
+    }
+
+    setDistanceSuggestions([]);
+    setResult(res);
+    const sel: Record<number, number> = {};
+    res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
+    setSelections(sel);
+  };
+
+  const handlePlace = () => {
+    if (!result || !building) return;
+    const allHandrails: Handrail[] = [];
+
+    // L字辺も通常辺と同様に配置する（L字辺の特徴は「離れ固定 + ダイアログ対象外」のみ）。
+    // ScaffoldStartModal で既に置かれた L字辺の始点手摺は、下の overlappingIds で検出されて
+    // 削除ダイアログが出るので、ユーザーが置換を承認すれば正しい配置に再構成される。
+    for (let i = 0; i < result.edgeLayouts.length; i++) {
+      const el = result.edgeLayouts[i];
+      const selIdx = selections[i] ?? 0;
+      const candidate = el.candidates[selIdx];
+      if (!candidate || candidate.rails.length === 0) continue;
+
+      const placements = placeHandrailsForEdge(el, candidate.rails);
+      // プライマリの所属階:
+      // 1Fのみ → 1F、2Fのみ → 2F、both → 2F（botheは2F全周が主）
+      const mainFloor: 1 | 2 = targetFloor === 1 ? 1 : 2;
+      for (const p of placements) {
+        allHandrails.push({
+          id: uuidv4(),
+          x: p.x, y: p.y,
+          lengthMm: p.lengthMm,
+          direction: p.direction,
+          color: getHandrailColor(p.lengthMm),
+          floor: mainFloor,
+        });
+      }
+    }
+
+    // 1F+2F 同時: 1F のうち 2F で覆われない辺（下屋辺）の手摺を追加
+    if (targetFloor === 'both' && resultSub) {
+      for (const el of resultSub.edgeLayouts) {
+        const selIdx = selectionsSub[el.edge.index] ?? 0;
+        const candidate = el.candidates[selIdx];
+        if (!candidate || candidate.rails.length === 0) continue;
+        const placements = placeHandrailsForEdge(el, candidate.rails);
+        for (const p of placements) {
+          allHandrails.push({
+            id: uuidv4(),
+            x: p.x, y: p.y,
+            lengthMm: p.lengthMm,
+            direction: p.direction,
+            color: getHandrailColor(p.lengthMm),
+            floor: 1, // 下屋辺は1F部材
+          });
+        }
+      }
+    }
+
+    if (allHandrails.length === 0) return;
+
+    // 触れる既存手摺を検出（各手摺について同じ階のもののみ比較）。
+    // 1F+2F同時モードでも、1F 手摺は 1F と、2F 手摺は 2F と比較される。
+    const mmToG = (mm: number) => Math.round(mm / 10);
+    const TOL = 2;
+    const overlappingIds = canvasData.handrails.filter(existing => {
+      return allHandrails.some(newH => {
+        if ((newH.floor ?? 1) !== (existing.floor ?? 1)) return false;
+        if (existing.direction !== newH.direction) return false;
+        if (existing.direction === 'horizontal') {
+          if (Math.abs(existing.y - newH.y) > TOL) return false;
+          const e1 = existing.x, e2 = existing.x + mmToG(existing.lengthMm);
+          const n1 = newH.x, n2 = newH.x + mmToG(newH.lengthMm);
+          return e1 <= n2 + TOL && e2 >= n1 - TOL;
+        } else {
+          if (Math.abs(existing.x - newH.x) > TOL) return false;
+          const e1 = existing.y, e2 = existing.y + mmToG(existing.lengthMm);
+          const n1 = newH.y, n2 = newH.y + mmToG(newH.lengthMm);
+          return e1 <= n2 + TOL && e2 >= n1 - TOL;
+        }
+      });
+    }).map(h => h.id);
+
+    // 干渉する既存部材がある場合はカスタム確認ダイアログ
+    if (overlappingIds.length > 0) {
+      setConflictIds(overlappingIds);
+      setPendingHandrails(allHandrails);
+      useCanvasStore.getState().setHighlightIds(overlappingIds);
+      setShowConflictConfirm(true);
+      return;
+    }
+
+    addHandrails(allHandrails);
+    onClose();
+  };
 
   // 【Phase D】decisions から距離 Record を構築
   const buildPhaseDDistances = (state: PhaseDFlowState): Record<number, number> => {
