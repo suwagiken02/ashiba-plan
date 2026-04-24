@@ -374,9 +374,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }[]>([]);
   const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
 
-  // 【Phase D】繋がる離れ提案モード（常時有効。従来モードのコードは残すが UI からはアクセス不可）
-  const phaseDMode = true;
-  const setPhaseDMode = (_: boolean) => {}; // no-op、既存呼び出し箇所のエラー回避
+  // 【Phase D】繋がる離れ提案モード（開発中、デフォルトOFF）
+  const [phaseDMode, setPhaseDMode] = useState(false);
   const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
   const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
   const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
@@ -748,6 +747,23 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             )}
           </div>
 
+          {/* 【Phase D】開発用トグル（リリース前に隠す想定） */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-300 dark:border-purple-700">
+            <input
+              type="checkbox"
+              id="phase-d-mode"
+              checked={phaseDMode}
+              onChange={(e) => {
+                setPhaseDMode(e.target.checked);
+                setPhaseDStep('input');
+              }}
+              className="w-4 h-4"
+            />
+            <label htmlFor="phase-d-mode" className="text-xs font-medium cursor-pointer select-none">
+              🚧 繋がる離れ提案モード（開発中）
+            </label>
+          </div>
+
           {!building && (
             <p className="text-xs text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
               {targetFloor === 2 ? '2F建物が未作成です。' : '建物が未作成です。'}
@@ -1031,7 +1047,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           {/* 【Phase D】繋がる離れ提案モード */}
           {phaseDStep === 'input' && (
             <div className="flex flex-col gap-3 p-3">
-              <div className="text-sm font-semibold">Step 0: 希望離れ入力</div>
+              <div className="text-sm font-semibold">🚧 繋がる離れ提案モード - Step 0: 希望離れ入力</div>
               <div className="text-xs text-gray-600 dark:text-gray-400">
                 各面の希望離れを入力してください。固定辺（スタート角の2辺）は既に確定しています。
               </div>
@@ -1111,7 +1127,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           {phaseDStep === 'sequential' && phaseDFlowState && (
             <div className="flex flex-col gap-3 p-3">
               <div className="text-sm font-semibold">
-                Step 1: 順次決定 ({phaseDFlowState.currentStep < 0 ? phaseDFlowState.edgeOrder.length : phaseDFlowState.currentStep + 1}/{phaseDFlowState.edgeOrder.length}面)
+                🚧 Step 1: 順次決定 ({phaseDFlowState.currentStep < 0 ? phaseDFlowState.edgeOrder.length : phaseDFlowState.currentStep + 1}/{phaseDFlowState.edgeOrder.length}面)
               </div>
 
               {(() => {
