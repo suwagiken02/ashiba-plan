@@ -270,6 +270,24 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return new Set([outEdge.index, inEdge.index]);
   }, [scaffoldStart, building]);
 
+  // 【Phase D】固定辺の face1/face2 edgeIndex と離れ
+  const phaseDLockedInfo = useMemo(() => {
+    if (!scaffoldStart || edges.length === 0) return null;
+    const n = edges.length;
+    const svi = scaffoldStart.startVertexIndex ?? 0;
+    const outEdge = edges[svi % n];
+    const inEdge = edges[(svi - 1 + n) % n];
+    const outIsH = outEdge.face === 'north' || outEdge.face === 'south';
+    const face1Edge = outIsH ? outEdge : inEdge;
+    const face2Edge = outIsH ? inEdge : outEdge;
+    return {
+      face1EdgeIndex: face1Edge.index,
+      face1DistanceMm: scaffoldStart.face1DistanceMm,
+      face2EdgeIndex: face2Edge.index,
+      face2DistanceMm: scaffoldStart.face2DistanceMm,
+    };
+  }, [scaffoldStart, edges]);
+
   // 各辺の離れ（mm）: edgeIndex → number
   const defaultDist = scaffoldStart?.face1DistanceMm ?? 900;
   const [distances, setDistances] = useState<Record<number, number>>(() => {
@@ -346,6 +364,11 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     suggestions: number[];
   }[]>([]);
   const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
+
+  // 【Phase D】繋がる離れ提案モード（開発中、デフォルトOFF）
+  const [phaseDMode, setPhaseDMode] = useState(false);
+  const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
+  const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -654,6 +677,23 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             )}
           </div>
 
+          {/* 【Phase D】開発用トグル（リリース前に隠す想定） */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-300 dark:border-purple-700">
+            <input
+              type="checkbox"
+              id="phase-d-mode"
+              checked={phaseDMode}
+              onChange={(e) => {
+                setPhaseDMode(e.target.checked);
+                setPhaseDStep('input');
+              }}
+              className="w-4 h-4"
+            />
+            <label htmlFor="phase-d-mode" className="text-xs font-medium cursor-pointer select-none">
+              🚧 繋がる離れ提案モード（開発中）
+            </label>
+          </div>
+
           {!building && (
             <p className="text-xs text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
               {targetFloor === 2 ? '2F建物が未作成です。' : '建物が未作成です。'}
@@ -662,6 +702,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           )}
 
           {building && (
+            <>
+          {!phaseDMode ? (
             <>
           {/* プレビューSVG（bothモードでは 1F を背景、下屋辺を緑で強調） */}
           <PreviewSVG
@@ -928,6 +970,84 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 配置する
               </button>
             </div>
+          )}
+            </>
+          ) : (
+            <>
+          {/* 【Phase D】繋がる離れ提案モード */}
+          {phaseDStep === 'input' && (
+            <div className="flex flex-col gap-3 p-3">
+              <div className="text-sm font-semibold">🚧 繋がる離れ提案モード - Step 0: 希望離れ入力</div>
+              <div className="text-xs text-gray-600 dark:text-gray-400">
+                各面の希望離れを入力してください。固定辺（スタート角の2辺）は既に確定しています。
+              </div>
+
+              <div className="flex flex-col gap-2">
+                {edges.map((edge) => {
+                  const isLocked = lockedEdgeIndices.has(edge.index);
+                  const lockedValue = isLocked && phaseDLockedInfo
+                    ? (edge.index === phaseDLockedInfo.face1EdgeIndex
+                        ? phaseDLockedInfo.face1DistanceMm
+                        : phaseDLockedInfo.face2DistanceMm)
+                    : undefined;
+                  const currentValue = isLocked
+                    ? lockedValue ?? 0
+                    : (phaseDDesiredDistances[edge.index] ?? 900);
+
+                  return (
+                    <div key={edge.index} className="flex items-center gap-2">
+                      <span className="w-16 text-xs font-medium">{edge.label}面</span>
+                      {isLocked ? (
+                        <>
+                          <input
+                            type="number"
+                            value={currentValue}
+                            disabled
+                            className="w-24 px-2 py-1 text-sm border rounded bg-gray-100 dark:bg-gray-800"
+                          />
+                          <span className="text-xs text-gray-500">固定</span>
+                        </>
+                      ) : (
+                        <input
+                          type="number"
+                          value={currentValue}
+                          min={0}
+                          step={1}
+                          onChange={(e) => {
+                            const v = Number(e.target.value);
+                            setPhaseDDesiredDistances(prev => ({ ...prev, [edge.index]: v }));
+                          }}
+                          className="w-24 px-2 py-1 text-sm border rounded bg-dark-bg"
+                        />
+                      )}
+                      <span className="text-xs text-gray-400">mm</span>
+                      <span className="text-xs text-gray-400">（辺長 {Math.round(edge.lengthMm)}mm）</span>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="flex justify-end gap-2 mt-2">
+                <button
+                  className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
+                  onClick={() => setPhaseDMode(false)}
+                >
+                  キャンセル
+                </button>
+                <button
+                  className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
+                  onClick={() => {
+                    // Phase D-4 で実装: sequential モードへ遷移
+                    alert('Step 1（順次決定）は Phase D-4 で実装予定');
+                    // setPhaseDStep('sequential');
+                  }}
+                >
+                  次へ（順次決定へ）
+                </button>
+              </div>
+            </div>
+          )}
+            </>
           )}
             </>
           )}
