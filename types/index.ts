@@ -155,6 +155,35 @@ export type Memo = {
   arrowTo?: Point;
 };
 
+// === マグネットピン ===
+/**
+ * マグネットピン: 既存頂点から方向と距離を指定して立てるガイドピン。
+ * 自由移動オブジェクト（障害物/メモ/外壁）を吸着する。
+ * floor === undefined の場合は全階共通で表示される。
+ */
+export type MagnetPin = {
+  id: string;
+  /** グリッド座標（1グリッド=10mm）*/
+  x: number;
+  y: number;
+  /** 階指定（undefined なら全階共通、スタート角★と同じ扱い）*/
+  floor?: 1 | 2;
+  /** 基準点の情報（履歴として保持、表示には使わない）
+   * undefined なら任意位置から作成
+   */
+  sourceInfo?: {
+    /** 基準点の種類 */
+    type: 'buildingCorner' | 'roofCorner' | 'handrailEnd' | 'obstacleCorner' | 'free';
+    /** 参照元の ID（buildingCorner なら buildingId、handrailEnd なら handrailId など）*/
+    refId?: string;
+    /** 基準点のグリッド座標 */
+    baseX: number;
+    baseY: number;
+    /** 基準点から現在位置までの累積オフセット履歴 */
+    offsets: Array<{ dx: number; dy: number }>;
+  };
+};
+
 // === キャンバスデータ（保存用） ===
 export type CanvasData = {
   version: string;
@@ -172,6 +201,8 @@ export type CanvasData = {
   memos: Memo[];
   compass: { angle: number };
   scaffoldStart?: ScaffoldStartConfig;
+  /** マグネットピン（undefined は既存プロジェクト互換、実行時は [] に正規化）*/
+  magnetPins?: MagnetPin[];
 };
 
 // === 建物テンプレート ===

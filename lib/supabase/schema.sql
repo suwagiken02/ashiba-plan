@@ -20,6 +20,10 @@ create table if not exists projects (
 );
 
 -- 図面
+-- canvas_data（JSONB）に含まれる主なフィールド:
+--   buildings, roofOverhangs, obstacles, handrails, posts, antis, memos,
+--   compass, scaffoldStart, magnetPins
+--   （magnetPins は後から追加。undefined の古いデータはストア側で [] に正規化）
 create table if not exists drawings (
   id uuid default gen_random_uuid() primary key,
   project_id uuid references projects(id) on delete cascade,

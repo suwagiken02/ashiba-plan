@@ -17,6 +17,7 @@ import {
   BuildingInputMethod,
   ScaffoldStartConfig,
   MemoShape,
+  MagnetPin,
 } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS, INITIAL_GRID_PX, ZOOM_MIN, ZOOM_MAX } from '@/lib/konva/gridUtils';
 
@@ -31,6 +32,13 @@ const createEmptyCanvasData = (): CanvasData => ({
   antis: [],
   memos: [],
   compass: { angle: 0 },
+  magnetPins: [],
+});
+
+/** 互換: 旧プロジェクトで欠落しているフィールドを補完する */
+const normalizeCanvasData = (data: CanvasData): CanvasData => ({
+  ...data,
+  magnetPins: data.magnetPins ?? [],
 });
 
 type HistoryState = {
@@ -281,6 +289,11 @@ type CanvasStore = {
   addAnti: (a: Anti) => void;
   addObstacle: (o: Obstacle) => void;
   addMemo: (m: Memo) => void;
+  addMagnetPin: (pin: MagnetPin) => void;
+  addMagnetPins: (pins: MagnetPin[]) => void;
+  updateMagnetPin: (id: string, updates: Partial<MagnetPin>) => void;
+  removeMagnetPin: (id: string) => void;
+  removeMagnetPins: (ids: string[]) => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   moveElement: (id: string, dx: number, dy: number) => void;
@@ -299,7 +312,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setProjectId: (id) => set({ projectId: id }),
 
   canvasData: createEmptyCanvasData(),
-  setCanvasData: (data) => set({ canvasData: data, isDirty: false }),
+  setCanvasData: (data) => set({ canvasData: normalizeCanvasData(data), isDirty: false }),
 
   mode: 'select',
   setMode: (mode) => set({ mode, selectedIds: [] }),
@@ -823,6 +836,58 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       isDirty: true,
     });
   },
+  addMagnetPin: (pin) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: { ...canvasData, magnetPins: [...(canvasData.magnetPins ?? []), pin] },
+      isDirty: true,
+    });
+  },
+  addMagnetPins: (pins) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: { ...canvasData, magnetPins: [...(canvasData.magnetPins ?? []), ...pins] },
+      isDirty: true,
+    });
+  },
+  updateMagnetPin: (id, updates) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: {
+        ...canvasData,
+        magnetPins: (canvasData.magnetPins ?? []).map((p) =>
+          p.id === id ? { ...p, ...updates } : p
+        ),
+      },
+      isDirty: true,
+    });
+  },
+  removeMagnetPin: (id) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: {
+        ...canvasData,
+        magnetPins: (canvasData.magnetPins ?? []).filter((p) => p.id !== id),
+      },
+      isDirty: true,
+    });
+  },
+  removeMagnetPins: (ids) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    const idSet = new Set(ids);
+    set({
+      canvasData: {
+        ...canvasData,
+        magnetPins: (canvasData.magnetPins ?? []).filter((p) => !idSet.has(p.id)),
+      },
+      isDirty: true,
+    });
+  },
   removeElement: (id) => {
     const { canvasData, pushHistory } = get();
     pushHistory();
@@ -836,6 +901,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         antis: canvasData.antis.filter((a) => a.id !== id),
         obstacles: canvasData.obstacles.filter((o) => o.id !== id),
         memos: canvasData.memos.filter((m) => m.id !== id),
+        magnetPins: (canvasData.magnetPins ?? []).filter((p) => p.id !== id),
       },
       isDirty: true,
     });
@@ -854,6 +920,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         antis: canvasData.antis.filter((a) => !idSet.has(a.id)),
         obstacles: canvasData.obstacles.filter((o) => !idSet.has(o.id)),
         memos: canvasData.memos.filter((m) => !idSet.has(m.id)),
+        magnetPins: (canvasData.magnetPins ?? []).filter((p) => !idSet.has(p.id)),
       },
       selectedIds: [],
       isDirty: true,
