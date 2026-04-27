@@ -17,6 +17,7 @@ import DimensionLineLayer from './DimensionLineLayer';
 import ObstacleLayer from './ObstacleLayer';
 import MemoLayer from './MemoLayer';
 import KidareLayer from './KidareLayer';
+import MagnetPinLayer from './MagnetPinLayer';
 import CompassWidget from './CompassWidget';
 import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
@@ -464,6 +465,9 @@ export default function GridCanvas({ width, height }: Props) {
 
       {/* メモレイヤー */}
       <MemoLayer />
+
+      {/* マグネットピンレイヤー（最前面のガイド） */}
+      <MagnetPinLayer />
 
       {/* 手摺プレビュー＋スナップインジケーター */}
       {(handrailPreview || snapPoint) && (
