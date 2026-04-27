@@ -18,6 +18,7 @@ import {
   AutoLayoutResult,
   EdgeInfo,
   EdgeLayout,
+  SequentialLayoutResult,
 } from '@/lib/konva/autoLayoutUtils';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
@@ -357,11 +358,20 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }[]>([]);
   const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
 
+  // Phase H-3b-2-1: 順次決定の状態管理
+  const [sequentialResult, setSequentialResult] = useState<SequentialLayoutResult | null>(null);
+  const [userSelections, setUserSelections] = useState<Record<number, number>>({});
+  const [activeEdgeIndex, setActiveEdgeIndex] = useState<number | null>(null);
+
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
   const setDistance = (idx: number, value: number) => {
     setDistances(prev => ({ ...prev, [idx]: value }));
     setResult(null);
+    // Phase H-3b-2-1: 順次決定 state もリセット
+    setSequentialResult(null);
+    setUserSelections({});
+    setActiveEdgeIndex(null);
   };
 
   // 問題辺の effectiveMm は「隣接2辺の離れ」で決まる（自身の離れは無関係）。
@@ -398,26 +408,24 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
   const handleCalc = () => {
     if (!building) return;
-    // プライマリ計算（1Fのみ→1F全周 / 2Fのみ→2F全周 / both→2F全周）
-    // Phase H-3b-1: 順次決定アルゴリズムに置き換え。アダプタで AutoLayoutResult 形式に変換
-    const seqRes = computeAutoLayoutSequential(building, distances, scaffoldStart, enabledSizes, priorityConfig);
+    // Phase H-3b-2-1: 順次決定アルゴリズムによる計算（userSelections を反映）
+    const seqRes = computeAutoLayoutSequential(
+      building, distances, scaffoldStart, enabledSizes, priorityConfig, userSelections,
+    );
+    setSequentialResult(seqRes);
     const res = sequentialResultToAutoLayoutResult(seqRes);
 
-    // 1F+2F 同時モード: 1F のうち 2F で覆われていない辺（下屋辺）を計算
+    // 1F+2F 同時モード: 1F のうち 2F で覆われていない辺（下屋辺）を計算（従来通り）
     if (targetFloor === 'both' && building1F && building2F && uncoveredEdges1F.length > 0) {
-      // 1F 全辺の離れを用意（下屋辺は UI で編集された値、その他はデフォルト 900mm）
       const d1: Record<number, number> = {};
       getBuildingEdgesClockwise(building1F).forEach(e => {
         d1[e.index] = distances1F[e.index] ?? 900;
       });
-      // Phase H-3b-1: bothモードの 1F 下屋辺も順次決定に置き換え
       const seqRes1 = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig);
       const res1 = sequentialResultToAutoLayoutResult(seqRes1);
-      // 下屋辺だけに edgeLayouts を絞り込む
       const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
       const filtered = res1.edgeLayouts.filter(el => uncoveredIdxSet.has(el.edge.index));
       setResultSub({ edgeLayouts: filtered });
-      // 選択 index を初期化
       const sel: Record<number, number> = {};
       filtered.forEach(el => { sel[el.edge.index] = 0; });
       setSelectionsSub(sel);
@@ -426,58 +434,22 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       setSelectionsSub({});
     }
 
-    // 端数が残る面を検出（固定面は除く）
-    const problemEdges = res.edgeLayouts.filter(el =>
-      !el.locked &&
-      el.candidates[0]?.remainder !== 0 &&
-      !lockedEdgeIndices.has(el.edge.index)
-    );
-
-    console.log('[handleCalc] problemEdges:', problemEdges.map(el => ({
-      label: el.edge.label,
-      remainder: el.candidates[0]?.remainder,
-      locked: el.locked,
-      lockedByIndex: lockedEdgeIndices.has(el.edge.index),
-    })));
-
-    if (problemEdges.length > 0) {
-      const seen = new Set<string>();
-      const suggestions = problemEdges
-        .map(el => {
-          const r = findDistanceSuggestions(el);
-          if (!r) return null;
-          // 同じ隣接非L辺を複数の問題辺が指す場合は重複排除
-          const key = `${r.adjustEdgeIndex}|${r.newDists.join(',')}`;
-          if (seen.has(key)) return null;
-          seen.add(key);
-          return {
-            edgeIndex: r.adjustEdgeIndex,
-            edgeLabel: r.adjustLabel,
-            currentDist: r.currentDist,
-            suggestions: r.newDists,
-          };
-        })
-        .filter((s): s is NonNullable<typeof s> => s !== null);
-
-      console.log('[handleCalc] suggestions:', suggestions.map(s => ({
-        label: s.edgeLabel,
-        currentDist: s.currentDist,
-        suggestions: s.suggestions,
-      })));
-
-      if (suggestions.length > 0) {
-        setDistanceSuggestions(suggestions);
-        setCurrentSuggestionIdx(0);
-        setResult(res); // 現在の結果も表示
-        return;
-      }
-    }
-
+    // 既存の問題辺検出ロジックは廃止（順次決定の hasUnresolved で分岐）
     setDistanceSuggestions([]);
     setResult(res);
     const sel: Record<number, number> = {};
     res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
     setSelections(sel);
+
+    // 未解決辺があれば最初の辺をフォーカス（新モーダルは H-3b-2-2 で実装）
+    if (seqRes.hasUnresolved) {
+      const firstUnresolved = seqRes.edgeResults.find(
+        er => !er.isLocked && !er.isAutoProgress
+      );
+      setActiveEdgeIndex(firstUnresolved ? firstUnresolved.edge.index : null);
+    } else {
+      setActiveEdgeIndex(null);
+    }
   };
 
   const handleSuggestionAccept = (newDist: number) => {
@@ -770,6 +742,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                       onChange={v => {
                         setDistances1F(prev => ({ ...prev, [edge.index]: Math.max(0, v) }));
                         setResultSub(null);
+                        // Phase H-3b-2-1: 順次決定 state もリセット
+                        setSequentialResult(null);
+                        setUserSelections({});
+                        setActiveEdgeIndex(null);
                       }}
                       onFocus={() => setFocusedSubEdgeIndex(edge.index)}
                       onBlur={() => setFocusedSubEdgeIndex(null)}
