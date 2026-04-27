@@ -5,33 +5,42 @@ import { Layer, Group, Circle, Line } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
 
+/**
+ * マグネットピン本体の描画。
+ * M-3c-fix: ピンの中心判定を「針先」に変更。pin.x/pin.y が針先で、
+ * 頭は左上 (-needleDx, -needleDy) に位置する（実物の待ち針が刺さってる状態）。
+ */
 export default function MagnetPinLayer() {
-  const { canvasData, zoom, panX, panY } = useCanvasStore();
-  const pins = canvasData.magnetPins ?? [];
+  // selector ベース購読: pins と pan/zoom のみ購読、他の state 更新で再レンダーされない
+  // ※ ?? [] は新しい配列参照を毎回生成するので selector 外で行う
+  const magnetPins = useCanvasStore(s => s.canvasData.magnetPins);
+  const zoom = useCanvasStore(s => s.zoom);
+  const panX = useCanvasStore(s => s.panX);
+  const panY = useCanvasStore(s => s.panY);
 
+  const pins = magnetPins ?? [];
   if (pins.length === 0) return <Layer listening={false} />;
 
   const gridPx = INITIAL_GRID_PX * zoom;
 
-  // ズームに応じてサイズをクランプ（読みやすさ優先）
+  // ズームに応じてサイズをクランプ
   const headRadius = Math.max(4, Math.min(8, 6 * zoom));
   const needleLen = Math.max(12, Math.min(20, 16 * zoom));
-
-  // 針の向き: 頭から右下へ（dx +0.5*len, dy +len）
   const needleDx = needleLen * 0.5;
   const needleDy = needleLen;
 
   return (
     <Layer listening={false}>
       {pins.map((pin) => {
-        const cx = pin.x * gridPx + panX;
-        const cy = pin.y * gridPx + panY;
+        // 針先 = pin.x/y
+        const tipX = pin.x * gridPx + panX;
+        const tipY = pin.y * gridPx + panY;
 
         return (
-          <Group key={pin.id}>
-            {/* 針（斜め下） */}
+          <Group key={pin.id} x={tipX} y={tipY}>
+            {/* 針: 頭(-needleDx,-needleDy) → 針先(0,0) */}
             <Line
-              points={[cx, cy, cx + needleDx, cy + needleDy]}
+              points={[-needleDx, -needleDy, 0, 0]}
               stroke="#991B1B"
               strokeWidth={1.5}
               shadowColor="#000"
@@ -40,10 +49,10 @@ export default function MagnetPinLayer() {
               shadowOffsetX={1}
               shadowOffsetY={1}
             />
-            {/* 頭（赤丸） */}
+            {/* 頭（赤丸）: 左上 */}
             <Circle
-              x={cx}
-              y={cy}
+              x={-needleDx}
+              y={-needleDy}
               radius={headRadius}
               fill="#DC2626"
               stroke="#FFFFFF"

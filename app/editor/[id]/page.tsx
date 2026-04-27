@@ -26,6 +26,7 @@ import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import DirectionInputModal from '@/components/building/DirectionInputModal';
+import PinDistanceInputModal from '@/components/canvas/PinDistanceInputModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
 
 // Konvaはクライアントサイドのみ
@@ -623,6 +624,7 @@ export default function EditorPage() {
       {showDirectionInputModal && (
         <DirectionInputModal onClose={() => setShowDirectionInputModal(false)} />
       )}
+      <PinDistanceInputModal />
       {(showBuildingModal || showBuildingModalStore) && (
         <BuildingTemplateModal onClose={() => { setShowBuildingModal(false); setShowBuildingModalStore(false); }} />
       )}

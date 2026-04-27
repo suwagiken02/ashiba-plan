@@ -82,6 +82,12 @@ type CanvasStore = {
   /** ピン配置の選択中起点（M-3b） */
   pinAnchor: PinAnchor | null;
   setPinAnchor: (anchor: PinAnchor | null) => void;
+  /** ピン配置: anchor からの相対オフセット (mm)（M-3c） */
+  pinDraftOffset: { dx: number; dy: number } | null;
+  setPinDraftOffset: (offset: { dx: number; dy: number } | null) => void;
+  /** ピン配置: 数値入力モーダルが開いてる方向（M-3c） */
+  pinDirectionInput: 'up' | 'down' | 'left' | 'right' | null;
+  setPinDirectionInput: (dir: 'up' | 'down' | 'left' | 'right' | null) => void;
 
   // Selection
   selectedIds: string[];
@@ -343,9 +349,17 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   buildingInputMethod: 'template',
   setBuildingInputMethod: (m) => set({ buildingInputMethod: m }),
   isMagnetPinMode: false,
-  setMagnetPinMode: (v) => set({ isMagnetPinMode: v, pinAnchor: v ? get().pinAnchor : null }),
+  setMagnetPinMode: (v) => set(
+    v
+      ? { isMagnetPinMode: true }
+      : { isMagnetPinMode: false, pinAnchor: null, pinDraftOffset: null, pinDirectionInput: null },
+  ),
   pinAnchor: null,
-  setPinAnchor: (anchor) => set({ pinAnchor: anchor }),
+  setPinAnchor: (anchor) => set({ pinAnchor: anchor, pinDraftOffset: null, pinDirectionInput: null }),
+  pinDraftOffset: null,
+  setPinDraftOffset: (offset) => set({ pinDraftOffset: offset }),
+  pinDirectionInput: null,
+  setPinDirectionInput: (dir) => set({ pinDirectionInput: dir }),
 
   selectedIds: [],
   setSelectedIds: (ids) => set({ selectedIds: ids }),

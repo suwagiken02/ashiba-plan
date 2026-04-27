@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useCallback } from 'react';
 import { Layer, Circle } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
@@ -8,31 +8,40 @@ import { collectAnchorPoints } from '@/lib/magnetPin/anchorPoints';
 import type Konva from 'konva';
 
 export default function PinAnchorPickerLayer() {
-  const { canvasData, zoom, panX, panY, isMagnetPinMode, pinAnchor, setPinAnchor } = useCanvasStore();
+  // Phase M-3c-fix: selector ベース購読で zoom/pan 等の更新で再レンダーされないように
+  const canvasData = useCanvasStore(s => s.canvasData);
+  const zoom = useCanvasStore(s => s.zoom);
+  const panX = useCanvasStore(s => s.panX);
+  const panY = useCanvasStore(s => s.panY);
+  const isMagnetPinMode = useCanvasStore(s => s.isMagnetPinMode);
+  const pinAnchor = useCanvasStore(s => s.pinAnchor);
+  const setPinAnchor = useCanvasStore(s => s.setPinAnchor);
 
   const anchors = useMemo(
     () => (isMagnetPinMode ? collectAnchorPoints(canvasData) : []),
     [isMagnetPinMode, canvasData],
   );
 
+  const handleClick = useCallback(
+    (e: Konva.KonvaEventObject<Event>) => {
+      e.cancelBubble = true;
+      const anchorId = e.target.id();
+      if (!anchorId) return;
+      if (pinAnchor?.id === anchorId) {
+        setPinAnchor(null);
+      } else {
+        const anchor = anchors.find(a => a.id === anchorId);
+        if (anchor) setPinAnchor(anchor);
+      }
+    },
+    [anchors, pinAnchor, setPinAnchor],
+  );
+
   if (!isMagnetPinMode) return null;
 
   const gridPx = INITIAL_GRID_PX * zoom;
-  // 通常半径と選択中半径（ズーム調整あり）
   const baseRadius = Math.max(5, Math.min(9, 6 * zoom));
   const activeRadius = baseRadius + 2;
-
-  const handleClick = (anchorId: string, e: Konva.KonvaEventObject<Event>) => {
-    e.cancelBubble = true; // Stage への伝播を止める（pan/select を発火させない）
-    const anchor = anchors.find(a => a.id === anchorId);
-    if (!anchor) return;
-    if (pinAnchor?.id === anchorId) {
-      // 同じ起点を再タップ → 解除
-      setPinAnchor(null);
-    } else {
-      setPinAnchor(anchor);
-    }
-  };
 
   return (
     <Layer>
@@ -43,19 +52,15 @@ export default function PinAnchorPickerLayer() {
         return (
           <Circle
             key={a.id}
+            id={a.id}
             x={cx}
             y={cy}
             radius={isActive ? activeRadius : baseRadius}
             fill={isActive ? '#F59E0B' : '#2563EB'}
             stroke="#FFFFFF"
             strokeWidth={1}
-            shadowColor="#000"
-            shadowOpacity={0.3}
-            shadowBlur={2}
-            shadowOffsetX={0.5}
-            shadowOffsetY={0.5}
-            onClick={(e) => handleClick(a.id, e)}
-            onTap={(e) => handleClick(a.id, e)}
+            onClick={handleClick}
+            onTap={handleClick}
           />
         );
       })}
