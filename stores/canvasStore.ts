@@ -75,6 +75,9 @@ type CanvasStore = {
   setMode: (mode: ModeType) => void;
   buildingInputMethod: BuildingInputMethod;
   setBuildingInputMethod: (m: BuildingInputMethod) => void;
+  /** マグネットピン配置モード（M-3a）: ModeType とは独立した副次フラグ */
+  isMagnetPinMode: boolean;
+  setMagnetPinMode: (v: boolean) => void;
 
   // Selection
   selectedIds: string[];
@@ -335,6 +338,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setMode: (mode) => set({ mode, selectedIds: [] }),
   buildingInputMethod: 'template',
   setBuildingInputMethod: (m) => set({ buildingInputMethod: m }),
+  isMagnetPinMode: false,
+  setMagnetPinMode: (v) => set({ isMagnetPinMode: v }),
 
   selectedIds: [],
   setSelectedIds: (ids) => set({ selectedIds: ids }),

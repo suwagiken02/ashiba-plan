@@ -4,7 +4,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
 
 export default function ModeToolbar() {
-  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData } = useCanvasStore();
+  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData, isMagnetPinMode, setMagnetPinMode } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
   const [showAshibaMenu, setShowAshibaMenu] = useState(false);
   const [dismissedStage, setDismissedStage] = useState<string | null>(null);
@@ -19,6 +19,7 @@ export default function ModeToolbar() {
     { id: 'ashiba' as const, label: '足場', icon: '▦', color: '#FFD700' },
     { id: 'buzai' as const, label: '部材', icon: '━', color: '#FFA500' },
     { id: 'memo' as const, label: 'メモ', icon: 'T', color: '#DDA0DD' },
+    { id: 'magnet-pin' as const, label: 'ピン', icon: '📌', color: '#EC4899' },
     { id: 'erase' as const, label: '消去', icon: '✕', color: '#EF4444' },
     { id: 'settings' as const, label: '設定', icon: '⚙', color: '#96CEB4' },
   ];
@@ -48,6 +49,12 @@ export default function ModeToolbar() {
     if (stage === 'scaffold') setDismissedStage('scaffold');
     if (stage === 'buzai' && (id === 'buzai' || id === 'ashiba')) setDismissedStage('buzai');
     if (isMeasuring) toggleMeasuring();
+    // ピンモードは「magnet-pin 自身」以外のボタン押下で解除（既存 isMeasuring と同パターン）
+    if (id !== 'magnet-pin' && isMagnetPinMode) setMagnetPinMode(false);
+    if (id === 'magnet-pin') {
+      setMagnetPinMode(!isMagnetPinMode);
+      return;
+    }
     if (id === 'select' || id === 'erase') {
       setMode(id as ModeType);
     } else if (id === 'memo') {
@@ -79,6 +86,7 @@ export default function ModeToolbar() {
     if (id === 'kutai') return isKutaiMode && !isMeasuring;
     if (id === 'buzai') return showPartSelector;
     if (id === 'memo') return mode === 'memo' && !isMeasuring;
+    if (id === 'magnet-pin') return isMagnetPinMode;
     if (id === 'erase') return mode === 'erase' && !isMeasuring;
     return false;
   };
