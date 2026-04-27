@@ -17,6 +17,7 @@ export default function PinDirectionPad() {
   const pinDraftOffset = useCanvasStore(s => s.pinDraftOffset);
   const setPinDirectionInput = useCanvasStore(s => s.setPinDirectionInput);
   const setPinAnchor = useCanvasStore(s => s.setPinAnchor);
+  const addMagnetPin = useCanvasStore(s => s.addMagnetPin);
   const zoom = useCanvasStore(s => s.zoom);
   const panX = useCanvasStore(s => s.panX);
   const panY = useCanvasStore(s => s.panY);
@@ -42,10 +43,23 @@ export default function PinDirectionPad() {
 
   const handleConfirm = (e: Konva.KonvaEventObject<Event>) => {
     e.cancelBubble = true;
-    if (!pinDraftOffset) return;
-    // M-3d で実際の addMagnetPin を実装。今は TODO ログ + UI リセット。
-    console.log('TODO M-3d: addMagnetPin', { anchor: pinAnchor, draftOffset: pinDraftOffset });
-    setPinAnchor(null); // pinDraftOffset / pinDirectionInput も同時にリセットされる
+    if (!pinAnchor || !pinDraftOffset) return;
+    // 最終ピン座標 = anchor + offset(mm)/10（grid 単位）
+    const x = pinAnchor.x + pinDraftOffset.dx / 10;
+    const y = pinAnchor.y + pinDraftOffset.dy / 10;
+    addMagnetPin({
+      id: crypto.randomUUID(),
+      x,
+      y,
+      sourceInfo: {
+        type: pinAnchor.kind,
+        refId: pinAnchor.refId,
+        baseX: pinAnchor.x,
+        baseY: pinAnchor.y,
+        offsets: [{ dx: pinDraftOffset.dx, dy: pinDraftOffset.dy }],
+      },
+    });
+    setPinAnchor(null); // pinDraftOffset / pinDirectionInput も同時にリセット、ピンモードは維持
   };
 
   const handleCancel = (e: Konva.KonvaEventObject<Event>) => {
