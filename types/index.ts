@@ -311,34 +311,3 @@ export type PhaseDEdgeCandidates = {
   smaller: PhaseDCandidate | null;
 };
 
-/** Phase D: 1辺の決定状態 */
-export type PhaseDEdgeDecision = {
-  edgeIndex: number;
-  /** 選択された候補（exact/larger/smaller のどれか）*/
-  selectedCandidate: PhaseDCandidate;
-  /** 始点離れ（mm、この辺が計算されたときの始点）*/
-  startDistanceMm: number;
-  /** 終点離れ（mm、次の辺の始点離れになる）*/
-  endDistanceMm: number;
-};
-
-/** Phase D: 順次決定フロー全体の状態 */
-export type PhaseDFlowState = {
-  /** 処理すべき辺のインデックス列（CW順、固定辺を含む）*/
-  edgeOrder: number[];
-  /** 固定辺のインデックスセット（スタート角の2辺）*/
-  lockedEdgeIndices: Set<number>;
-  /** 各辺の希望終点離れ（edgeIndex → mm）*/
-  desiredDistances: Record<number, number>;
-  /** 確定済みの辺の決定（edgeIndex → PhaseDEdgeDecision）*/
-  decisions: Record<number, PhaseDEdgeDecision>;
-  /** 現在処理中の辺のインデックス（edgeOrder 内の位置、-1 なら全完了）*/
-  currentStep: number;
-  /** スタート角の固定離れ情報 */
-  startDistances: {
-    face1EdgeIndex: number;
-    face1DistanceMm: number;
-    face2EdgeIndex: number;
-    face2DistanceMm: number;
-  };
-};
