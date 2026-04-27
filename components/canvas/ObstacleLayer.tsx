@@ -4,8 +4,8 @@ import React from 'react';
 import { Layer, Rect, Circle, Text, Line } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
-import { snapObstacleToWall } from '@/lib/konva/snapUtils';
-import { ObstacleType } from '@/types';
+import { snapObstacleToWall, snapToMagnetPin } from '@/lib/konva/snapUtils';
+import { ObstacleType, Obstacle } from '@/types';
 
 const OBSTACLE_COLORS: Record<ObstacleType, string> = {
   ecocute: '#B5D4F4',
@@ -31,6 +31,47 @@ export default function ObstacleLayer() {
   const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
   const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
+
+  /**
+   * Phase M-6a: ドラッグ末尾の最終配置決定。
+   * 壁吸着とピン吸着の両方を評価し、補正距離が小さい方を採用する。
+   * 中心 (obs.x + dx + w/2, obs.y + dy + h/2) を refPoint として使用。
+   */
+  const finalizeMove = (dx: number, dy: number, obs: Obstacle) => {
+    const newCx = obs.x + dx + obs.width / 2;
+    const newCy = obs.y + dy + obs.height / 2;
+
+    // 壁吸着
+    const wallSnapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
+    let wallCorrection = Infinity;
+    let wallDx: number | null = null;
+    let wallDy: number | null = null;
+    if (wallSnapped) {
+      wallDx = wallSnapped.x - obs.x;
+      wallDy = wallSnapped.y - obs.y;
+      wallCorrection = Math.hypot(wallDx - dx, wallDy - dy);
+    }
+
+    // ピン吸着（中心が refPoint）
+    const pins = canvasData.magnetPins ?? [];
+    const pinSnap = snapToMagnetPin({ x: newCx, y: newCy }, pins, zoom);
+    let pinCorrection = Infinity;
+    let pinDx: number | null = null;
+    let pinDy: number | null = null;
+    if (pinSnap) {
+      pinDx = dx + pinSnap.dx;
+      pinDy = dy + pinSnap.dy;
+      pinCorrection = Math.hypot(pinSnap.dx, pinSnap.dy);
+    }
+
+    if (wallCorrection === Infinity && pinCorrection === Infinity) {
+      useCanvasStore.getState().moveElement(obs.id, dx, dy);
+    } else if (pinCorrection < wallCorrection) {
+      useCanvasStore.getState().moveElement(obs.id, pinDx!, pinDy!);
+    } else {
+      useCanvasStore.getState().moveElement(obs.id, wallDx!, wallDy!);
+    }
+  };
 
   return (
     <Layer>
@@ -65,14 +106,7 @@ export default function ObstacleLayer() {
                   const dy = Math.round(e.target.y() / gridPx);
                   e.target.x(0); e.target.y(0);
                   if (dx !== 0 || dy !== 0) {
-                    const newCx = obs.x + dx + obs.width / 2;
-                    const newCy = obs.y + dy + obs.height / 2;
-                    const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-                    if (snapped) {
-                      useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
-                    } else {
-                      useCanvasStore.getState().moveElement(obs.id, dx, dy);
-                    }
+                    finalizeMove(dx, dy, obs);
                   }
                 }}
               />
@@ -119,14 +153,7 @@ export default function ObstacleLayer() {
                   const dy = Math.round((e.target.y() - origY) / gridPx);
                   e.target.x(origX); e.target.y(origY);
                   if (dx !== 0 || dy !== 0) {
-                    const newCx = obs.x + dx + obs.width / 2;
-                    const newCy = obs.y + dy + obs.height / 2;
-                    const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-                    if (snapped) {
-                      useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
-                    } else {
-                      useCanvasStore.getState().moveElement(obs.id, dx, dy);
-                    }
+                    finalizeMove(dx, dy, obs);
                   }
                 }}
               />
@@ -167,14 +194,7 @@ export default function ObstacleLayer() {
                 const dy = Math.round((e.target.y() - screenY) / gridPx);
                 e.target.x(screenX); e.target.y(screenY);
                 if (dx !== 0 || dy !== 0) {
-                  const newCx = obs.x + dx + obs.width / 2;
-                  const newCy = obs.y + dy + obs.height / 2;
-                  const snapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-                  if (snapped) {
-                    useCanvasStore.getState().moveElement(obs.id, snapped.x - obs.x, snapped.y - obs.y);
-                  } else {
-                    useCanvasStore.getState().moveElement(obs.id, dx, dy);
-                  }
+                  finalizeMove(dx, dy, obs);
                 }
               }}
             />

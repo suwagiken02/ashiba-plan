@@ -1,4 +1,4 @@
-import { Point, Handrail, HandrailLengthMm, Anti, BuildingShape, Obstacle } from '@/types';
+import { Point, Handrail, HandrailLengthMm, Anti, BuildingShape, Obstacle, MagnetPin } from '@/types';
 import { mmToGrid, INITIAL_GRID_PX } from './gridUtils';
 
 /** 最近傍の手摺端点へのスナップ */
@@ -403,4 +403,52 @@ export function snapObstacleToWall(
   }
 
   return result;
+}
+
+/**
+ * Phase M-6a: マグネットピンへの強力吸着。
+ * ドラッグしたオブジェクトの参照点が、ピンの吸着範囲内にあれば
+ * そのピンに完全一致するよう補正するオフセットを返す。
+ *
+ * 吸着範囲: 画面 50px / zoom と 実距離 300mm の大きい方（ハイブリッド）
+ *   - ズームインしても 300mm の最低吸着範囲を保証
+ *   - ズームアウトでは画面 50px 感覚で吸着
+ *
+ * @param refPoint オブジェクトの参照点（グリッド座標）
+ * @param pins 全マグネットピン（floor フィルタなし）
+ * @param zoom 現在のズーム
+ * @returns refPoint をピンに合わせるためのオフセット（グリッド単位）+ pinId、または null
+ */
+export function snapToMagnetPin(
+  refPoint: Point,
+  pins: MagnetPin[],
+  zoom: number,
+): { dx: number; dy: number; pinId: string } | null {
+  if (pins.length === 0) return null;
+
+  // 強力マグネット: 画面 50px と 実距離 300mm (= 30 グリッド) の大きい方
+  const SNAP_PX = 50;
+  const MIN_THRESHOLD_GRID = 30; // 300mm = 30 グリッド
+  const pixelBasedGrid = SNAP_PX / (INITIAL_GRID_PX * zoom);
+  const thresholdGrid = Math.max(pixelBasedGrid, MIN_THRESHOLD_GRID);
+
+  let bestPin: MagnetPin | null = null;
+  let bestDist = Infinity;
+  for (const pin of pins) {
+    const dx = pin.x - refPoint.x;
+    const dy = pin.y - refPoint.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < thresholdGrid && dist < bestDist) {
+      bestDist = dist;
+      bestPin = pin;
+    }
+  }
+
+  if (!bestPin) return null;
+
+  return {
+    dx: bestPin.x - refPoint.x,
+    dy: bestPin.y - refPoint.y,
+    pinId: bestPin.id,
+  };
 }
