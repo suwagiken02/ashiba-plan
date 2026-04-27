@@ -314,6 +314,97 @@ export function findBestEndCombinations(
 }
 
 // ============================================================
+// Phase H-1: 順次決定用の候補生成
+// 「希望より大きい結果」「希望より小さい結果」を1つずつ、計2つ返す。
+// 端数0の候補があれば、それ1つだけを返す（自動進行用）。
+// ============================================================
+type SequentialCandidate = {
+  rails: HandrailLengthMm[];
+  totalMm: number;
+  actualEndDistanceMm: number;
+  diffFromDesired: number;
+};
+
+export function generateSequentialCandidates(
+  edgeLengthMm: number,
+  startDistanceMm: number,
+  desiredEndDistanceMm: number,
+  isNextConvex: boolean,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  priorityConfig?: PriorityConfig,
+): SequentialCandidate[] {
+  // 有効長の計算
+  // 凸: effective = startDist + edgeLength + desiredEndDist
+  // 凹: effective = startDist + edgeLength - desiredEndDist
+  const effectiveMm = isNextConvex
+    ? startDistanceMm + edgeLengthMm + desiredEndDistanceMm
+    : startDistanceMm + edgeLengthMm - desiredEndDistanceMm;
+
+  if (effectiveMm <= 0) {
+    return [];
+  }
+
+  // 希望値の周辺 ±500mm を 50mm ステップで探索
+  const candidatesMap = new Map<number, SequentialCandidate>();
+
+  for (let offset = -500; offset <= 500; offset += 50) {
+    const targetMm = effectiveMm + offset;
+    if (targetMm <= 0) continue;
+
+    const cands = findBestEndCombinations(targetMm, enabledSizes, priorityConfig);
+
+    for (const c of cands) {
+      const railsTotal = c.rails.reduce((a, b) => a + b, 0);
+
+      // 実際の終点離れを逆算
+      // 凸: actualEnd = railsTotal - edgeLength - startDist
+      // 凹: actualEnd = startDist + edgeLength - railsTotal
+      const actualEndDistanceMm = isNextConvex
+        ? railsTotal - edgeLengthMm - startDistanceMm
+        : startDistanceMm + edgeLengthMm - railsTotal;
+
+      if (actualEndDistanceMm < 0) continue;
+
+      const diffFromDesired = actualEndDistanceMm - desiredEndDistanceMm;
+
+      if (!candidatesMap.has(railsTotal)) {
+        candidatesMap.set(railsTotal, {
+          rails: c.rails,
+          totalMm: railsTotal,
+          actualEndDistanceMm,
+          diffFromDesired,
+        });
+      }
+    }
+  }
+
+  if (candidatesMap.size === 0) return [];
+
+  const allCandidates = Array.from(candidatesMap.values());
+
+  // 端数0なら1つだけ
+  const exactMatch = allCandidates.find(c => c.diffFromDesired === 0);
+  if (exactMatch) {
+    return [exactMatch];
+  }
+
+  // 希望より大きい側 / 小さい側
+  const largerCandidates = allCandidates
+    .filter(c => c.diffFromDesired > 0)
+    .sort((a, b) => a.diffFromDesired - b.diffFromDesired);
+
+  const smallerCandidates = allCandidates
+    .filter(c => c.diffFromDesired < 0)
+    .sort((a, b) => b.diffFromDesired - a.diffFromDesired);
+
+  const result: SequentialCandidate[] = [];
+  if (smallerCandidates[0]) result.push(smallerCandidates[0]);
+  if (largerCandidates[0]) result.push(largerCandidates[0]);
+
+  return result;
+}
+
+// ============================================================
 // 辺のscaffoldCoordを計算（固定軸座標）
 // ============================================================
 function calcScaffoldCoord(edge: EdgeInfo, distGrid: number): number {
