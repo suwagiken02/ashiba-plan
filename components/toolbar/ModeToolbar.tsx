@@ -25,7 +25,7 @@ export default function ModeToolbar() {
 
   // ガイド点滅
   const hasBuildings = canvasData.buildings.length > 0;
-  const hasScaffoldStart = !!canvasData.scaffoldStart;
+  const hasScaffoldStart = !!(canvasData.scaffoldStart1F || canvasData.scaffoldStart2F || canvasData.scaffoldStart);
   const hasHandrails = canvasData.handrails.length > 0;
 
   const getCurrentStage = (): string | null => {

@@ -212,9 +212,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const priorityConfig = useHandrailSettingsStore(s => s.priorityConfig);
 
   // 対象階（1F / 2F / both = 1F+2F同時）
-  const [targetFloor, setTargetFloor] = useState<1 | 2 | 'both'>(
-    () => (canvasData.scaffoldStart?.floor ?? 1) as 1 | 2,
-  );
+  // 初期値: scaffoldStart1F があれば 1F、2F だけあれば 2F、旧 scaffoldStart があればその floor、どれもなければ 1F
+  const [targetFloor, setTargetFloor] = useState<1 | 2 | 'both'>(() => {
+    if (canvasData.scaffoldStart1F) return 1;
+    if (canvasData.scaffoldStart2F) return 2;
+    return (canvasData.scaffoldStart?.floor ?? 1) as 1 | 2;
+  });
 
   // 1F建物 / 2F建物（最初に一致したもの）
   const building1F = useMemo(
@@ -255,12 +258,15 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
   // scaffoldStart は対象階のものだけ有効扱い（別階のを引き継がない）
   // both モードは 2F 主表示なので 2F の scaffoldStart を使用
+  // 優先順: 新フィールド (scaffoldStart1F / scaffoldStart2F) → 旧 scaffoldStart (後方互換)
   const scaffoldStart = useMemo(() => {
-    const ss = canvasData.scaffoldStart;
-    if (!ss) return undefined;
     const effectiveFloor = targetFloor === 'both' ? 2 : targetFloor;
-    return (ss.floor ?? 1) === effectiveFloor ? ss : undefined;
-  }, [canvasData.scaffoldStart, targetFloor]);
+    const newSS = effectiveFloor === 1 ? canvasData.scaffoldStart1F : canvasData.scaffoldStart2F;
+    if (newSS) return newSS;
+    const legacy = canvasData.scaffoldStart;
+    if (!legacy) return undefined;
+    return (legacy.floor ?? 1) === effectiveFloor ? legacy : undefined;
+  }, [canvasData.scaffoldStart1F, canvasData.scaffoldStart2F, canvasData.scaffoldStart, targetFloor]);
 
   // 辺リストを取得
   const edges = useMemo(

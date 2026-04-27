@@ -90,23 +90,32 @@ export default function DimensionLayer() {
   const gy = (g: number) => g * gridPx + panY;
   const elements: React.ReactElement[] = [];
 
-  const scaffoldStart = canvasData.scaffoldStart;
-  // scaffoldStart の階に合致する建物を対象に、同階の手摺だけで端点を集める
-  const targetFloor = scaffoldStart?.floor ?? 1;
-
-  // 全手摺の端点（同階のみ）
-  const eps: { x: number; y: number }[] = [];
-  for (const h of canvasData.handrails) {
-    if ((h.floor ?? 1) !== targetFloor) continue;
-    const [p1, p2] = getHandrailEndpoints(h);
-    eps.push(p1, p2);
+  // 描画対象の scaffoldStart を収集（1F/2F 両方保持対応）
+  // 新フィールド (scaffoldStart1F / scaffoldStart2F) 優先、無ければ旧 scaffoldStart をフォールバック
+  const dimensionJobs: NonNullable<typeof canvasData.scaffoldStart>[] = [];
+  if (canvasData.scaffoldStart1F) dimensionJobs.push(canvasData.scaffoldStart1F);
+  if (canvasData.scaffoldStart2F) dimensionJobs.push(canvasData.scaffoldStart2F);
+  if (dimensionJobs.length === 0 && canvasData.scaffoldStart) {
+    dimensionJobs.push(canvasData.scaffoldStart);
   }
 
-  if (scaffoldStart && canvasData.buildings.length > 0) {
+  let mainLogicRan = false;
+  for (const scaffoldStart of dimensionJobs) {
+    const targetFloor = scaffoldStart.floor ?? 1;
+
+    // 全手摺の端点（同階のみ）
+    const eps: { x: number; y: number }[] = [];
+    for (const h of canvasData.handrails) {
+      if ((h.floor ?? 1) !== targetFloor) continue;
+      const [p1, p2] = getHandrailEndpoints(h);
+      eps.push(p1, p2);
+    }
+
+    if (canvasData.buildings.length === 0) continue;
     const building = canvasData.buildings.find(b => (b.floor ?? 1) === targetFloor) ?? canvasData.buildings[0];
     const edges = getBuildingEdgesClockwise(building);
     const n = edges.length;
-    if (n < 3) return <Layer listening={false} />;
+    if (n < 3) continue;
 
     const corner = scaffoldStart.corner;
     const face1Dist = mmToGrid(scaffoldStart.face1DistanceMm);
@@ -388,11 +397,22 @@ export default function DimensionLayer() {
       }
     }
 
+    mainLogicRan = true;
+  }
+
+  if (mainLogicRan) {
     console.log(`[DimLayer] total: ${elements.length} elements`);
     return <Layer listening={false}>{elements}</Layer>;
   }
 
   // ── フォールバック: scaffoldStart未設定時はBBOXベース ──
+  // フォールバックは単一階（1F）のみの簡易版（旧仕様互換）
+  const eps: { x: number; y: number }[] = [];
+  for (const h of canvasData.handrails) {
+    if ((h.floor ?? 1) !== 1) continue;
+    const [p1, p2] = getHandrailEndpoints(h);
+    eps.push(p1, p2);
+  }
   let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
   for (const b of canvasData.buildings)
     for (const p of b.points) {
