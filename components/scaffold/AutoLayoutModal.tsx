@@ -452,6 +452,64 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     }
   };
 
+  // Phase H-3b-2-2: 順次決定の候補選択
+  const handleSequentialSelect = (edgeIndex: number, candIdx: number) => {
+    if (!building) return;
+    const newSelections = { ...userSelections, [edgeIndex]: candIdx };
+    setUserSelections(newSelections);
+
+    const seqRes = computeAutoLayoutSequential(
+      building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections,
+    );
+    setSequentialResult(seqRes);
+    const adapted = sequentialResultToAutoLayoutResult(seqRes);
+    setResult(adapted);
+    const sel: Record<number, number> = {};
+    adapted.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
+    setSelections(sel);
+
+    // 現在の辺より後ろの未解決辺を探す
+    const currentIdx = seqRes.edgeResults.findIndex(er => er.edge.index === edgeIndex);
+    const next = seqRes.edgeResults
+      .slice(currentIdx + 1)
+      .find(er => !er.isLocked && !er.isAutoProgress);
+
+    if (next) {
+      setActiveEdgeIndex(next.edge.index);
+    } else {
+      setActiveEdgeIndex(null);
+    }
+  };
+
+  // Phase H-3b-2-2: 順次決定で前の辺に戻る
+  const handleSequentialBack = () => {
+    if (!building || !sequentialResult || activeEdgeIndex === null) return;
+    const currentIdx = sequentialResult.edgeResults.findIndex(er => er.edge.index === activeEdgeIndex);
+    const prev = sequentialResult.edgeResults
+      .slice(0, currentIdx)
+      .reverse()
+      .find(er => !er.isLocked && !er.isAutoProgress);
+    if (!prev) return;
+
+    const newSelections = { ...userSelections };
+    delete newSelections[prev.edge.index];
+    setUserSelections(newSelections);
+
+    const seqRes = computeAutoLayoutSequential(
+      building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections,
+    );
+    setSequentialResult(seqRes);
+    setActiveEdgeIndex(prev.edge.index);
+  };
+
+  // Phase H-3b-2-2: 順次決定をキャンセル
+  const handleSequentialCancel = () => {
+    setActiveEdgeIndex(null);
+    setSequentialResult(null);
+    setUserSelections({});
+    setResult(null);
+  };
+
   const handleSuggestionAccept = (newDist: number) => {
     const suggestion = distanceSuggestions[currentSuggestionIdx];
     const newDistances = { ...distances, [suggestion.edgeIndex]: newDist };
@@ -591,7 +649,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || distanceSuggestions.length > 0) ? undefined : onClose}>
+    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || distanceSuggestions.length > 0 || activeEdgeIndex !== null) ? undefined : onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between z-10">
           <h2 className="font-bold text-lg">自動割付</h2>
@@ -948,6 +1006,99 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           </div>
         </div>
       )}
+
+      {/* Phase H-3b-2-2: 順次決定モーダル */}
+      {activeEdgeIndex !== null && sequentialResult && (() => {
+        const activeEdge = sequentialResult.edgeResults.find(er => er.edge.index === activeEdgeIndex);
+        if (!activeEdge) return null;
+
+        const allUnresolved = sequentialResult.edgeResults.filter(er => !er.isLocked && !er.isAutoProgress);
+        const currentNum = allUnresolved.findIndex(er => er.edge.index === activeEdgeIndex) + 1;
+        const totalNum = allUnresolved.length;
+
+        return (
+          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
+            <div className="absolute inset-0 bg-black/50" />
+            <div className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto z-10">
+              {/* ヘッダー */}
+              <div className="px-4 py-3 border-b border-dark-border">
+                <p className="font-bold text-sm">足場の繋ぎ方を選んでください</p>
+                <p className="text-xs text-dimension mt-0.5">未解決 {currentNum} / {totalNum} 面</p>
+              </div>
+
+              {/* プレビュー */}
+              <div className="px-4 pt-3">
+                <PreviewSVG
+                  points={building!.points}
+                  edges={edges}
+                  focusedIndex={activeEdgeIndex}
+                  blinkEdgeIndex={activeEdgeIndex}
+                  scaffoldStart={scaffoldStart}
+                />
+              </div>
+
+              {/* 該当辺の情報 */}
+              <div className="mx-4 mt-2 px-3 py-2 rounded-xl bg-dark-bg border border-dark-border">
+                <div className="text-sm font-bold">
+                  📍 {activeEdge.edge.label}面（{FACE_LABEL[activeEdge.edge.face]} / {activeEdge.edge.lengthMm}mm）
+                </div>
+                <div className="text-[11px] text-dimension mt-1">
+                  始点離れ: <span className="font-mono text-canvas">{activeEdge.startDistanceMm}mm</span>
+                  <span className="ml-1">（前辺の終端から継承）</span>
+                </div>
+                <div className="text-[11px] text-dimension">
+                  希望する次の面の離れ: <span className="font-mono text-canvas">{activeEdge.desiredEndDistanceMm}mm</span>
+                </div>
+              </div>
+
+              {/* 候補ボタン */}
+              <div className="p-4 space-y-2">
+                {activeEdge.candidates.map((cand, idx) => {
+                  const isSmaller = cand.diffFromDesired < 0;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => handleSequentialSelect(activeEdgeIndex, idx)}
+                      className="w-full p-3 border border-dark-border rounded-xl bg-dark-bg hover:border-accent hover:bg-accent/10 transition-colors text-left"
+                    >
+                      <div className="text-[10px] text-dimension mb-1">
+                        候補{idx + 1}（{isSmaller ? '小さめ' : '大きめ'}）
+                      </div>
+                      <div className="flex flex-wrap gap-1 mb-2">
+                        {cand.rails.map((r, ri) => (
+                          <span key={ri} className="px-1.5 py-0.5 bg-handrail/20 text-handrail text-[11px] font-mono rounded">
+                            {r}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="text-xs font-mono text-accent">
+                        → 次の面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* フッター */}
+              <div className="px-4 py-3 border-t border-dark-border flex gap-2 justify-between">
+                <button
+                  onClick={handleSequentialBack}
+                  disabled={currentNum <= 1}
+                  className="px-3 py-2 text-xs border border-dark-border text-dimension rounded-xl disabled:opacity-30 disabled:cursor-not-allowed"
+                >
+                  ← 前の辺に戻る
+                </button>
+                <button
+                  onClick={handleSequentialCancel}
+                  className="px-3 py-2 text-xs border border-dark-border text-dimension rounded-xl"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {distanceSuggestions.length > 0 && currentSuggestionIdx < distanceSuggestions.length && (() => {
         const suggestion = distanceSuggestions[currentSuggestionIdx];

@@ -30,10 +30,10 @@ describe('computeAutoLayoutSequential', () => {
     });
   });
 
-  it('全辺950希望なら端数発生で hasUnresolved = true', () => {
-    // 各辺 effective = 950 + 9000 + 950 = 10900
-    // 1800×6 = 10800 (rem -100), 1800×6 + 200 = 11000 (rem +100) → 挟む2択
-    const distances = { 0: 950, 1: 950, 2: 950, 3: 950 };
+  it('全辺945希望なら端数発生で hasUnresolved = true', () => {
+    // 945 は 50 の倍数でないため、required = 945+9000+945 = 10890 が
+    // GCD=100 と整合せず、delta=0 で exact が見つからない → 2候補（挟む2択）
+    const distances = { 0: 945, 1: 945, 2: 945, 3: 945 };
     const result = computeAutoLayoutSequential(square9000, distances);
     expect(result.hasUnresolved).toBe(true);
     const hasMultiple = result.edgeResults.some(er => er.candidates.length === 2);
@@ -41,7 +41,7 @@ describe('computeAutoLayoutSequential', () => {
   });
 
   it('userSelections で次の辺の始点離れに反映される', () => {
-    const distances = { 0: 950, 1: 950, 2: 950, 3: 950 };
+    const distances = { 0: 945, 1: 945, 2: 945, 3: 945 };
 
     const r1 = computeAutoLayoutSequential(square9000, distances);
     const firstEdge = r1.edgeResults[0];

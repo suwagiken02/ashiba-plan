@@ -40,8 +40,8 @@ describe('generateSequentialCandidates', () => {
     }
   });
 
-  it('有効長0以下なら空配列', () => {
-    const result = generateSequentialCandidates(100, 900, 1500, true, false);
+  it('enabledSizes が空なら空配列', () => {
+    const result = generateSequentialCandidates(2000, 900, 900, true, true, []);
     expect(result).toEqual([]);
   });
 

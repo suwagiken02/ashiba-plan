@@ -325,6 +325,59 @@ type SequentialCandidate = {
   diffFromDesired: number;
 };
 
+/**
+ * 指定された targetEndDistanceMm をぴったり実現する手摺の組み合わせを全て見つける。
+ * DFS で列挙、深さ20本・結果100件で打ち切り。
+ */
+function findAllCombinationsForEnd(
+  edgeLengthMm: number,
+  startContribution: number,
+  targetEndDistanceMm: number,
+  isNextConvex: boolean,
+  enabledSizes: HandrailLengthMm[],
+): HandrailLengthMm[][] {
+  const endContribution = isNextConvex ? targetEndDistanceMm : -targetEndDistanceMm;
+  const requiredRailsTotal = startContribution + edgeLengthMm + endContribution;
+
+  if (requiredRailsTotal <= 0) return [];
+  if (enabledSizes.length === 0) return [];
+
+  const sortedSizes: HandrailLengthMm[] = [...enabledSizes].sort((a, b) => b - a);
+
+  // 早期枝刈り: requiredRailsTotal が GCD の倍数でなければ達成不可能
+  const computeGcd = (a: number, b: number): number => {
+    while (b) { const t = b; b = a % b; a = t; }
+    return a;
+  };
+  let stepGcd: number = sortedSizes[0];
+  for (const s of sortedSizes) stepGcd = computeGcd(stepGcd, s);
+  if (requiredRailsTotal % stepGcd !== 0) return [];
+
+  const results: HandrailLengthMm[][] = [];
+  const MAX_DEPTH = 20;
+  const MAX_RESULTS = 100;
+
+  const dfs = (remaining: number, current: HandrailLengthMm[], maxIndex: number): void => {
+    if (results.length >= MAX_RESULTS) return;
+    if (remaining === 0) {
+      results.push([...current]);
+      return;
+    }
+    if (current.length >= MAX_DEPTH) return;
+    for (let i = maxIndex; i < sortedSizes.length; i++) {
+      const size = sortedSizes[i];
+      if (size > remaining) continue;
+      current.push(size);
+      dfs(remaining - size, current, i);
+      current.pop();
+      if (results.length >= MAX_RESULTS) return;
+    }
+  };
+
+  dfs(requiredRailsTotal, [], 0);
+  return results;
+}
+
 export function generateSequentialCandidates(
   edgeLengthMm: number,
   startDistanceMm: number,
@@ -334,76 +387,69 @@ export function generateSequentialCandidates(
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
   priorityConfig?: PriorityConfig,
 ): SequentialCandidate[] {
-  // 有効長の計算
-  // 始点側コーナーが凸 → +startDist（手前に張り出す）、凹 → -startDist（食い込む）
-  // 終点側コーナーが凸 → +desiredEnd、凹 → -desiredEnd
+  if (enabledSizes.length === 0) return [];
+
   const startContribution = isPrevConvex ? startDistanceMm : -startDistanceMm;
-  const endContribution = isNextConvex ? desiredEndDistanceMm : -desiredEndDistanceMm;
-  const effectiveMm = startContribution + edgeLengthMm + endContribution;
+  const MAX_DELTA = 1000;
 
-  if (effectiveMm <= 0) {
-    return [];
-  }
+  // 同一 targetEnd で複数組合せが見つかった場合のスコア（priorityConfig なしは本数少ない順）
+  const scoreFn = (rails: HandrailLengthMm[]): number =>
+    priorityConfig ? scoreCombination(rails, priorityConfig) : -rails.length;
 
-  // 希望値の周辺 ±500mm を 50mm ステップで探索
-  const candidatesMap = new Map<number, SequentialCandidate>();
+  const pickBest = (combos: HandrailLengthMm[][]): HandrailLengthMm[] =>
+    combos.reduce((a, b) => (scoreFn(b) > scoreFn(a) ? b : a));
 
-  for (let offset = -500; offset <= 500; offset += 50) {
-    const targetMm = effectiveMm + offset;
-    if (targetMm <= 0) continue;
+  // smaller 側: targetEnd = desired - delta（delta は 0 から増加）
+  let smallerCand: SequentialCandidate | undefined;
+  for (let delta = 0; delta <= MAX_DELTA; delta++) {
+    const targetEnd = desiredEndDistanceMm - delta;
+    if (targetEnd < 0) break;
 
-    const cands = findBestEndCombinations(targetMm, enabledSizes, priorityConfig);
-
-    for (const c of cands) {
-      const railsTotal = c.rails.reduce((a, b) => a + b, 0);
-
-      // 実際の終点離れを逆算
-      // railsTotal = startContribution + edgeLength + endContributionActual
-      // endContributionActual = railsTotal - startContribution - edgeLength
-      // actualEnd = isNextConvex ? endContributionActual : -endContributionActual
-      const endContributionActual = railsTotal - startContribution - edgeLengthMm;
-      const actualEndDistanceMm = isNextConvex
-        ? endContributionActual
-        : -endContributionActual;
-
-      if (actualEndDistanceMm < 0) continue;
-
-      const diffFromDesired = actualEndDistanceMm - desiredEndDistanceMm;
-
-      if (!candidatesMap.has(railsTotal)) {
-        candidatesMap.set(railsTotal, {
-          rails: c.rails,
-          totalMm: railsTotal,
-          actualEndDistanceMm,
-          diffFromDesired,
-        });
-      }
+    const combos = findAllCombinationsForEnd(
+      edgeLengthMm, startContribution, targetEnd, isNextConvex, enabledSizes,
+    );
+    if (combos.length > 0) {
+      const best = pickBest(combos);
+      const railsTotal = best.reduce((a, b) => a + b, 0);
+      smallerCand = {
+        rails: best,
+        totalMm: railsTotal,
+        actualEndDistanceMm: targetEnd,
+        diffFromDesired: delta === 0 ? 0 : -delta,
+      };
+      break;
     }
   }
 
-  if (candidatesMap.size === 0) return [];
-
-  const allCandidates = Array.from(candidatesMap.values());
-
-  // 端数0なら1つだけ
-  const exactMatch = allCandidates.find(c => c.diffFromDesired === 0);
-  if (exactMatch) {
-    return [exactMatch];
+  // delta=0 で見つかった = exact: 1候補のみ返す（自動進行）
+  if (smallerCand && smallerCand.diffFromDesired === 0) {
+    return [smallerCand];
   }
 
-  // 希望より大きい側 / 小さい側
-  const largerCandidates = allCandidates
-    .filter(c => c.diffFromDesired > 0)
-    .sort((a, b) => a.diffFromDesired - b.diffFromDesired);
+  // larger 側: targetEnd = desired + delta（delta は 1 から）
+  let largerCand: SequentialCandidate | undefined;
+  for (let delta = 1; delta <= MAX_DELTA; delta++) {
+    const targetEnd = desiredEndDistanceMm + delta;
 
-  const smallerCandidates = allCandidates
-    .filter(c => c.diffFromDesired < 0)
-    .sort((a, b) => b.diffFromDesired - a.diffFromDesired);
+    const combos = findAllCombinationsForEnd(
+      edgeLengthMm, startContribution, targetEnd, isNextConvex, enabledSizes,
+    );
+    if (combos.length > 0) {
+      const best = pickBest(combos);
+      const railsTotal = best.reduce((a, b) => a + b, 0);
+      largerCand = {
+        rails: best,
+        totalMm: railsTotal,
+        actualEndDistanceMm: targetEnd,
+        diffFromDesired: delta,
+      };
+      break;
+    }
+  }
 
   const result: SequentialCandidate[] = [];
-  if (smallerCandidates[0]) result.push(smallerCandidates[0]);
-  if (largerCandidates[0]) result.push(largerCandidates[0]);
-
+  if (smallerCand) result.push(smallerCand);
+  if (largerCand) result.push(largerCand);
   return result;
 }
 
