@@ -19,6 +19,7 @@ import {
   MemoShape,
   MagnetPin,
 } from '@/types';
+import { PinAnchor } from '@/lib/magnetPin/anchorPoints';
 import { DEFAULT_COLS, DEFAULT_ROWS, INITIAL_GRID_PX, ZOOM_MIN, ZOOM_MAX } from '@/lib/konva/gridUtils';
 
 const createEmptyCanvasData = (): CanvasData => ({
@@ -78,6 +79,9 @@ type CanvasStore = {
   /** マグネットピン配置モード（M-3a）: ModeType とは独立した副次フラグ */
   isMagnetPinMode: boolean;
   setMagnetPinMode: (v: boolean) => void;
+  /** ピン配置の選択中起点（M-3b） */
+  pinAnchor: PinAnchor | null;
+  setPinAnchor: (anchor: PinAnchor | null) => void;
 
   // Selection
   selectedIds: string[];
@@ -339,7 +343,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   buildingInputMethod: 'template',
   setBuildingInputMethod: (m) => set({ buildingInputMethod: m }),
   isMagnetPinMode: false,
-  setMagnetPinMode: (v) => set({ isMagnetPinMode: v }),
+  setMagnetPinMode: (v) => set({ isMagnetPinMode: v, pinAnchor: v ? get().pinAnchor : null }),
+  pinAnchor: null,
+  setPinAnchor: (anchor) => set({ pinAnchor: anchor }),
 
   selectedIds: [],
   setSelectedIds: (ids) => set({ selectedIds: ids }),

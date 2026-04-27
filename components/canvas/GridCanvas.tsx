@@ -18,6 +18,7 @@ import ObstacleLayer from './ObstacleLayer';
 import MemoLayer from './MemoLayer';
 import KidareLayer from './KidareLayer';
 import MagnetPinLayer from './MagnetPinLayer';
+import PinAnchorPickerLayer from './PinAnchorPickerLayer';
 import CompassWidget from './CompassWidget';
 import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
@@ -468,6 +469,9 @@ export default function GridCanvas({ width, height }: Props) {
 
       {/* マグネットピンレイヤー（最前面のガイド） */}
       <MagnetPinLayer />
+
+      {/* マグネットピン: 起点候補ピッカー（ピンモード中のみ表示） */}
+      <PinAnchorPickerLayer />
 
       {/* 手摺プレビュー＋スナップインジケーター */}
       {(handrailPreview || snapPoint) && (
