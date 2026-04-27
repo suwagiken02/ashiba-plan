@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeAutoLayoutSequential } from '../autoLayoutUtils';
+import { computeAutoLayout, computeAutoLayoutSequential } from '../autoLayoutUtils';
 import type { BuildingShape } from '@/types';
 
 describe('computeAutoLayoutSequential', () => {
@@ -77,6 +77,23 @@ describe('computeAutoLayoutSequential', () => {
       expect(typeof er.prevCornerIsConvex).toBe('boolean');
       expect(typeof er.nextCornerIsConvex).toBe('boolean');
       expect(er.isLocked).toBe(false); // scaffoldStart 未指定なので全て false
+    });
+  });
+
+  it('全 exact 時は scaffoldCoord/cursorStart/cursorEnd が computeAutoLayout と一致', () => {
+    // 全辺900希望 → 全 exact → 各辺の startDistanceMm = 900 = distances[i]
+    // この条件下では Sequential の座標計算は既存 computeAutoLayout と完全一致するはず
+    const distances = { 0: 900, 1: 900, 2: 900, 3: 900 };
+    const seq = computeAutoLayoutSequential(square9000, distances);
+    const orig = computeAutoLayout(square9000, distances);
+
+    expect(seq.edgeResults.length).toBe(orig.edgeLayouts.length);
+    seq.edgeResults.forEach((er, i) => {
+      const ol = orig.edgeLayouts[i];
+      expect(er.scaffoldCoord).toBeCloseTo(ol.scaffoldCoord, 6);
+      expect(er.cursorStart).toBeCloseTo(ol.cursorStart, 6);
+      expect(er.cursorEnd).toBeCloseTo(ol.cursorEnd, 6);
+      expect(er.effectiveMm).toBe(ol.effectiveMm);
     });
   });
 });

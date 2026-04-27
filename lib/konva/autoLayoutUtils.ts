@@ -419,6 +419,11 @@ export type SequentialEdgeResult = {
   isAutoProgress: boolean;
   prevCornerIsConvex: boolean;
   nextCornerIsConvex: boolean;
+  // Phase H-3a: 配置に必要な座標情報
+  scaffoldCoord: number;
+  cursorStart: number;
+  cursorEnd: number;
+  effectiveMm: number;
 };
 
 export type SequentialLayoutResult = {
@@ -452,7 +457,12 @@ export function computeAutoLayoutSequential(
     cornerConvexity.push(isConvexCorner(edges[i], next));
   }
 
-  const edgeResults: SequentialEdgeResult[] = [];
+  // 順次決定パス: 座標以外の情報を確定
+  type Intermediate = Omit<
+    SequentialEdgeResult,
+    'scaffoldCoord' | 'cursorStart' | 'cursorEnd' | 'effectiveMm'
+  >;
+  const intermediate: Intermediate[] = [];
   let prevEndDistanceMm: number | undefined = undefined;
   let hasUnresolved = false;
 
@@ -497,7 +507,7 @@ export function computeAutoLayoutSequential(
     const isAutoProgress = candidates.length === 1;
     if (!isLocked && !isAutoProgress) hasUnresolved = true;
 
-    edgeResults.push({
+    intermediate.push({
       edge,
       startDistanceMm,
       desiredEndDistanceMm,
@@ -514,6 +524,73 @@ export function computeAutoLayoutSequential(
     } else {
       prevEndDistanceMm = desiredEndDistanceMm;
     }
+  }
+
+  // Phase H-3a: 1パス目相当 — 確定 startDistanceMm から distGrid と scaffoldCoord を計算
+  const distGrids: number[] = [];
+  const scaffoldCoords: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const dg = mmToGrid(intermediate[i].startDistanceMm);
+    distGrids.push(dg);
+    scaffoldCoords.push(calcScaffoldCoord(edges[i], dg));
+  }
+
+  // Phase H-3a: 2パス目相当 — cursorStart/cursorEnd/effectiveMm を計算
+  // 既存 computeAutoLayout の 2パス目ロジックを忠実にコピー
+  const edgeResults: SequentialEdgeResult[] = [];
+  for (let i = 0; i < n; i++) {
+    const edge = edges[i];
+    const prevIdx = (i - 1 + n) % n;
+    const nextIdx = (i + 1) % n;
+    const prevEdge = edges[prevIdx];
+    const nextEdge = edges[nextIdx];
+
+    const dx = edge.p2.x - edge.p1.x;
+    const dy = edge.p2.y - edge.p1.y;
+
+    // --- cursorStart ---
+    const prevScaffold = scaffoldCoords[prevIdx];
+    let cursorStart: number;
+    if (prevEdge.handrailDir !== edge.handrailDir) {
+      cursorStart = prevScaffold;
+    } else {
+      cursorStart = edge.handrailDir === 'horizontal' ? edge.p1.x : edge.p1.y;
+    }
+
+    // --- cursorEnd ---
+    const endConvex = isConvexCorner(edge, nextEdge);
+    const nextScaffold = scaffoldCoords[nextIdx];
+    const nextDistGrid = distGrids[nextIdx];
+    let cursorEnd: number;
+    if (edge.handrailDir === 'horizontal') {
+      const sign = dx > 0 ? 1 : -1;
+      if (endConvex) {
+        cursorEnd = edge.p2.x + sign * nextDistGrid;
+      } else if (nextEdge.handrailDir !== edge.handrailDir) {
+        cursorEnd = nextScaffold;
+      } else {
+        cursorEnd = edge.p2.x;
+      }
+    } else {
+      const sign = dy > 0 ? 1 : -1;
+      if (endConvex) {
+        cursorEnd = edge.p2.y + sign * nextDistGrid;
+      } else if (nextEdge.handrailDir !== edge.handrailDir) {
+        cursorEnd = nextScaffold;
+      } else {
+        cursorEnd = edge.p2.y;
+      }
+    }
+
+    const effectiveMm = Math.max(0, Math.round(Math.abs(cursorEnd - cursorStart) * 10));
+
+    edgeResults.push({
+      ...intermediate[i],
+      scaffoldCoord: scaffoldCoords[i],
+      cursorStart,
+      cursorEnd,
+      effectiveMm,
+    });
   }
 
   return { edgeResults, hasUnresolved };
