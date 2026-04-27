@@ -329,16 +329,17 @@ export function generateSequentialCandidates(
   edgeLengthMm: number,
   startDistanceMm: number,
   desiredEndDistanceMm: number,
+  isPrevConvex: boolean,
   isNextConvex: boolean,
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
   priorityConfig?: PriorityConfig,
 ): SequentialCandidate[] {
   // 有効長の計算
-  // 凸: effective = startDist + edgeLength + desiredEndDist
-  // 凹: effective = startDist + edgeLength - desiredEndDist
-  const effectiveMm = isNextConvex
-    ? startDistanceMm + edgeLengthMm + desiredEndDistanceMm
-    : startDistanceMm + edgeLengthMm - desiredEndDistanceMm;
+  // 始点側コーナーが凸 → +startDist（手前に張り出す）、凹 → -startDist（食い込む）
+  // 終点側コーナーが凸 → +desiredEnd、凹 → -desiredEnd
+  const startContribution = isPrevConvex ? startDistanceMm : -startDistanceMm;
+  const endContribution = isNextConvex ? desiredEndDistanceMm : -desiredEndDistanceMm;
+  const effectiveMm = startContribution + edgeLengthMm + endContribution;
 
   if (effectiveMm <= 0) {
     return [];
@@ -357,11 +358,13 @@ export function generateSequentialCandidates(
       const railsTotal = c.rails.reduce((a, b) => a + b, 0);
 
       // 実際の終点離れを逆算
-      // 凸: actualEnd = railsTotal - edgeLength - startDist
-      // 凹: actualEnd = startDist + edgeLength - railsTotal
+      // railsTotal = startContribution + edgeLength + endContributionActual
+      // endContributionActual = railsTotal - startContribution - edgeLength
+      // actualEnd = isNextConvex ? endContributionActual : -endContributionActual
+      const endContributionActual = railsTotal - startContribution - edgeLengthMm;
       const actualEndDistanceMm = isNextConvex
-        ? railsTotal - edgeLengthMm - startDistanceMm
-        : startDistanceMm + edgeLengthMm - railsTotal;
+        ? endContributionActual
+        : -endContributionActual;
 
       if (actualEndDistanceMm < 0) continue;
 
@@ -496,6 +499,7 @@ export function computeAutoLayoutSequential(
       edge.lengthMm,
       startDistanceMm,
       desiredEndDistanceMm,
+      prevCornerIsConvex,
       nextCornerIsConvex,
       enabledSizes,
       priorityConfig,
@@ -594,6 +598,57 @@ export function computeAutoLayoutSequential(
   }
 
   return { edgeResults, hasUnresolved };
+}
+
+// ============================================================
+// Phase H-3b-1: SequentialLayoutResult → AutoLayoutResult アダプタ
+// 既存 placeHandrailsForEdge / handlePlace を変更せずに使うため、
+// SequentialLayoutResult を AutoLayoutResult 形式に変換する。
+//
+// cursorEnd は rails 合計ベースに再計算する（cursor 由来の effectiveMm と
+// 順次決定の railsTotal が乖離するケースで配置が崩れるのを防ぐ）。
+// 提案モーダルは H-3b-2 で順次決定方式に置き換わるまでの暫定対応として
+// remainder=0 で発火を抑止する。
+// ============================================================
+export function sequentialResultToAutoLayoutResult(
+  seqResult: SequentialLayoutResult,
+): AutoLayoutResult {
+  const edgeLayouts: EdgeLayout[] = seqResult.edgeResults.map(er => {
+    const selectedCandidate = er.candidates[er.selectedIndex];
+    const railsTotal = selectedCandidate
+      ? selectedCandidate.rails.reduce((a, b) => a + b, 0)
+      : 0;
+
+    // cursorEnd を rails 合計ベースに再計算
+    // cursorStart から辺の進行方向に rails 合計分進んだ位置を cursorEnd とする
+    const railsTotalGrid = railsTotal / 10;
+    const sign = er.edge.handrailDir === 'horizontal'
+      ? (er.edge.p2.x > er.edge.p1.x ? 1 : -1)
+      : (er.edge.p2.y > er.edge.p1.y ? 1 : -1);
+    const cursorEndAdjusted = er.cursorStart + sign * railsTotalGrid;
+
+    // 暫定: 提案モーダル発火抑止のため remainder=0
+    const candidates: LayoutCombination[] = er.candidates.map(c => ({
+      rails: c.rails,
+      remainder: 0,
+      count: c.rails.length,
+    }));
+
+    return {
+      edge: er.edge,
+      distanceMm: er.startDistanceMm,
+      edgeLengthMm: er.edge.lengthMm,
+      effectiveMm: railsTotal,
+      scaffoldCoord: er.scaffoldCoord,
+      cursorStart: er.cursorStart,
+      cursorEnd: cursorEndAdjusted,
+      candidates,
+      selectedIndex: er.selectedIndex,
+      locked: er.isLocked,
+    };
+  });
+
+  return { edgeLayouts };
 }
 
 // ============================================================

@@ -10,6 +10,8 @@ import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import {
   getBuildingEdgesClockwise,
   computeAutoLayout,
+  computeAutoLayoutSequential,
+  sequentialResultToAutoLayoutResult,
   placeHandrailsForEdge,
   getEdgesNotCoveredBy,
   isConvexCorner,
@@ -397,7 +399,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const handleCalc = () => {
     if (!building) return;
     // プライマリ計算（1Fのみ→1F全周 / 2Fのみ→2F全周 / both→2F全周）
-    const res = computeAutoLayout(building, distances, scaffoldStart, enabledSizes, priorityConfig);
+    // Phase H-3b-1: 順次決定アルゴリズムに置き換え。アダプタで AutoLayoutResult 形式に変換
+    const seqRes = computeAutoLayoutSequential(building, distances, scaffoldStart, enabledSizes, priorityConfig);
+    const res = sequentialResultToAutoLayoutResult(seqRes);
 
     // 1F+2F 同時モード: 1F のうち 2F で覆われていない辺（下屋辺）を計算
     if (targetFloor === 'both' && building1F && building2F && uncoveredEdges1F.length > 0) {
@@ -406,7 +410,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       getBuildingEdgesClockwise(building1F).forEach(e => {
         d1[e.index] = distances1F[e.index] ?? 900;
       });
-      const res1 = computeAutoLayout(building1F, d1, undefined, enabledSizes, priorityConfig);
+      // Phase H-3b-1: bothモードの 1F 下屋辺も順次決定に置き換え
+      const seqRes1 = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig);
+      const res1 = sequentialResultToAutoLayoutResult(seqRes1);
       // 下屋辺だけに edgeLayouts を絞り込む
       const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
       const filtered = res1.edgeLayouts.filter(el => uncoveredIdxSet.has(el.edge.index));
@@ -492,7 +498,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     } else {
       setDistanceSuggestions([]);
       if (!building) return;
-      const res = computeAutoLayout(building, currentDistances, scaffoldStart, enabledSizes, priorityConfig);
+      // Phase H-3b-1: proceedToNextSuggestion 内の再計算も順次決定に置き換え
+      const seqRes = computeAutoLayoutSequential(building, currentDistances, scaffoldStart, enabledSizes, priorityConfig);
+      const res = sequentialResultToAutoLayoutResult(seqRes);
       setResult(res);
       const sel: Record<number, number> = {};
       res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
