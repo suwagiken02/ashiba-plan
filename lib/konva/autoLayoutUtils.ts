@@ -405,6 +405,121 @@ export function generateSequentialCandidates(
 }
 
 // ============================================================
+// Phase H-2: 順次決定アルゴリズムによる自動割付
+// 各辺を時計回りに処理し、前辺の終点離れを次辺の始点離れとして継承する。
+// 端数発生時は2択候補を返す（UI で選択させる）。
+// ============================================================
+export type SequentialEdgeResult = {
+  edge: EdgeInfo;
+  startDistanceMm: number;
+  desiredEndDistanceMm: number;
+  candidates: SequentialCandidate[];
+  selectedIndex: number;
+  isLocked: boolean;
+  isAutoProgress: boolean;
+  prevCornerIsConvex: boolean;
+  nextCornerIsConvex: boolean;
+};
+
+export type SequentialLayoutResult = {
+  edgeResults: SequentialEdgeResult[];
+  hasUnresolved: boolean;
+};
+
+export function computeAutoLayoutSequential(
+  building: BuildingShape,
+  distances: Record<number, number>,
+  scaffoldStart?: ScaffoldStartConfig,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  priorityConfig?: PriorityConfig,
+  userSelections?: Record<number, number>,
+): SequentialLayoutResult {
+  const edges = getBuildingEdgesClockwise(building);
+  const n = edges.length;
+
+  // lockedIndices: 既存 computeAutoLayout のロジックをそのまま使用
+  const lockedIndices = new Set<number>();
+  if (scaffoldStart && n >= 2) {
+    const startIdx = scaffoldStart.startVertexIndex ?? 0;
+    lockedIndices.add(edges[startIdx % n].index);
+    lockedIndices.add(edges[(startIdx - 1 + n) % n].index);
+  }
+
+  // 各コーナーの凸/凹判定: cornerConvexity[i] = 辺i と 辺(i+1) の間のコーナー
+  const cornerConvexity: boolean[] = [];
+  for (let i = 0; i < n; i++) {
+    const next = edges[(i + 1) % n];
+    cornerConvexity.push(isConvexCorner(edges[i], next));
+  }
+
+  const edgeResults: SequentialEdgeResult[] = [];
+  let prevEndDistanceMm: number | undefined = undefined;
+  let hasUnresolved = false;
+
+  for (let i = 0; i < n; i++) {
+    const edge = edges[i];
+    const isLocked = lockedIndices.has(edge.index);
+    const prevCornerIsConvex = cornerConvexity[(i - 1 + n) % n];
+    const nextCornerIsConvex = cornerConvexity[i];
+
+    // 始点離れの決定
+    let startDistanceMm: number;
+    if (i === 0) {
+      if (scaffoldStart && isLocked) {
+        // scaffoldStart の対応 face を使う（水平面=face1 / 垂直面=face2）
+        startDistanceMm = edge.handrailDir === 'horizontal'
+          ? scaffoldStart.face1DistanceMm
+          : scaffoldStart.face2DistanceMm;
+      } else {
+        startDistanceMm = distances[edge.index] ?? 900;
+      }
+    } else {
+      // 2番目以降: 前辺の終点離れを継承
+      startDistanceMm = prevEndDistanceMm ?? distances[edge.index] ?? 900;
+    }
+
+    // 終点離れ希望 = 次の辺の希望離れ
+    const nextEdge = edges[(i + 1) % n];
+    const desiredEndDistanceMm = distances[nextEdge.index] ?? 900;
+
+    const candidates = generateSequentialCandidates(
+      edge.lengthMm,
+      startDistanceMm,
+      desiredEndDistanceMm,
+      nextCornerIsConvex,
+      enabledSizes,
+      priorityConfig,
+    );
+
+    let selectedIndex = userSelections?.[edge.index] ?? 0;
+    if (selectedIndex >= candidates.length) selectedIndex = 0;
+
+    const isAutoProgress = candidates.length === 1;
+    if (!isLocked && !isAutoProgress) hasUnresolved = true;
+
+    edgeResults.push({
+      edge,
+      startDistanceMm,
+      desiredEndDistanceMm,
+      candidates,
+      selectedIndex,
+      isLocked,
+      isAutoProgress,
+      prevCornerIsConvex,
+      nextCornerIsConvex,
+    });
+
+    if (candidates.length > 0) {
+      prevEndDistanceMm = candidates[selectedIndex].actualEndDistanceMm;
+    } else {
+      prevEndDistanceMm = desiredEndDistanceMm;
+    }
+  }
+
+  return { edgeResults, hasUnresolved };
+}
+
+// ============================================================
 // 辺のscaffoldCoordを計算（固定軸座標）
 // ============================================================
 function calcScaffoldCoord(edge: EdgeInfo, distGrid: number): number {
