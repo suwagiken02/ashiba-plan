@@ -3,7 +3,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { Handrail, HandrailLengthMm, Point, ScaffoldStartConfig, PhaseDFlowState, PhaseDCandidate } from '@/types';
+import { Handrail, HandrailLengthMm, Point, ScaffoldStartConfig } from '@/types';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
@@ -17,16 +17,6 @@ import {
   EdgeInfo,
   EdgeLayout,
 } from '@/lib/konva/autoLayoutUtils';
-import {
-  initPhaseDFlowState,
-  getCurrentCandidates,
-  confirmCurrentEdge,
-  rollbackCurrentStep,
-  getCurrentEdgeIndex,
-  getStartDistanceForCurrentEdge,
-  isFlowCompleted,
-} from '@/lib/konva/phaseDFlow';
-
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
@@ -288,24 +278,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return new Set([outEdge.index, inEdge.index]);
   }, [scaffoldStart, building]);
 
-  // 【Phase D】固定辺の face1/face2 edgeIndex と離れ
-  const phaseDLockedInfo = useMemo(() => {
-    if (!scaffoldStart || edges.length === 0) return null;
-    const n = edges.length;
-    const svi = scaffoldStart.startVertexIndex ?? 0;
-    const outEdge = edges[svi % n];
-    const inEdge = edges[(svi - 1 + n) % n];
-    const outIsH = outEdge.face === 'north' || outEdge.face === 'south';
-    const face1Edge = outIsH ? outEdge : inEdge;
-    const face2Edge = outIsH ? inEdge : outEdge;
-    return {
-      face1EdgeIndex: face1Edge.index,
-      face1DistanceMm: scaffoldStart.face1DistanceMm,
-      face2EdgeIndex: face2Edge.index,
-      face2DistanceMm: scaffoldStart.face2DistanceMm,
-    };
-  }, [scaffoldStart, edges]);
-
   // 各辺の離れ（mm）: edgeIndex → number
   const defaultDist = scaffoldStart?.face1DistanceMm ?? 900;
   const [distances, setDistances] = useState<Record<number, number>>(() => {
@@ -382,16 +354,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     suggestions: number[];
   }[]>([]);
   const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
-
-  // 【Phase D】繋がる離れ提案モード（開発中、デフォルトOFF）
-  const [phaseDMode, setPhaseDMode] = useState(false);
-  const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
-  // 主建物（1Fのみ/2Fのみモードはこちら、bothモード時は2F全周）
-  const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
-  const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
-  // 1F下屋辺（bothモード時のみ使用）
-  const [phaseDDesiredDistances1F, setPhaseDDesiredDistances1F] = useState<Record<number, number>>({});
-  const [phaseDFlowState1F, setPhaseDFlowState1F] = useState<PhaseDFlowState | null>(null);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -637,66 +599,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setShowConflictConfirm(false);
   };
 
-  // 【Phase D】decisions から距離 Record を構築
-  const buildPhaseDDistances = (state: PhaseDFlowState): Record<number, number> => {
-    const result: Record<number, number> = {};
-    // 固定辺
-    result[state.startDistances.face1EdgeIndex] = state.startDistances.face1DistanceMm;
-    result[state.startDistances.face2EdgeIndex] = state.startDistances.face2DistanceMm;
-    // 決定済み
-    for (const [idxStr, dec] of Object.entries(state.decisions)) {
-      result[Number(idxStr)] = dec.startDistanceMm;
-    }
-    return result;
-  };
-
-  // 【Phase D】配置ハンドラ
-  const handlePhaseDPlace = () => {
-    if (!phaseDFlowState || !building) return;
-    if (!isFlowCompleted(phaseDFlowState)) {
-      alert('まだ全辺の決定が完了していません');
-      return;
-    }
-
-    // Phase D の decisions から distances を構築
-    const phaseDDistances = buildPhaseDDistances(phaseDFlowState);
-
-    // 既存の computeAutoLayout で配置計算
-    const res = computeAutoLayout(
-      building,
-      phaseDDistances,
-      scaffoldStart,
-      enabledSizes,
-      priorityConfig,
-    );
-
-    // 配置処理
-    const mainFloor: 1 | 2 = targetFloor === 1 ? 1 : 2;
-    const newHandrails: Handrail[] = [];
-    for (const el of res.edgeLayouts) {
-      if (el.candidates.length === 0) continue;
-      // Phase D では candidate[0] を使う（selections 未使用）
-      const rails = el.candidates[0].rails;
-      if (rails.length === 0) continue;
-      const placements = placeHandrailsForEdge(el, rails);
-      for (const p of placements) {
-        newHandrails.push({
-          id: uuidv4(),
-          x: p.x,
-          y: p.y,
-          lengthMm: p.lengthMm,
-          direction: p.direction,
-          color: getHandrailColor(p.lengthMm),
-          floor: mainFloor,
-        });
-      }
-    }
-
-    // canvas に追加（干渉判定は Phase D-6 以降で検討）
-    addHandrails(newHandrails);
-    onClose();
-  };
-
   if (!building) {
     return (
       <div className="fixed inset-0 modal-overlay flex items-center justify-center z-50" onClick={onClose}>
@@ -760,23 +662,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             )}
           </div>
 
-          {/* 【Phase D】開発用トグル（リリース前に隠す想定） */}
-          <div className="flex items-center gap-2 px-3 py-2 bg-purple-50 dark:bg-purple-900/20 rounded border border-purple-300 dark:border-purple-700">
-            <input
-              type="checkbox"
-              id="phase-d-mode"
-              checked={phaseDMode}
-              onChange={(e) => {
-                setPhaseDMode(e.target.checked);
-                setPhaseDStep('input');
-              }}
-              className="w-4 h-4"
-            />
-            <label htmlFor="phase-d-mode" className="text-xs font-medium cursor-pointer select-none">
-              🚧 繋がる離れ提案モード（開発中）
-            </label>
-          </div>
-
           {!building && (
             <p className="text-xs text-yellow-500 bg-yellow-500/10 border border-yellow-500/30 rounded-lg px-3 py-2">
               {targetFloor === 2 ? '2F建物が未作成です。' : '建物が未作成です。'}
@@ -785,8 +670,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           )}
 
           {building && (
-            <>
-          {!phaseDMode ? (
             <>
           {/* プレビューSVG（bothモードでは 1F を背景、下屋辺を緑で強調） */}
           <PreviewSVG
@@ -1053,300 +936,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 配置する
               </button>
             </div>
-          )}
-            </>
-          ) : (
-            <>
-          {/* 【Phase D】繋がる離れ提案モード */}
-          {phaseDStep === 'input' && (
-            <div className="flex flex-col gap-3 p-3">
-              <div className="text-sm font-semibold">🚧 繋がる離れ提案モード - Step 0: 希望離れ入力</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400">
-                各面の希望離れを入力してください。固定辺（スタート角の2辺）は既に確定しています。
-              </div>
-
-              {/* 主建物（2F全周 or 単独階）の各辺 */}
-              <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
-                {targetFloor === 'both' ? '2F全周の各辺' : `${targetFloor === 1 ? '1F' : '2F'} の各辺`}
-              </div>
-              <div className="flex flex-col gap-2">
-                {edges.map((edge) => {
-                  const isLocked = lockedEdgeIndices.has(edge.index);
-                  const lockedValue = isLocked && phaseDLockedInfo
-                    ? (edge.index === phaseDLockedInfo.face1EdgeIndex
-                        ? phaseDLockedInfo.face1DistanceMm
-                        : phaseDLockedInfo.face2DistanceMm)
-                    : undefined;
-                  const currentValue = isLocked
-                    ? lockedValue ?? 0
-                    : (phaseDDesiredDistances[edge.index] ?? 900);
-
-                  return (
-                    <div key={edge.index} className="flex items-center gap-2">
-                      <span className="w-16 text-xs font-medium">{edge.label}面</span>
-                      {isLocked ? (
-                        <>
-                          <input
-                            type="number"
-                            value={currentValue}
-                            disabled
-                            className="w-24 px-2 py-1 text-sm border rounded bg-gray-100 dark:bg-gray-800"
-                          />
-                          <span className="text-xs text-gray-500">固定</span>
-                        </>
-                      ) : (
-                        <input
-                          type="number"
-                          value={currentValue}
-                          min={0}
-                          step={1}
-                          onChange={(e) => {
-                            const v = Number(e.target.value);
-                            setPhaseDDesiredDistances(prev => ({ ...prev, [edge.index]: v }));
-                          }}
-                          className="w-24 px-2 py-1 text-sm border rounded bg-dark-bg"
-                        />
-                      )}
-                      <span className="text-xs text-gray-400">mm</span>
-                      <span className="text-xs text-gray-400">（辺長 {Math.round(edge.lengthMm)}mm）</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* bothモード時の 1F下屋辺 */}
-              {targetFloor === 'both' && uncoveredEdges1F.length > 0 && (
-                <>
-                  <div className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-sm bg-green-500 inline-block" />
-                    1F下屋辺
-                    <span className="text-[10px] text-gray-500">({uncoveredEdges1F.length} 本)</span>
-                  </div>
-                  <div className="flex flex-col gap-2">
-                    {uncoveredEdges1F.map((edge) => {
-                      const currentValue = phaseDDesiredDistances1F[edge.index] ?? 900;
-                      return (
-                        <div key={`1f-${edge.index}`} className="flex items-center gap-2">
-                          <span className="w-16 text-xs font-medium">1{edge.label}面</span>
-                          <input
-                            type="number"
-                            value={currentValue}
-                            min={0}
-                            step={1}
-                            onChange={(e) => {
-                              const v = Number(e.target.value);
-                              setPhaseDDesiredDistances1F(prev => ({ ...prev, [edge.index]: v }));
-                            }}
-                            className="w-24 px-2 py-1 text-sm border rounded bg-dark-bg"
-                          />
-                          <span className="text-xs text-gray-400">mm</span>
-                          <span className="text-xs text-gray-400">（辺長 {Math.round(edge.lengthMm)}mm）</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              <div className="flex justify-end gap-2 mt-2">
-                <button
-                  className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
-                  onClick={() => setPhaseDMode(false)}
-                >
-                  キャンセル
-                </button>
-                <button
-                  className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
-                  onClick={() => {
-                    if (!phaseDLockedInfo) return;
-                    // 主フロー（2F全周 or 単独階）の初期化
-                    const initialState = initPhaseDFlowState({
-                      edgeIndices: edges.map(e => e.index),
-                      lockedEdgeIndices,
-                      startDistances: phaseDLockedInfo,
-                      desiredDistances: phaseDDesiredDistances,
-                    });
-                    setPhaseDFlowState(initialState);
-
-                    // bothモード時は 1F下屋辺フローも初期化（固定辺なし、ダミー startDistances）
-                    if (targetFloor === 'both' && uncoveredEdges1F.length > 0) {
-                      const initialState1F = initPhaseDFlowState({
-                        edgeIndices: uncoveredEdges1F.map(e => e.index),
-                        lockedEdgeIndices: new Set(),
-                        startDistances: {
-                          face1EdgeIndex: -1,
-                          face1DistanceMm: 900,
-                          face2EdgeIndex: -1,
-                          face2DistanceMm: 900,
-                        },
-                        desiredDistances: phaseDDesiredDistances1F,
-                      });
-                      setPhaseDFlowState1F(initialState1F);
-                    } else {
-                      setPhaseDFlowState1F(null);
-                    }
-
-                    setPhaseDStep('sequential');
-                  }}
-                >
-                  次へ（順次決定へ）
-                </button>
-              </div>
-            </div>
-          )}
-
-          {phaseDStep === 'sequential' && phaseDFlowState && (
-            <div className="flex flex-col gap-3 p-3">
-              <div className="text-sm font-semibold">
-                🚧 Step 1: 順次決定 ({phaseDFlowState.currentStep < 0 ? phaseDFlowState.edgeOrder.length : phaseDFlowState.currentStep + 1}/{phaseDFlowState.edgeOrder.length}面)
-              </div>
-
-              {(() => {
-                const currentEdgeIdx = getCurrentEdgeIndex(phaseDFlowState);
-                if (currentEdgeIdx === null) {
-                  // 全完了
-                  return (
-                    <div className="flex flex-col gap-2">
-                      <div className="text-sm text-green-600 font-medium">✅ 全辺の決定が完了しました</div>
-                      <div className="flex justify-end gap-2">
-                        <button
-                          className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
-                          onClick={() => {
-                            setPhaseDStep('input');
-                            setPhaseDFlowState(null);
-                          }}
-                        >
-                          入力に戻る
-                        </button>
-                        <button
-                          className="px-4 py-2 text-sm bg-green-500 text-white rounded hover:bg-green-600"
-                          onClick={handlePhaseDPlace}
-                        >
-                          配置する
-                        </button>
-                      </div>
-                    </div>
-                  );
-                }
-
-                const currentEdge = edges.find(e => e.index === currentEdgeIdx);
-                if (!currentEdge) return null;
-
-                const startDist = getStartDistanceForCurrentEdge(phaseDFlowState);
-                const desired = phaseDFlowState.desiredDistances[currentEdgeIdx] ?? 900;
-                const candidates = getCurrentCandidates(
-                  phaseDFlowState,
-                  currentEdge.lengthMm,
-                  enabledSizes,
-                  priorityConfig,
-                );
-
-                if (!candidates) return <div>候補の生成中...</div>;
-
-                const handleSelect = (candidate: PhaseDCandidate) => {
-                  const newState = confirmCurrentEdge(phaseDFlowState, candidate);
-                  setPhaseDFlowState(newState);
-                };
-
-                return (
-                  <>
-                    <div className="text-xs text-gray-600 dark:text-gray-400 space-y-1">
-                      <div>面: <span className="font-semibold">{currentEdge.label}</span>（{currentEdge.face}）</div>
-                      <div>辺長: {Math.round(currentEdge.lengthMm)}mm / 始点離れ: {startDist}mm</div>
-                      <div>希望終点離れ: <span className="font-semibold text-blue-500">{desired}mm</span></div>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      {candidates.exact && (
-                        <button
-                          className="flex flex-col items-start gap-1 p-3 border-2 border-green-500 bg-green-50 dark:bg-green-900/20 rounded hover:bg-green-100 dark:hover:bg-green-900/30"
-                          onClick={() => handleSelect(candidates.exact!)}
-                        >
-                          <div className="text-xs font-semibold text-green-700 dark:text-green-400">🎯 ぴったり候補</div>
-                          <div className="text-sm font-medium text-green-900 dark:text-green-100">{candidates.exact.rails.join(' + ')}</div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            終点離れ: {candidates.exact.endDistanceMm}mm (±0)
-                          </div>
-                        </button>
-                      )}
-
-                      {candidates.larger && (
-                        <button
-                          className="flex flex-col items-start gap-1 p-3 border border-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded hover:bg-blue-100 dark:hover:bg-blue-900/30"
-                          onClick={() => handleSelect(candidates.larger!)}
-                        >
-                          <div className="text-xs font-semibold text-blue-700 dark:text-blue-400">⬆️ 大きい側</div>
-                          <div className="text-sm font-medium text-blue-900 dark:text-blue-100">{candidates.larger.rails.join(' + ')}</div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            終点離れ: {candidates.larger.endDistanceMm}mm (+{candidates.larger.diffFromDesired})
-                          </div>
-                        </button>
-                      )}
-
-                      {candidates.smaller && (
-                        <button
-                          className="flex flex-col items-start gap-1 p-3 border border-orange-400 bg-orange-50 dark:bg-orange-900/20 rounded hover:bg-orange-100 dark:hover:bg-orange-900/30"
-                          onClick={() => handleSelect(candidates.smaller!)}
-                        >
-                          <div className="text-xs font-semibold text-orange-700 dark:text-orange-400">⬇️ 小さい側</div>
-                          <div className="text-sm font-medium text-orange-900 dark:text-orange-100">{candidates.smaller.rails.join(' + ')}</div>
-                          <div className="text-xs text-gray-600 dark:text-gray-400">
-                            終点離れ: {candidates.smaller.endDistanceMm}mm ({candidates.smaller.diffFromDesired})
-                          </div>
-                        </button>
-                      )}
-
-                      {!candidates.exact && !candidates.larger && !candidates.smaller && (
-                        <div className="text-sm text-red-600 bg-red-50 dark:bg-red-900/20 p-3 rounded">
-                          ⚠️ 候補が見つかりませんでした。希望離れを見直してください。
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex justify-between gap-2 mt-2">
-                      <button
-                        className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded disabled:opacity-50"
-                        disabled={Object.keys(phaseDFlowState.decisions).length === 0}
-                        onClick={() => {
-                          const rolled = rollbackCurrentStep(phaseDFlowState);
-                          setPhaseDFlowState(rolled);
-                        }}
-                      >
-                        ← 前の辺
-                      </button>
-                      <button
-                        className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
-                        onClick={() => {
-                          setPhaseDStep('input');
-                          setPhaseDFlowState(null);
-                        }}
-                      >
-                        入力に戻る
-                      </button>
-                    </div>
-
-                    {/* 確定済みの履歴表示 */}
-                    {Object.keys(phaseDFlowState.decisions).length > 0 && (
-                      <div className="mt-3 pt-3 border-t border-gray-300 dark:border-gray-600">
-                        <div className="text-xs font-semibold mb-2">確定済み</div>
-                        <div className="flex flex-col gap-1">
-                          {Object.entries(phaseDFlowState.decisions).map(([idx, dec]) => {
-                            const edge = edges.find(e => e.index === Number(idx));
-                            return (
-                              <div key={idx} className="text-xs text-gray-600 dark:text-gray-400">
-                                {edge?.label}: {dec.selectedCandidate.rails.join('+')} → 終点離れ {dec.endDistanceMm}mm
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
-            </div>
-          )}
-            </>
           )}
             </>
           )}
