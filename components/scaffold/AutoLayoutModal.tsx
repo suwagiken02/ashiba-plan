@@ -259,14 +259,17 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   // scaffoldStart は対象階のものだけ有効扱い（別階のを引き継がない）
   // both モードは 2F 主表示なので 2F の scaffoldStart を使用
   // 優先順: 新フィールド (scaffoldStart1F / scaffoldStart2F) → 旧 scaffoldStart (後方互換)
+  // 該当階の建物が存在しない場合は undefined（偽スタート角防止）
   const scaffoldStart = useMemo(() => {
     const effectiveFloor = targetFloor === 'both' ? 2 : targetFloor;
+    const hasFloorBuilding = effectiveFloor === 1 ? !!building1F : !!building2F;
+    if (!hasFloorBuilding) return undefined;
     const newSS = effectiveFloor === 1 ? canvasData.scaffoldStart1F : canvasData.scaffoldStart2F;
     if (newSS) return newSS;
     const legacy = canvasData.scaffoldStart;
     if (!legacy) return undefined;
     return (legacy.floor ?? 1) === effectiveFloor ? legacy : undefined;
-  }, [canvasData.scaffoldStart1F, canvasData.scaffoldStart2F, canvasData.scaffoldStart, targetFloor]);
+  }, [canvasData.scaffoldStart1F, canvasData.scaffoldStart2F, canvasData.scaffoldStart, targetFloor, building1F, building2F]);
 
   // 辺リストを取得
   const edges = useMemo(

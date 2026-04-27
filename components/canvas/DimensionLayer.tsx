@@ -92,11 +92,22 @@ export default function DimensionLayer() {
 
   // 描画対象の scaffoldStart を収集（1F/2F 両方保持対応）
   // 新フィールド (scaffoldStart1F / scaffoldStart2F) 優先、無ければ旧 scaffoldStart をフォールバック
+  // 該当階の建物が存在しない場合はスキップ（偽寸法線防止）
+  const has1FBuilding = canvasData.buildings.some(b => (b.floor ?? 1) === 1);
+  const has2FBuilding = canvasData.buildings.some(b => b.floor === 2);
   const dimensionJobs: NonNullable<typeof canvasData.scaffoldStart>[] = [];
-  if (canvasData.scaffoldStart1F) dimensionJobs.push(canvasData.scaffoldStart1F);
-  if (canvasData.scaffoldStart2F) dimensionJobs.push(canvasData.scaffoldStart2F);
+  if (canvasData.scaffoldStart1F && has1FBuilding) {
+    dimensionJobs.push(canvasData.scaffoldStart1F);
+  }
+  if (canvasData.scaffoldStart2F && has2FBuilding) {
+    dimensionJobs.push(canvasData.scaffoldStart2F);
+  }
   if (dimensionJobs.length === 0 && canvasData.scaffoldStart) {
-    dimensionJobs.push(canvasData.scaffoldStart);
+    const legacyFloor = canvasData.scaffoldStart.floor ?? 1;
+    const hasLegacyBuilding = canvasData.buildings.some(b => (b.floor ?? 1) === legacyFloor);
+    if (hasLegacyBuilding) {
+      dimensionJobs.push(canvasData.scaffoldStart);
+    }
   }
 
   let mainLogicRan = false;
