@@ -317,17 +317,30 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
         ));
       }
 
-      /* ── レイヤー3: 屋根出幅（数値のみ） ── */
+      /* ── レイヤー3: 屋根出幅（外壁寸法線と同じ axis に左右翼として描画） ── */
       if (roofMm[face] > 0) {
-        const axis = refPx + sign * OFF_ROOF;
-        const center = isH
-          ? (gx(bldBB.minX) + gx(bldBB.maxX)) / 2
-          : (gy(bldBB.minY) + gy(bldBB.maxY)) / 2;
-        els.push(...renderLabel(
-          isH ? center : axis,
-          isH ? axis   : center,
-          `${roofMm[face]}`, fs, `R${face}`,
-        ));
+        const overhangPx = mmToGrid(roofMm[face]) * gridPx;
+        const axis = refPx + sign * OFF_WALL;  // 外壁寸法線と同じ高さに揃える
+        const edges = wallEdges[face];
+        for (let ei = 0; ei < edges.length; ei++) {
+          const edge = edges[ei];
+          const edgeStartPx = isH ? gx(edge.from) : gy(edge.from);
+          const edgeEndPx = isH ? gx(edge.to) : gy(edge.to);
+
+          // 左翼（軸方向の小さい側、外向きに overhangPx 伸びる）
+          els.push(...renderDimLine(
+            `RL${face}-${ei}`, isH, axis, innerDir,
+            [{ s: edgeStartPx - overhangPx, e: edgeStartPx, mm: roofMm[face] }],
+            false, roofMm[face], fs,
+          ));
+
+          // 右翼（軸方向の大きい側、外向きに overhangPx 伸びる）
+          els.push(...renderDimLine(
+            `RR${face}-${ei}`, isH, axis, innerDir,
+            [{ s: edgeEndPx, e: edgeEndPx + overhangPx, mm: roofMm[face] }],
+            false, roofMm[face], fs,
+          ));
+        }
       }
     }
 
