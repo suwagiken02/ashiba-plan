@@ -17,6 +17,8 @@ export default function MagnetPinLayer() {
   const zoom = useCanvasStore(s => s.zoom);
   const panX = useCanvasStore(s => s.panX);
   const panY = useCanvasStore(s => s.panY);
+  const mode = useCanvasStore(s => s.mode);
+  const eraseMode = mode === 'erase';
 
   const pins = magnetPins ?? [];
   if (pins.length === 0) return <Layer listening={false} />;
@@ -30,7 +32,7 @@ export default function MagnetPinLayer() {
   const needleDy = needleLen;
 
   return (
-    <Layer listening={false}>
+    <Layer listening={eraseMode}>
       {pins.map((pin) => {
         // 針先 = pin.x/y
         const tipX = pin.x * gridPx + panX;
@@ -63,6 +65,16 @@ export default function MagnetPinLayer() {
               shadowOffsetX={1}
               shadowOffsetY={1}
             />
+            {/* Phase M-8: 削除モード時のみ、頭の上に透明な大きい hit area を重ねる */}
+            {eraseMode && (
+              <Circle
+                id={pin.id}
+                x={-needleDx}
+                y={-needleDy}
+                radius={Math.max(20, headRadius * 2.5)}
+                fill="transparent"
+              />
+            )}
           </Group>
         );
       })}
