@@ -4,6 +4,7 @@ import React from 'react';
 import { Layer, Text, Line, Rect, Group, Path } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
+import { snapToMagnetPin } from '@/lib/konva/snapUtils';
 import { MemoShape } from '@/types';
 
 function getShapePath(shape: MemoShape, w: number, h: number): string {
@@ -63,7 +64,17 @@ export default function MemoLayer() {
                 const dy = Math.round((e.target.y() - screenY) / gridPx);
                 e.target.x(screenX); e.target.y(screenY);
                 if (dx !== 0 || dy !== 0) {
-                  useCanvasStore.getState().moveElement(memo.id, dx, dy);
+                  // Phase M-6b: メモ中心がピンに吸着
+                  const wGrid = w / gridPx;
+                  const hGrid = h / gridPx;
+                  const cx = memo.x + dx + wGrid / 2;
+                  const cy = memo.y + dy + hGrid / 2;
+                  const pinSnap = snapToMagnetPin({ x: cx, y: cy }, canvasData.magnetPins ?? [], zoom);
+                  if (pinSnap) {
+                    useCanvasStore.getState().moveElement(memo.id, dx + pinSnap.dx, dy + pinSnap.dy);
+                  } else {
+                    useCanvasStore.getState().moveElement(memo.id, dx, dy);
+                  }
                 }
               }}
             >
@@ -145,7 +156,15 @@ export default function MemoLayer() {
               const dy = Math.round((e.target.y() - screenY) / gridPx);
               e.target.x(screenX); e.target.y(screenY);
               if (dx !== 0 || dy !== 0) {
-                useCanvasStore.getState().moveElement(memo.id, dx, dy);
+                // Phase M-6b: 旧式 plain メモ — memo.x/y を refPoint として吸着
+                const refX = memo.x + dx;
+                const refY = memo.y + dy;
+                const pinSnap = snapToMagnetPin({ x: refX, y: refY }, canvasData.magnetPins ?? [], zoom);
+                if (pinSnap) {
+                  useCanvasStore.getState().moveElement(memo.id, dx + pinSnap.dx, dy + pinSnap.dy);
+                } else {
+                  useCanvasStore.getState().moveElement(memo.id, dx, dy);
+                }
               }
             }}
           />
