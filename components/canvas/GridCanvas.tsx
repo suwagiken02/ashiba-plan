@@ -50,20 +50,22 @@ export default function GridCanvas({ width, height }: Props) {
   const [memoCursorPos, setMemoCursorPos] = useState<{ x: number; y: number } | null>(null);
   const panInitialized = useRef(false);
 
-  // 十字ガイド用: 全頂点のユニークX/Y（建物+障害物+directionPoints）
+  // 十字ガイド用: 全頂点のユニークX/Y（建物+障害物+directionPoints+マグネットピン）
   const guideXs = useMemo(() => {
     if (!showDirectionGuide || buildingInputMethod !== 'direction' || directionPoints.length === 0) return [];
     const verts = getAllExistingVertices(canvasData.buildings, canvasData.obstacles);
     verts.push(...directionPoints);
+    verts.push(...(canvasData.magnetPins ?? []));
     return Array.from(new Set(verts.map(v => v.x)));
-  }, [showDirectionGuide, buildingInputMethod, directionPoints, canvasData.buildings, canvasData.obstacles]);
+  }, [showDirectionGuide, buildingInputMethod, directionPoints, canvasData.buildings, canvasData.obstacles, canvasData.magnetPins]);
 
   const guideYs = useMemo(() => {
     if (!showDirectionGuide || buildingInputMethod !== 'direction' || directionPoints.length === 0) return [];
     const verts = getAllExistingVertices(canvasData.buildings, canvasData.obstacles);
     verts.push(...directionPoints);
+    verts.push(...(canvasData.magnetPins ?? []));
     return Array.from(new Set(verts.map(v => v.y)));
-  }, [showDirectionGuide, buildingInputMethod, directionPoints, canvasData.buildings, canvasData.obstacles]);
+  }, [showDirectionGuide, buildingInputMethod, directionPoints, canvasData.buildings, canvasData.obstacles, canvasData.magnetPins]);
   const lastPanPos = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
 
   // グリッド描画（キャンバス全体に広がる無限グリッド）
