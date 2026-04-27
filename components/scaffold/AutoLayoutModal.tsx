@@ -386,8 +386,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   // 【Phase D】繋がる離れ提案モード（開発中、デフォルトOFF）
   const [phaseDMode, setPhaseDMode] = useState(false);
   const [phaseDStep, setPhaseDStep] = useState<'input' | 'sequential' | 'done'>('input');
+  // 主建物（1Fのみ/2Fのみモードはこちら、bothモード時は2F全周）
   const [phaseDDesiredDistances, setPhaseDDesiredDistances] = useState<Record<number, number>>({});
   const [phaseDFlowState, setPhaseDFlowState] = useState<PhaseDFlowState | null>(null);
+  // 1F下屋辺（bothモード時のみ使用）
+  const [phaseDDesiredDistances1F, setPhaseDDesiredDistances1F] = useState<Record<number, number>>({});
+  const [phaseDFlowState1F, setPhaseDFlowState1F] = useState<PhaseDFlowState | null>(null);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -1061,6 +1065,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 各面の希望離れを入力してください。固定辺（スタート角の2辺）は既に確定しています。
               </div>
 
+              {/* 主建物（2F全周 or 単独階）の各辺 */}
+              <div className="text-xs font-medium text-gray-600 dark:text-gray-300">
+                {targetFloor === 'both' ? '2F全周の各辺' : `${targetFloor === 1 ? '1F' : '2F'} の各辺`}
+              </div>
               <div className="flex flex-col gap-2">
                 {edges.map((edge) => {
                   const isLocked = lockedEdgeIndices.has(edge.index);
@@ -1106,6 +1114,40 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 })}
               </div>
 
+              {/* bothモード時の 1F下屋辺 */}
+              {targetFloor === 'both' && uncoveredEdges1F.length > 0 && (
+                <>
+                  <div className="text-xs font-medium text-green-600 dark:text-green-400 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-sm bg-green-500 inline-block" />
+                    1F下屋辺
+                    <span className="text-[10px] text-gray-500">({uncoveredEdges1F.length} 本)</span>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {uncoveredEdges1F.map((edge) => {
+                      const currentValue = phaseDDesiredDistances1F[edge.index] ?? 900;
+                      return (
+                        <div key={`1f-${edge.index}`} className="flex items-center gap-2">
+                          <span className="w-16 text-xs font-medium">1{edge.label}面</span>
+                          <input
+                            type="number"
+                            value={currentValue}
+                            min={0}
+                            step={1}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              setPhaseDDesiredDistances1F(prev => ({ ...prev, [edge.index]: v }));
+                            }}
+                            className="w-24 px-2 py-1 text-sm border rounded bg-dark-bg"
+                          />
+                          <span className="text-xs text-gray-400">mm</span>
+                          <span className="text-xs text-gray-400">（辺長 {Math.round(edge.lengthMm)}mm）</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
               <div className="flex justify-end gap-2 mt-2">
                 <button
                   className="px-4 py-2 text-sm bg-gray-200 dark:bg-gray-700 rounded"
@@ -1117,6 +1159,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                   className="px-4 py-2 text-sm bg-blue-500 text-white rounded hover:bg-blue-600"
                   onClick={() => {
                     if (!phaseDLockedInfo) return;
+                    // 主フロー（2F全周 or 単独階）の初期化
                     const initialState = initPhaseDFlowState({
                       edgeIndices: edges.map(e => e.index),
                       lockedEdgeIndices,
@@ -1124,6 +1167,25 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                       desiredDistances: phaseDDesiredDistances,
                     });
                     setPhaseDFlowState(initialState);
+
+                    // bothモード時は 1F下屋辺フローも初期化（固定辺なし、ダミー startDistances）
+                    if (targetFloor === 'both' && uncoveredEdges1F.length > 0) {
+                      const initialState1F = initPhaseDFlowState({
+                        edgeIndices: uncoveredEdges1F.map(e => e.index),
+                        lockedEdgeIndices: new Set(),
+                        startDistances: {
+                          face1EdgeIndex: -1,
+                          face1DistanceMm: 900,
+                          face2EdgeIndex: -1,
+                          face2DistanceMm: 900,
+                        },
+                        desiredDistances: phaseDDesiredDistances1F,
+                      });
+                      setPhaseDFlowState1F(initialState1F);
+                    } else {
+                      setPhaseDFlowState1F(null);
+                    }
+
                     setPhaseDStep('sequential');
                   }}
                 >
