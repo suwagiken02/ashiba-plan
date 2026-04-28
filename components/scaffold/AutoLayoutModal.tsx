@@ -14,6 +14,7 @@ import {
   placeHandrailsForEdge,
   getEdgesNotCoveredBy,
   isConvexCorner,
+  generateSequentialCandidates,
   AutoLayoutResult,
   EdgeInfo,
   SequentialLayoutResult,
@@ -1211,33 +1212,128 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 </div>
               </div>
 
-              {/* 候補ボタン */}
-              <div className="p-4 space-y-2">
-                {activeEdgeResult.candidates.map((cand, idx) => {
-                  const isSmaller = cand.diffFromDesired < 0;
-                  return (
-                    <button
-                      key={idx}
-                      onClick={() => handleSequentialSelect(activeEdge.floor, activeEdge.index, idx)}
-                      className="w-full p-3 border border-dark-border rounded-xl bg-dark-bg hover:border-accent hover:bg-accent/10 transition-colors text-left"
-                    >
-                      <div className="text-[10px] text-dimension mb-1">
-                        候補{idx + 1}（{isSmaller ? '小さめ' : '大きめ'}）
-                      </div>
-                      <div className="flex flex-wrap gap-1 mb-2">
-                        {cand.rails.map((r, ri) => (
-                          <span key={ri} className="px-1.5 py-0.5 bg-handrail/20 text-handrail text-[11px] font-mono rounded">
-                            {r}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="text-xs font-mono text-accent">
-                        → 次の面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
-                      </div>
-                    </button>
+              {/* Phase I-3: 候補ヘッダー + 候補カード + 操作ボタン */}
+              {(() => {
+                // 操作ボタンに必要な context を IIFE 内で組み立て
+                const activeAdjustments = activeEdge.floor === 2 ? userAdjustments2F : userAdjustments1F;
+                const activeAdj = activeAdjustments[activeEdge.index] ?? DEFAULT_EDGE_ADJUSTMENT;
+                const nPreview = previewEdges.length;
+                const nextEdge = previewEdges[(activeEdgeResult.edge.index + 1) % nPreview];
+                // 物理 prev の startDist を取得（bothmode 1F filtered の場合は近似値 fallback）
+                const prevPhysIdx = (activeEdgeResult.edge.index - 1 + nPreview) % nPreview;
+                const prevER = activeSeqResult.edgeResults.find(er => er.edge.index === prevPhysIdx);
+                const prevStartForProbe = prevER ? prevER.startDistanceMm : (activeEdgeResult.startDistanceMm ?? 900);
+
+                // 「→」枯れ判定: 該当 side で offsetIdx+1 の候補が存在するか probe
+                const canAdvanceOffset = (side: 'larger' | 'smaller'): boolean => {
+                  const probeAdj = {
+                    larger: side === 'larger'
+                      ? { offsetIdx: activeAdj.larger.offsetIdx + 1, variationIdx: 0 }
+                      : { offsetIdx: 0, variationIdx: 0 },
+                    smaller: side === 'smaller'
+                      ? { offsetIdx: activeAdj.smaller.offsetIdx + 1, variationIdx: 0 }
+                      : { offsetIdx: 0, variationIdx: 0 },
+                  };
+                  const probe = generateSequentialCandidates(
+                    activeEdgeResult.edge.lengthMm,
+                    activeEdgeResult.startDistanceMm,
+                    activeEdgeResult.desiredEndDistanceMm,
+                    activeEdgeResult.prevCornerIsConvex,
+                    activeEdgeResult.nextCornerIsConvex,
+                    prevStartForProbe,
+                    enabledSizes,
+                    priorityConfig,
+                    probeAdj.larger.offsetIdx,
+                    probeAdj.smaller.offsetIdx,
+                    probeAdj.larger.variationIdx,
+                    probeAdj.smaller.variationIdx,
                   );
-                })}
-              </div>
+                  return probe.some(c => c.side === side);
+                };
+
+                return (
+                  <>
+                    {/* 候補ヘッダー */}
+                    <div className="px-4 pt-3 pb-1 text-xs font-bold text-canvas">
+                      {activeEdgeResult.edge.label}面の割付候補
+                    </div>
+
+                    {/* 候補カードリスト */}
+                    <div className="px-4 pb-4 space-y-2">
+                      {activeEdgeResult.candidates.map((cand, idx) => {
+                        // exact は ←/→ が無意味なので disabled。割り変更は smallerVariationIdx 流用で機能。
+                        const isExact = cand.side === 'exact';
+                        const sideLabel = isExact ? 'ぴったり' : cand.side === 'smaller' ? '小さめ' : '大きめ';
+                        // ←/→ ハンドラに渡す side: exact のときは smaller (Phase I-1 仕様準拠)
+                        const sideForHandler: 'larger' | 'smaller' = cand.side === 'exact' ? 'smaller' : cand.side;
+                        const sideOffsetIdx = sideForHandler === 'larger'
+                          ? activeAdj.larger.offsetIdx
+                          : activeAdj.smaller.offsetIdx;
+
+                        // 「割り変更」disabled: 次の variation がない (= 最後 or 唯一)
+                        const variationDisabled = cand.variationIdx + 1 >= cand.variationCount;
+                        // ←: exact では disabled、それ以外は offsetIdx===0 で disabled
+                        const prevDisabled = isExact || sideOffsetIdx === 0;
+                        // →: exact では disabled、それ以外は probe で枯れ判定
+                        const nextDisabled = isExact || !canAdvanceOffset(sideForHandler);
+
+                        return (
+                          <div
+                            key={idx}
+                            className="border border-dark-border rounded-xl bg-dark-bg overflow-hidden"
+                          >
+                            <button
+                              onClick={() => handleSequentialSelect(activeEdge.floor, activeEdge.index, idx)}
+                              className="w-full p-3 hover:bg-accent/10 hover:border-accent transition-colors text-left"
+                            >
+                              <div className="text-[10px] text-dimension mb-1">
+                                候補{idx + 1}（{sideLabel}）
+                              </div>
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                {cand.rails.map((r, ri) => (
+                                  <span key={ri} className="px-1.5 py-0.5 bg-handrail/20 text-handrail text-[11px] font-mono rounded">
+                                    {r}
+                                  </span>
+                                ))}
+                              </div>
+                              <div className="text-xs font-mono text-accent">
+                                → {nextEdge.label}面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
+                              </div>
+                            </button>
+                            {/* 操作ボタン行: 割り変更 / ← / → */}
+                            <div className="px-3 pb-3 flex gap-2 items-center">
+                              <button
+                                onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler)}
+                                disabled={variationDisabled}
+                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="同じ離れで別の rails パターンに切替"
+                              >
+                                割り変更 ({cand.variationIdx + 1}/{cand.variationCount})
+                              </button>
+                              <button
+                                onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
+                                disabled={prevDisabled}
+                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="前の離れに戻る"
+                              >
+                                ←
+                              </button>
+                              <button
+                                onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
+                                disabled={nextDisabled}
+                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="次の離れに進む"
+                              >
+                                →
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                );
+              })()}
 
               {/* フッター */}
               <div className="px-4 py-3 border-t border-dark-border flex gap-2 justify-between">
