@@ -33,44 +33,63 @@ export default function ObstacleLayer() {
   const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
   /**
-   * Phase M-6a: ドラッグ末尾の最終配置決定。
-   * 壁吸着とピン吸着の両方を評価し、補正距離が小さい方を採用する。
-   * 中心 (obs.x + dx + w/2, obs.y + dy + h/2) を refPoint として使用。
+   * Phase M-6a-corner-fix: 障害物のピン吸着を「最近傍角」方式に変更。
+   * - rect / polygon: 全角 × 全ピン から最良補正の組み合わせを選び、その角がピンに重なる
+   * - custom_circle: 角の概念がないため中心吸着のまま維持
+   * 壁吸着との優先順は M-6a 同様、補正距離が小さい方を採用。
    */
+  const getCornersForObstacle = (obs: Obstacle): { x: number; y: number }[] => {
+    if (obs.type === 'custom_circle') {
+      // 円形は中心1点を refPoint として返す（既存仕様維持）
+      return [{ x: obs.x + obs.width / 2, y: obs.y + obs.height / 2 }];
+    }
+    if (obs.points && obs.points.length >= 3) {
+      // polygon: points は absolute グリッド座標
+      return obs.points.map(p => ({ x: p.x, y: p.y }));
+    }
+    // rect: 左上/右上/右下/左下
+    return [
+      { x: obs.x, y: obs.y },
+      { x: obs.x + obs.width, y: obs.y },
+      { x: obs.x + obs.width, y: obs.y + obs.height },
+      { x: obs.x, y: obs.y + obs.height },
+    ];
+  };
+
   const finalizeMove = (dx: number, dy: number, obs: Obstacle) => {
+    // ピン吸着優先: 全角 × 全ピン から最良補正を探す
+    const pins = canvasData.magnetPins ?? [];
+    const corners = getCornersForObstacle(obs);
+    let bestPinSnap: { dx: number; dy: number; pinId: string } | null = null;
+    let bestPinCorrection = Infinity;
+    for (const corner of corners) {
+      const newCorner = { x: corner.x + dx, y: corner.y + dy };
+      const snap = snapToMagnetPin(newCorner, pins, zoom);
+      if (snap) {
+        const corr = Math.hypot(snap.dx, snap.dy);
+        if (corr < bestPinCorrection) {
+          bestPinCorrection = corr;
+          bestPinSnap = snap;
+        }
+      }
+    }
+    if (bestPinSnap) {
+      // ピン優先: 壁吸着は無視
+      useCanvasStore.getState().moveElement(obs.id, dx + bestPinSnap.dx, dy + bestPinSnap.dy);
+      return;
+    }
+
+    // ピン圏外: 従来通り壁吸着を評価
     const newCx = obs.x + dx + obs.width / 2;
     const newCy = obs.y + dy + obs.height / 2;
-
-    // 壁吸着
     const wallSnapped = snapObstacleToWall({ x: newCx, y: newCy }, obs.width, obs.height, canvasData.buildings);
-    let wallCorrection = Infinity;
-    let wallDx: number | null = null;
-    let wallDy: number | null = null;
     if (wallSnapped) {
-      wallDx = wallSnapped.x - obs.x;
-      wallDy = wallSnapped.y - obs.y;
-      wallCorrection = Math.hypot(wallDx - dx, wallDy - dy);
+      useCanvasStore.getState().moveElement(obs.id, wallSnapped.x - obs.x, wallSnapped.y - obs.y);
+      return;
     }
 
-    // ピン吸着（中心が refPoint）
-    const pins = canvasData.magnetPins ?? [];
-    const pinSnap = snapToMagnetPin({ x: newCx, y: newCy }, pins, zoom);
-    let pinCorrection = Infinity;
-    let pinDx: number | null = null;
-    let pinDy: number | null = null;
-    if (pinSnap) {
-      pinDx = dx + pinSnap.dx;
-      pinDy = dy + pinSnap.dy;
-      pinCorrection = Math.hypot(pinSnap.dx, pinSnap.dy);
-    }
-
-    if (wallCorrection === Infinity && pinCorrection === Infinity) {
-      useCanvasStore.getState().moveElement(obs.id, dx, dy);
-    } else if (pinCorrection < wallCorrection) {
-      useCanvasStore.getState().moveElement(obs.id, pinDx!, pinDy!);
-    } else {
-      useCanvasStore.getState().moveElement(obs.id, wallDx!, wallDy!);
-    }
+    // 両方なし: 通常移動
+    useCanvasStore.getState().moveElement(obs.id, dx, dy);
   };
 
   return (
