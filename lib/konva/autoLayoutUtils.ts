@@ -318,11 +318,17 @@ export function findBestEndCombinations(
 // 「希望より大きい結果」「希望より小さい結果」を1つずつ、計2つ返す。
 // 端数0の候補があれば、それ1つだけを返す（自動進行用）。
 // ============================================================
-type SequentialCandidate = {
+export type SequentialCandidateSide = 'exact' | 'smaller' | 'larger';
+
+export type SequentialCandidate = {
   rails: HandrailLengthMm[];
   totalMm: number;
   actualEndDistanceMm: number;
   diffFromDesired: number;
+  // Phase I-1: 「割り変更」「←/→」操作の状態管理
+  side: SequentialCandidateSide;
+  variationIdx: number;     // この delta 内で何番目の rails パターンか (0-based, score 降順)
+  variationCount: number;   // この delta 内の総 rails パターン数 (UI の (m/N) 表示用)
 };
 
 /**
@@ -390,6 +396,14 @@ export function generateSequentialCandidates(
   prevEdgeStartDistanceMm: number,
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
   priorityConfig?: PriorityConfig,
+  // Phase I-1: 「←/→」「割り変更」UI 操作のための offset / variation 引数。
+  // - offsetIdx: 希望から何個目の delta を採用するか (0=最も近い)
+  // - variationIdx: その delta 内で何番目の rails パターンを使うか (0=最高 score)
+  // 全デフォルト 0 で既存挙動と完全互換。
+  largerOffsetIdx: number = 0,
+  smallerOffsetIdx: number = 0,
+  largerVariationIdx: number = 0,
+  smallerVariationIdx: number = 0,
 ): SequentialCandidate[] {
   if (enabledSizes.length === 0) return [];
 
@@ -399,62 +413,115 @@ export function generateSequentialCandidates(
   const startContribution = isPrevConvex ? prevEdgeStartDistanceMm : -prevEdgeStartDistanceMm;
   const MAX_DELTA = 1000;
 
-  // 同一 targetEnd で複数組合せが見つかった場合のスコア（priorityConfig なしは本数少ない順）
+  // priorityConfig なしは本数少ない順
   const scoreFn = (rails: HandrailLengthMm[]): number =>
     priorityConfig ? scoreCombination(rails, priorityConfig) : -rails.length;
 
-  const pickBest = (combos: HandrailLengthMm[][]): HandrailLengthMm[] =>
-    combos.reduce((a, b) => (scoreFn(b) > scoreFn(a) ? b : a));
+  // combos を score 降順で安定ソートして variationIdx 番目を取り出す
+  const pickVariation = (
+    combos: HandrailLengthMm[][],
+    variationIdx: number,
+  ): HandrailLengthMm[] | null => {
+    if (combos.length === 0) return null;
+    const sorted = [...combos].sort((a, b) => scoreFn(b) - scoreFn(a));
+    if (variationIdx < 0 || variationIdx >= sorted.length) return null;
+    return sorted[variationIdx];
+  };
 
-  // smaller 側: targetEnd = desired - delta（delta は 0 から増加）
+  const buildCandidate = (
+    rails: HandrailLengthMm[],
+    targetEnd: number,
+    side: SequentialCandidateSide,
+    delta: number,
+    variationIdx: number,
+    variationCount: number,
+  ): SequentialCandidate => ({
+    rails,
+    totalMm: rails.reduce((a, b) => a + b, 0),
+    actualEndDistanceMm: targetEnd,
+    diffFromDesired: delta,
+    side,
+    variationIdx,
+    variationCount,
+  });
+
+  const isDefaultArgs =
+    largerOffsetIdx === 0 &&
+    smallerOffsetIdx === 0 &&
+    largerVariationIdx === 0 &&
+    smallerVariationIdx === 0;
+
+  // === exact (delta=0) 探索 ===
+  // exact 候補の variation 切替は smallerVariationIdx を流用（指示書に exact 専用引数なし）。
+  let exactCand: SequentialCandidate | undefined;
+  if (desiredEndDistanceMm >= 0) {
+    const exactCombos = findAllCombinationsForEnd(
+      edgeLengthMm, startContribution, desiredEndDistanceMm, isNextConvex, enabledSizes,
+    );
+    if (exactCombos.length > 0) {
+      const rails = pickVariation(exactCombos, smallerVariationIdx);
+      if (rails) {
+        exactCand = buildCandidate(
+          rails, desiredEndDistanceMm, 'exact', 0,
+          smallerVariationIdx, exactCombos.length,
+        );
+      }
+    }
+  }
+
+  // 既存互換: exact ありかつデフォルト引数 → exact 1 候補のみ返す（自動進行）
+  if (exactCand && isDefaultArgs) {
+    return [exactCand];
+  }
+
+  // === smaller 側 (delta = -1, -2, ...) を smallerOffsetIdx 番目まで探索 ===
   let smallerCand: SequentialCandidate | undefined;
-  for (let delta = 0; delta <= MAX_DELTA; delta++) {
+  let smallerFoundCount = 0;
+  for (let delta = 1; delta <= MAX_DELTA; delta++) {
     const targetEnd = desiredEndDistanceMm - delta;
     if (targetEnd < 0) break;
-
     const combos = findAllCombinationsForEnd(
       edgeLengthMm, startContribution, targetEnd, isNextConvex, enabledSizes,
     );
-    if (combos.length > 0) {
-      const best = pickBest(combos);
-      const railsTotal = best.reduce((a, b) => a + b, 0);
-      smallerCand = {
-        rails: best,
-        totalMm: railsTotal,
-        actualEndDistanceMm: targetEnd,
-        diffFromDesired: delta === 0 ? 0 : -delta,
-      };
+    if (combos.length === 0) continue;
+    if (smallerFoundCount === smallerOffsetIdx) {
+      const rails = pickVariation(combos, smallerVariationIdx);
+      if (rails) {
+        smallerCand = buildCandidate(
+          rails, targetEnd, 'smaller', -delta,
+          smallerVariationIdx, combos.length,
+        );
+      }
+      // variationIdx で枯れた場合も配列に含めない
       break;
     }
+    smallerFoundCount++;
   }
 
-  // delta=0 で見つかった = exact: 1候補のみ返す（自動進行）
-  if (smallerCand && smallerCand.diffFromDesired === 0) {
-    return [smallerCand];
-  }
-
-  // larger 側: targetEnd = desired + delta（delta は 1 から）
+  // === larger 側 (delta = +1, +2, ...) を largerOffsetIdx 番目まで探索 ===
   let largerCand: SequentialCandidate | undefined;
+  let largerFoundCount = 0;
   for (let delta = 1; delta <= MAX_DELTA; delta++) {
     const targetEnd = desiredEndDistanceMm + delta;
-
     const combos = findAllCombinationsForEnd(
       edgeLengthMm, startContribution, targetEnd, isNextConvex, enabledSizes,
     );
-    if (combos.length > 0) {
-      const best = pickBest(combos);
-      const railsTotal = best.reduce((a, b) => a + b, 0);
-      largerCand = {
-        rails: best,
-        totalMm: railsTotal,
-        actualEndDistanceMm: targetEnd,
-        diffFromDesired: delta,
-      };
+    if (combos.length === 0) continue;
+    if (largerFoundCount === largerOffsetIdx) {
+      const rails = pickVariation(combos, largerVariationIdx);
+      if (rails) {
+        largerCand = buildCandidate(
+          rails, targetEnd, 'larger', delta,
+          largerVariationIdx, combos.length,
+        );
+      }
       break;
     }
+    largerFoundCount++;
   }
 
   const result: SequentialCandidate[] = [];
+  if (exactCand) result.push(exactCand);
   if (smallerCand) result.push(smallerCand);
   if (largerCand) result.push(largerCand);
   return result;
