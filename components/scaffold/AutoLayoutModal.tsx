@@ -363,6 +363,31 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [userAdjustments1F, setUserAdjustments1F] = useState<Record<number, EdgeAdjustment>>({});
   const [activeEdge, setActiveEdge] = useState<{ floor: 1 | 2; index: number } | null>(null);
 
+  // Phase I-3-fix: 順次決定の表示順を scaffoldStart 起点 cascade 順に並べ替え。
+  // 内部 cascade は (startIdx + k) % n で進むが edgeResults は物理 index 順で格納されるため、
+  // UI 側で改めて cascade 順に並べ直す。scaffoldStart 無し時は startIdx=0 (= 物理順)。
+  // ハンドラ内 (state 更新前の seqResult を扱う) でも使えるよう純粋関数として定義。
+  const startIdxFor2F = useMemo(() => {
+    if (!sequentialResult2F || !scaffoldStart) return 0;
+    const n = sequentialResult2F.edgeResults.length;
+    return n > 0 ? (scaffoldStart.startVertexIndex ?? 0) % n : 0;
+  }, [sequentialResult2F, scaffoldStart]);
+  const getCascadeOrderedEdges = (seqResult: SequentialLayoutResult, startIdx: number) => {
+    const n = seqResult.edgeResults.length;
+    if (n === 0) return [];
+    return Array.from({ length: n }, (_, k) => seqResult.edgeResults[(startIdx + k) % n]);
+  };
+  const cascadeOrdered2F = useMemo(() => {
+    if (!sequentialResult2F) return null;
+    return getCascadeOrderedEdges(sequentialResult2F, startIdxFor2F);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sequentialResult2F, startIdxFor2F]);
+  // 1F は scaffoldStart 無し設計 (bothmode 1F 下屋辺)。startIdx=0 で物理 index 順 = 既存挙動。
+  const cascadeOrdered1F = useMemo(() => {
+    if (!sequentialResult1F) return null;
+    return [...sequentialResult1F.edgeResults];
+  }, [sequentialResult1F]);
+
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
   const setDistance = (idx: number, value: number) => {
@@ -420,12 +445,19 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     res.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
     setSelections(sel);
 
-    // activeEdge を決定: 2F が未解決ならまず 2F、2F 解決済なら 1F へ
-    const firstUnresolved2F = seqRes2F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
-    if (seqRes2F.hasUnresolved && firstUnresolved2F) {
+    // Phase I-3-fix: cascade 順で「最初の未解決辺」を探す
+    // 起点辺・閉じ辺も対象 (isLocked スキップを廃止、isAutoProgress のみスキップ)
+    const startIdx2F = scaffoldStart && seqRes2F.edgeResults.length > 0
+      ? (scaffoldStart.startVertexIndex ?? 0) % seqRes2F.edgeResults.length
+      : 0;
+    const ordered2F = getCascadeOrderedEdges(seqRes2F, startIdx2F);
+    const firstUnresolved2F = ordered2F.find(er => !er.isAutoProgress);
+    const has2FUnresolved = firstUnresolved2F !== undefined;
+    if (has2FUnresolved && firstUnresolved2F) {
       setActiveEdge({ floor: 2, index: firstUnresolved2F.edge.index });
-    } else if (seqRes1F && seqRes1F.hasUnresolved) {
-      const firstUnresolved1F = seqRes1F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
+    } else if (seqRes1F) {
+      const ordered1F = getCascadeOrderedEdges(seqRes1F, 0);
+      const firstUnresolved1F = ordered1F.find(er => !er.isAutoProgress);
       if (firstUnresolved1F) {
         setActiveEdge({ floor: 1, index: firstUnresolved1F.edge.index });
       } else {
@@ -476,11 +508,15 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       adapted.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
       setSelections(sel);
 
-      // 2F 内で次の未解決辺を探す
-      const currentIdx2F = seqRes2F.edgeResults.findIndex(er => er.edge.index === edgeIndex);
-      const next2F = seqRes2F.edgeResults
+      // Phase I-3-fix: cascade 順で次の未解決辺を探す
+      const startIdx2F = scaffoldStart && seqRes2F.edgeResults.length > 0
+        ? (scaffoldStart.startVertexIndex ?? 0) % seqRes2F.edgeResults.length
+        : 0;
+      const ordered2F = getCascadeOrderedEdges(seqRes2F, startIdx2F);
+      const currentIdx2F = ordered2F.findIndex(er => er.edge.index === edgeIndex);
+      const next2F = ordered2F
         .slice(currentIdx2F + 1)
-        .find(er => !er.isLocked && !er.isAutoProgress);
+        .find(er => !er.isAutoProgress);
 
       if (next2F) {
         setActiveEdge({ floor: 2, index: next2F.edge.index });
@@ -488,8 +524,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       }
 
       // 2F 全解決 → 1F 下屋辺の最初の未解決へ（あれば）
-      if (sequentialResult1F && sequentialResult1F.hasUnresolved) {
-        const first1F = sequentialResult1F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
+      if (sequentialResult1F) {
+        const ordered1F = getCascadeOrderedEdges(sequentialResult1F, 0);
+        const first1F = ordered1F.find(er => !er.isAutoProgress);
         if (first1F) {
           setActiveEdge({ floor: 1, index: first1F.edge.index });
           return;
@@ -510,11 +547,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         adaptedSub.edgeLayouts.forEach(el => { selSub[el.edge.index] = el.selectedIndex; });
         setSelectionsSub(selSub);
 
-        // 1F 内で次の未解決辺を探す
-        const currentIdx1F = seqRes1F.edgeResults.findIndex(er => er.edge.index === edgeIndex);
-        const next1F = seqRes1F.edgeResults
+        // Phase I-3-fix: 1F は scaffoldStart 無し → cascade 順 = 物理 index 順
+        const ordered1F = getCascadeOrderedEdges(seqRes1F, 0);
+        const currentIdx1F = ordered1F.findIndex(er => er.edge.index === edgeIndex);
+        const next1F = ordered1F
           .slice(currentIdx1F + 1)
-          .find(er => !er.isLocked && !er.isAutoProgress);
+          .find(er => !er.isAutoProgress);
         if (next1F) {
           setActiveEdge({ floor: 1, index: next1F.edge.index });
           return;
@@ -530,12 +568,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     if (!building || !activeEdge) return;
 
     if (activeEdge.floor === 1 && sequentialResult1F) {
-      // 1F 内で前の未解決辺を探す
-      const currentIdx = sequentialResult1F.edgeResults.findIndex(er => er.edge.index === activeEdge.index);
-      const prev1F = sequentialResult1F.edgeResults
+      // Phase I-3-fix: cascade 順で前の未解決辺を探す
+      const ordered1F = getCascadeOrderedEdges(sequentialResult1F, 0);
+      const currentIdx = ordered1F.findIndex(er => er.edge.index === activeEdge.index);
+      const prev1F = ordered1F
         .slice(0, currentIdx)
         .reverse()
-        .find(er => !er.isLocked && !er.isAutoProgress);
+        .find(er => !er.isAutoProgress);
       if (prev1F) {
         const newSelections1F = { ...userSelections1F };
         delete newSelections1F[prev1F.edge.index];
@@ -549,11 +588,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         setActiveEdge({ floor: 1, index: prev1F.edge.index });
         return;
       }
-      // 1F 内に戻る先なし → 2F の最後の解決辺に戻る
+      // 1F 内に戻る先なし → 2F の最後の未解決辺に戻る (cascade 順)
       if (sequentialResult2F) {
-        const last2F = [...sequentialResult2F.edgeResults]
-          .reverse()
-          .find(er => !er.isLocked && !er.isAutoProgress);
+        const startIdx2F = scaffoldStart && sequentialResult2F.edgeResults.length > 0
+          ? (scaffoldStart.startVertexIndex ?? 0) % sequentialResult2F.edgeResults.length
+          : 0;
+        const ordered2F = getCascadeOrderedEdges(sequentialResult2F, startIdx2F);
+        const last2F = [...ordered2F].reverse().find(er => !er.isAutoProgress);
         if (last2F) {
           const newSelections2F = { ...userSelections2F };
           delete newSelections2F[last2F.edge.index];
@@ -573,11 +614,16 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
     // 2F の場合
     if (activeEdge.floor === 2 && sequentialResult2F) {
-      const currentIdx = sequentialResult2F.edgeResults.findIndex(er => er.edge.index === activeEdge.index);
-      const prev2F = sequentialResult2F.edgeResults
+      // Phase I-3-fix: cascade 順で前の未解決辺を探す
+      const startIdx2F = scaffoldStart && sequentialResult2F.edgeResults.length > 0
+        ? (scaffoldStart.startVertexIndex ?? 0) % sequentialResult2F.edgeResults.length
+        : 0;
+      const ordered2F = getCascadeOrderedEdges(sequentialResult2F, startIdx2F);
+      const currentIdx = ordered2F.findIndex(er => er.edge.index === activeEdge.index);
+      const prev2F = ordered2F
         .slice(0, currentIdx)
         .reverse()
-        .find(er => !er.isLocked && !er.isAutoProgress);
+        .find(er => !er.isAutoProgress);
       if (!prev2F) return;
       const newSelections2F = { ...userSelections2F };
       delete newSelections2F[prev2F.edge.index];
@@ -654,11 +700,17 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     floor: 1 | 2,
     edgeIndex: number,
     side: 'larger' | 'smaller',
+    direction: 'next' | 'prev' = 'next',
   ) => {
-    applyAdjustmentsUpdate(floor, edgeIndex, cur => ({
-      ...cur,
-      [side]: { ...cur[side], variationIdx: cur[side].variationIdx + 1 },
-    }));
+    applyAdjustmentsUpdate(floor, edgeIndex, cur => {
+      const curVar = cur[side].variationIdx;
+      if (direction === 'prev' && curVar === 0) return null; // ガード: 0 未満には行かない
+      const newVar = direction === 'next' ? curVar + 1 : curVar - 1;
+      return {
+        ...cur,
+        [side]: { ...cur[side], variationIdx: newVar },
+      };
+    });
   };
 
   const handleOffsetChange = (
@@ -1157,13 +1209,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         const activeEdgeResult = activeSeqResult.edgeResults.find(er => er.edge.index === activeEdge.index);
         if (!activeEdgeResult) return null;
 
-        // 進捗: 2F の未解決数 + 1F の未解決数の合計内で「現在何番目か」
-        const unresolved2F = sequentialResult2F
-          ? sequentialResult2F.edgeResults.filter(er => !er.isLocked && !er.isAutoProgress)
-          : [];
-        const unresolved1F = sequentialResult1F
-          ? sequentialResult1F.edgeResults.filter(er => !er.isLocked && !er.isAutoProgress)
-          : [];
+        // Phase I-3-fix: 進捗は cascade 順 (起点辺・閉じ辺も含む、autoProgress のみスキップ)
+        const unresolved2F = (cascadeOrdered2F ?? []).filter(er => !er.isAutoProgress);
+        const unresolved1F = (cascadeOrdered1F ?? []).filter(er => !er.isAutoProgress);
         const totalNum = unresolved2F.length + unresolved1F.length;
         const currentNum = activeEdge.floor === 2
           ? unresolved2F.findIndex(er => er.edge.index === activeEdge.index) + 1
@@ -1205,7 +1253,20 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 </div>
                 <div className="text-[11px] text-dimension mt-1">
                   始点離れ: <span className="font-mono text-canvas">{activeEdgeResult.startDistanceMm}mm</span>
-                  <span className="ml-1">（前辺の終端から継承）</span>
+                  <span className="ml-1">
+                    {(() => {
+                      // 起点辺/閉じ辺判定: 2F のみ scaffoldStart 利用、1F は scaffoldStart=undefined
+                      if (activeEdge.floor !== 2 || !scaffoldStart) {
+                        return '（前辺の終端から継承）';
+                      }
+                      const nP = previewEdges.length;
+                      const sIdx = (scaffoldStart.startVertexIndex ?? 0) % nP;
+                      const cIdx = (sIdx - 1 + nP) % nP;
+                      if (activeEdgeResult.edge.index === sIdx) return '（足場開始で固定）';
+                      if (activeEdgeResult.edge.index === cIdx) return '（足場開始で固定 - 閉じ辺）';
+                      return '（前辺の終端から継承）';
+                    })()}
+                  </span>
                 </div>
                 <div className="text-[11px] text-dimension">
                   希望する次の面の離れ: <span className="font-mono text-canvas">{activeEdgeResult.desiredEndDistanceMm}mm</span>
@@ -1219,6 +1280,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 const activeAdj = activeAdjustments[activeEdge.index] ?? DEFAULT_EDGE_ADJUSTMENT;
                 const nPreview = previewEdges.length;
                 const nextEdge = previewEdges[(activeEdgeResult.edge.index + 1) % nPreview];
+                // Phase I-3-fix: 閉じ辺判定 (2F のみ、scaffoldStart 必須)
+                const sIdx = activeEdge.floor === 2 && scaffoldStart
+                  ? (scaffoldStart.startVertexIndex ?? 0) % nPreview
+                  : 0;
+                const closeIdx = (sIdx - 1 + nPreview) % nPreview;
+                const isCloseCorner = activeEdge.floor === 2 && !!scaffoldStart
+                  && activeEdgeResult.edge.index === closeIdx;
                 // 物理 prev の startDist を取得（bothmode 1F filtered の場合は近似値 fallback）
                 const prevPhysIdx = (activeEdgeResult.edge.index - 1 + nPreview) % nPreview;
                 const prevER = activeSeqResult.edgeResults.find(er => er.edge.index === prevPhysIdx);
@@ -1270,12 +1338,14 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           ? activeAdj.larger.offsetIdx
                           : activeAdj.smaller.offsetIdx;
 
-                        // 「割り変更」disabled: 次の variation がない (= 最後 or 唯一)
-                        const variationDisabled = cand.variationIdx + 1 >= cand.variationCount;
-                        // ←: exact では disabled、それ以外は offsetIdx===0 で disabled
-                        const prevDisabled = isExact || sideOffsetIdx === 0;
-                        // →: exact では disabled、それ以外は probe で枯れ判定
-                        const nextDisabled = isExact || !canAdvanceOffset(sideForHandler);
+                        // 「割り変更←」: variationIdx === 0 で disabled
+                        const variationPrevDisabled = cand.variationIdx === 0;
+                        // 「割り変更→」: 次の variation がない (= 最後 or 唯一) で disabled
+                        const variationNextDisabled = cand.variationIdx + 1 >= cand.variationCount;
+                        // 「←」: exact / 閉じ辺 / offsetIdx===0 で disabled
+                        const prevDisabled = isExact || isCloseCorner || sideOffsetIdx === 0;
+                        // 「→」: exact / 閉じ辺 / probe で枯れ で disabled
+                        const nextDisabled = isExact || isCloseCorner || !canAdvanceOffset(sideForHandler);
 
                         return (
                           <div
@@ -1300,16 +1370,31 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                                 → {nextEdge.label}面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
                               </div>
                             </button>
-                            {/* 操作ボタン行: 割り変更 / ← / → */}
-                            <div className="px-3 pb-3 flex gap-2 items-center">
+                            {/* Phase I-3-fix: 操作ボタン行
+                                [割り変更←] [(n/N)] [割り変更→] | [←] [→]
+                                左グループ = 同じ離れの rails パターン切替 (variation)
+                                右グループ = 離れを進める/戻す (offsetIdx) */}
+                            <div className="px-3 pb-3 flex gap-1.5 items-center flex-wrap">
                               <button
-                                onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler)}
-                                disabled={variationDisabled}
+                                onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
+                                disabled={variationPrevDisabled}
                                 className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="同じ離れで別の rails パターンに切替"
+                                title="前の rails パターンに戻る"
                               >
-                                割り変更 ({cand.variationIdx + 1}/{cand.variationCount})
+                                割り変更←
                               </button>
+                              <span className="px-1 text-[11px] font-mono text-dimension">
+                                ({cand.variationIdx + 1}/{cand.variationCount})
+                              </span>
+                              <button
+                                onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
+                                disabled={variationNextDisabled}
+                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
+                                title="次の rails パターンに切替"
+                              >
+                                割り変更→
+                              </button>
+                              <span className="mx-1 text-dimension/30">|</span>
                               <button
                                 onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
                                 disabled={prevDisabled}
