@@ -384,12 +384,19 @@ export function generateSequentialCandidates(
   desiredEndDistanceMm: number,
   isPrevConvex: boolean,
   isNextConvex: boolean,
+  // Phase H-fix-2a: 前辺の wall 距離 (= 物理 prev edge の startDist)。
+  // cursor 計算 (effectiveMm = edgeLen + s_{i-1} + s_{i+1}) と整合させるため、
+  // startContribution は「前辺の startDist」を使う（自身の startDist ではない）。
+  prevEdgeStartDistanceMm: number,
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
   priorityConfig?: PriorityConfig,
 ): SequentialCandidate[] {
   if (enabledSizes.length === 0) return [];
 
-  const startContribution = isPrevConvex ? startDistanceMm : -startDistanceMm;
+  // startDistanceMm はインターフェース互換のため受け取るが、
+  // requiredRailsTotal の計算には prevEdgeStartDistanceMm を使う。
+  void startDistanceMm;
+  const startContribution = isPrevConvex ? prevEdgeStartDistanceMm : -prevEdgeStartDistanceMm;
   const MAX_DELTA = 1000;
 
   // 同一 targetEnd で複数組合せが見つかった場合のスコア（priorityConfig なしは本数少ない順）
@@ -491,11 +498,18 @@ export function computeAutoLayoutSequential(
   const edges = getBuildingEdgesClockwise(building);
   const n = edges.length;
 
+  // Phase H-fix-2b: 順次決定の起点を scaffoldStart にローテート。
+  // edges[startIdx]   = out edge (角から出る辺、cascade 起点、face で初期化)
+  // edges[startIdx-1] = in edge  (角に入る辺、cascade 終点、face で閉合)
+  // scaffoldStart 無し時は startIdx=0 → 旧来 i=0 起点と一致 (後方互換)
+  const startIdx = scaffoldStart && n >= 2
+    ? (scaffoldStart.startVertexIndex ?? 0) % n
+    : 0;
+
   // lockedIndices: 既存 computeAutoLayout のロジックをそのまま使用
   const lockedIndices = new Set<number>();
   if (scaffoldStart && n >= 2) {
-    const startIdx = scaffoldStart.startVertexIndex ?? 0;
-    lockedIndices.add(edges[startIdx % n].index);
+    lockedIndices.add(edges[startIdx].index);
     lockedIndices.add(edges[(startIdx - 1 + n) % n].index);
   }
 
@@ -506,34 +520,43 @@ export function computeAutoLayoutSequential(
     cornerConvexity.push(isConvexCorner(edges[i], next));
   }
 
-  // 順次決定パス: 座標以外の情報を確定
+  // 順次決定パス: 座標以外の情報を確定。
+  // ループ順は scaffoldStart 起点 (k=0 で out edge、k=n-1 で in edge)。
+  // intermediate は edges 物理 index 順で格納 → 2 パス目 (cursor 計算) は無変更で動作。
   type Intermediate = Omit<
     SequentialEdgeResult,
     'scaffoldCoord' | 'cursorStart' | 'cursorEnd' | 'effectiveMm'
   >;
-  const intermediate: Intermediate[] = [];
+  const intermediate: Intermediate[] = new Array(n);
   let prevEndDistanceMm: number | undefined = undefined;
   let hasUnresolved = false;
 
-  for (let i = 0; i < n; i++) {
+  for (let k = 0; k < n; k++) {
+    const i = (startIdx + k) % n;
     const edge = edges[i];
     const isLocked = lockedIndices.has(edge.index);
     const prevCornerIsConvex = cornerConvexity[(i - 1 + n) % n];
     const nextCornerIsConvex = cornerConvexity[i];
 
     // 始点離れの決定
+    // - k===0: 起点辺。scaffoldStart があれば locked = face1/2、無ければ distances or 900
+    // - k===n-1: 閉じ辺。scaffoldStart があれば locked = face1/2 で cascade を上書きして閉合
+    // - その他: 前辺 (cascade k-1) の actualEnd を継承
     let startDistanceMm: number;
-    if (i === 0) {
+    if (k === 0) {
       if (scaffoldStart && isLocked) {
-        // scaffoldStart の対応 face を使う（水平面=face1 / 垂直面=face2）
         startDistanceMm = edge.handrailDir === 'horizontal'
           ? scaffoldStart.face1DistanceMm
           : scaffoldStart.face2DistanceMm;
       } else {
         startDistanceMm = distances[edge.index] ?? 900;
       }
+    } else if (k === n - 1 && scaffoldStart && isLocked) {
+      // 閉じ辺: もう一方の locked を face で固定 (cascade 値を捨てる)
+      startDistanceMm = edge.handrailDir === 'horizontal'
+        ? scaffoldStart.face1DistanceMm
+        : scaffoldStart.face2DistanceMm;
     } else {
-      // 2番目以降: 前辺の終点離れを継承
       startDistanceMm = prevEndDistanceMm ?? distances[edge.index] ?? 900;
     }
 
@@ -541,12 +564,25 @@ export function computeAutoLayoutSequential(
     const nextEdge = edges[(i + 1) % n];
     const desiredEndDistanceMm = distances[nextEdge.index] ?? 900;
 
+    // Phase H-fix-2a: 前辺 wall 距離 = 物理 prev edge の startDist
+    // 物理 prev = (i-1+n)%n は cascade 順では k-1 (= 前回処理した辺) と一致するため、
+    // k>=1 では intermediate[prevIdx] が既に書き込み済み。
+    // k===0 のみ物理 prev = 閉じ辺 (cascade 最後で確定) → ユーザー入力 distances から取る。
+    // scaffoldStart 有り時は AutoLayoutModal が distances[locked_edge.index] = face で
+    // 初期化するため、k=0 起点辺の prevEdgeStart と k=n-1 閉じ辺の上書き値 (face) が
+    // 一致 → 閉合誤差ゼロ。scaffoldStart 無し時は edges[n-1]/edges[0] 境界に残存。
+    const prevIdx = (i - 1 + n) % n;
+    const prevEdgeStartDistanceMm = k === 0
+      ? distances[edges[prevIdx].index] ?? 900
+      : intermediate[prevIdx].startDistanceMm;
+
     const candidates = generateSequentialCandidates(
       edge.lengthMm,
       startDistanceMm,
       desiredEndDistanceMm,
       prevCornerIsConvex,
       nextCornerIsConvex,
+      prevEdgeStartDistanceMm,
       enabledSizes,
       priorityConfig,
     );
@@ -557,7 +593,7 @@ export function computeAutoLayoutSequential(
     const isAutoProgress = candidates.length === 1;
     if (!isLocked && !isAutoProgress) hasUnresolved = true;
 
-    intermediate.push({
+    intermediate[i] = {
       edge,
       startDistanceMm,
       desiredEndDistanceMm,
@@ -567,7 +603,7 @@ export function computeAutoLayoutSequential(
       isAutoProgress,
       prevCornerIsConvex,
       nextCornerIsConvex,
-    });
+    };
 
     if (candidates.length > 0) {
       prevEndDistanceMm = candidates[selectedIndex].actualEndDistanceMm;
