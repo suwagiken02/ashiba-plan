@@ -6,7 +6,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { HandrailLengthMm, HandrailDirection, AntiWidth, ObstacleType } from '@/types';
 import { screenToGrid, INITIAL_GRID_PX, mmToGrid } from '@/lib/konva/gridUtils';
-import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints, snapObstacleToWall } from '@/lib/konva/snapUtils';
+import { snapHandrailPlacement, snapToHandrail, getHandrailEndpoints, snapObstacleToWall, snapToMagnetPin } from '@/lib/konva/snapUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import NumInput from '@/components/ui/NumInput';
 
@@ -358,9 +358,44 @@ export default function PartSelector() {
         } else if (toolbarDrag.type === 'obstacle') {
           const wGrid = mmToGrid(toolbarDrag.widthMm);
           const hGrid = mmToGrid(toolbarDrag.heightMm);
-          const snapped = snapObstacleToWall(gridPos, wGrid, hGrid, canvasData.buildings);
-          const finalX = snapped ? snapped.x : gridPos.x - Math.round(wGrid / 2);
-          const finalY = snapped ? snapped.y : gridPos.y - Math.round(hGrid / 2);
+
+          // Phase M-6a-place: ピン優先吸着（最近傍角×最近傍ピン）
+          const cx = gridPos.x;
+          const cy = gridPos.y;
+          const corners = toolbarDrag.obstacleType === 'custom_circle'
+            ? [{ x: cx, y: cy }]
+            : [
+                { x: cx - wGrid / 2, y: cy - hGrid / 2 },
+                { x: cx + wGrid / 2, y: cy - hGrid / 2 },
+                { x: cx + wGrid / 2, y: cy + hGrid / 2 },
+                { x: cx - wGrid / 2, y: cy + hGrid / 2 },
+              ];
+          const pins = canvasData.magnetPins ?? [];
+          let bestPinSnap: { dx: number; dy: number; pinId: string } | null = null;
+          let bestCorr = Infinity;
+          for (const c of corners) {
+            const snap = snapToMagnetPin(c, pins, zoom);
+            if (snap) {
+              const corr = Math.hypot(snap.dx, snap.dy);
+              if (corr < bestCorr) {
+                bestCorr = corr;
+                bestPinSnap = snap;
+              }
+            }
+          }
+
+          let finalX: number;
+          let finalY: number;
+          if (bestPinSnap) {
+            // ピン優先: 中心を補正してから左上算出
+            finalX = Math.round(cx + bestPinSnap.dx - wGrid / 2);
+            finalY = Math.round(cy + bestPinSnap.dy - hGrid / 2);
+          } else {
+            // ピン圏外: 既存の壁スナップ → カーソル中心配置
+            const snapped = snapObstacleToWall(gridPos, wGrid, hGrid, canvasData.buildings);
+            finalX = snapped ? snapped.x : gridPos.x - Math.round(wGrid / 2);
+            finalY = snapped ? snapped.y : gridPos.y - Math.round(hGrid / 2);
+          }
           addObstacle({ id: uuidv4(), type: toolbarDrag.obstacleType, x: finalX, y: finalY, width: wGrid, height: hGrid });
         }
       }
