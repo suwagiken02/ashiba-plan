@@ -9,7 +9,6 @@ import NumInput from '@/components/ui/NumInput';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import {
   getBuildingEdgesClockwise,
-  computeAutoLayout,
   computeAutoLayoutSequential,
   sequentialResultToAutoLayoutResult,
   placeHandrailsForEdge,
@@ -17,7 +16,6 @@ import {
   isConvexCorner,
   AutoLayoutResult,
   EdgeInfo,
-  EdgeLayout,
   SequentialLayoutResult,
 } from '@/lib/konva/autoLayoutUtils';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
@@ -350,14 +348,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [showLockedAlert, setShowLockedAlert] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
-  const [distanceSuggestions, setDistanceSuggestions] = useState<{
-    edgeIndex: number;
-    edgeLabel: string;
-    currentDist: number;
-    suggestions: number[];
-  }[]>([]);
-  const [currentSuggestionIdx, setCurrentSuggestionIdx] = useState(0);
-
   // Phase H-3b-2-1: 順次決定の状態管理
   const [sequentialResult, setSequentialResult] = useState<SequentialLayoutResult | null>(null);
   const [userSelections, setUserSelections] = useState<Record<number, number>>({});
@@ -372,38 +362,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setSequentialResult(null);
     setUserSelections({});
     setActiveEdgeIndex(null);
-  };
-
-  // 問題辺の effectiveMm は「隣接2辺の離れ」で決まる（自身の離れは無関係）。
-  // 修正する離れは問題辺の隣接非L辺（= prev か next の非L字側）を対象にする。
-  // 新離れ = 隣接非L辺の現在離れ - 問題辺のremainder
-  //   remainder > 0 (不足) → 新離れ = 現在離れ - remainder（隣接離れを縮める）
-  //   remainder < 0 (突出) → 新離れ = 現在離れ + |remainder|（隣接離れを伸ばす）
-  // 戻り値は "どの辺を調整するか" も含む。
-  const findDistanceSuggestions = (el: EdgeLayout): {
-    adjustEdgeIndex: number; adjustLabel: string; currentDist: number; newDists: number[];
-  } | null => {
-    const edgeIdx = edges.findIndex(e => e.index === el.edge.index);
-    if (edgeIdx < 0) return null;
-    const nE = edges.length;
-    const prevE = edges[(edgeIdx - 1 + nE) % nE];
-    const nextE = edges[(edgeIdx + 1) % nE];
-    // 隣接辺のうち L字固定でない側を調整対象とする
-    let adjE: typeof prevE | null = null;
-    if (!lockedEdgeIndices.has(prevE.index)) adjE = prevE;
-    else if (!lockedEdgeIndices.has(nextE.index)) adjE = nextE;
-    if (!adjE) return null; // 両隣が L字固定 → 調整不能
-    const currentDist = distances[adjE.index] ?? 900;
-    const newDists: number[] = [];
-    for (const cand of el.candidates) {
-      if (cand.remainder === 0) continue;
-      const newDist = Math.round(currentDist - cand.remainder);
-      if (newDist > 0 && newDist !== currentDist && !newDists.includes(newDist)) {
-        newDists.push(newDist);
-      }
-    }
-    if (newDists.length === 0) return null;
-    return { adjustEdgeIndex: adjE.index, adjustLabel: adjE.label, currentDist, newDists: newDists.slice(0, 2) };
   };
 
   const handleCalc = () => {
@@ -435,7 +393,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     }
 
     // 既存の問題辺検出ロジックは廃止（順次決定の hasUnresolved で分岐）
-    setDistanceSuggestions([]);
     setResult(res);
     const sel: Record<number, number> = {};
     res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
@@ -508,34 +465,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setSequentialResult(null);
     setUserSelections({});
     setResult(null);
-  };
-
-  const handleSuggestionAccept = (newDist: number) => {
-    const suggestion = distanceSuggestions[currentSuggestionIdx];
-    const newDistances = { ...distances, [suggestion.edgeIndex]: newDist };
-    setDistances(newDistances);
-    proceedToNextSuggestion(newDistances);
-  };
-
-  const handleSuggestionSkip = () => {
-    proceedToNextSuggestion(distances);
-  };
-
-  const proceedToNextSuggestion = (currentDistances: Record<number, number>) => {
-    const nextIdx = currentSuggestionIdx + 1;
-    if (nextIdx < distanceSuggestions.length) {
-      setCurrentSuggestionIdx(nextIdx);
-    } else {
-      setDistanceSuggestions([]);
-      if (!building) return;
-      // Phase H-3b-1: proceedToNextSuggestion 内の再計算も順次決定に置き換え
-      const seqRes = computeAutoLayoutSequential(building, currentDistances, scaffoldStart, enabledSizes, priorityConfig);
-      const res = sequentialResultToAutoLayoutResult(seqRes);
-      setResult(res);
-      const sel: Record<number, number> = {};
-      res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
-      setSelections(sel);
-    }
   };
 
   const handlePlace = () => {
@@ -649,7 +578,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || distanceSuggestions.length > 0 || activeEdgeIndex !== null) ? undefined : onClose}>
+    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || activeEdgeIndex !== null) ? undefined : onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between z-10">
           <h2 className="font-bold text-lg">自動割付</h2>
@@ -1094,57 +1023,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 >
                   キャンセル
                 </button>
-              </div>
-            </div>
-          </div>
-        );
-      })()}
-
-      {distanceSuggestions.length > 0 && currentSuggestionIdx < distanceSuggestions.length && (() => {
-        const suggestion = distanceSuggestions[currentSuggestionIdx];
-        const currentRemainder = result?.edgeLayouts.find(el => el.edge.index === suggestion.edgeIndex)?.candidates[0]?.remainder;
-        return (
-          <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
-            <div className="absolute inset-0 bg-black/30" />
-            <div className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg z-10">
-              <div className="px-4 py-3 border-b border-dark-border">
-                <p className="font-bold text-sm">離れの調整提案</p>
-                <p className="text-xs text-dimension mt-0.5">{currentSuggestionIdx + 1} / {distanceSuggestions.length} 面</p>
-              </div>
-
-              <div className="px-4 pt-3">
-                <PreviewSVG
-                  points={building!.points}
-                  edges={edges}
-                  focusedIndex={suggestion.edgeIndex}
-                  blinkEdgeIndex={suggestion.edgeIndex}
-                  scaffoldStart={scaffoldStart}
-                />
-              </div>
-
-              <div className="px-4 py-3 space-y-3">
-                <p className="text-sm">
-                  <span className="font-bold">{suggestion.edgeLabel}面</span>（現在の離れ: {suggestion.currentDist}mm）で
-                  <span className="text-yellow-400 font-bold"> 端数{currentRemainder ?? '?'}mm </span>が発生しています。
-                </p>
-                <p className="text-xs text-dimension">以下の離れに変更すると端数0になります：</p>
-                <div className="flex flex-wrap gap-2">
-                  {suggestion.suggestions.map((dist) => (
-                    <button key={dist} onClick={() => handleSuggestionAccept(dist)}
-                      className="px-4 py-2 bg-accent/15 border border-accent text-accent font-bold rounded-xl text-sm hover:bg-accent/25 transition-colors"
-                    >
-                      {dist}mm
-                      <span className="text-[10px] ml-1 opacity-70">({dist > suggestion.currentDist ? '+' : ''}{dist - suggestion.currentDist})</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="flex gap-2 pt-1">
-                  <button onClick={handleSuggestionSkip}
-                    className="flex-1 py-2.5 border border-dark-border text-dimension rounded-xl text-sm"
-                  >
-                    変更せず次へ
-                  </button>
-                </div>
               </div>
             </div>
           </div>
