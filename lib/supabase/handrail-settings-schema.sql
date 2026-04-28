@@ -8,6 +8,8 @@
 create table if not exists handrail_settings (
   id uuid default gen_random_uuid() primary key,
   owner_id uuid default null,
+  -- company_id は Phase 0a で追加（nullable、Phase 0d で NOT NULL 化予定）
+  company_id uuid references companies(id),
   enabled_sizes jsonb not null default '[1800,1200,900,600,400,300,200]'::jsonb,
   updated_at timestamptz default now()
 );

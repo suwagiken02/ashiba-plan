@@ -1,18 +1,32 @@
 -- Supabase SQL: テーブル作成
 -- Supabaseダッシュボードの SQL Editor で実行してください
+--
+-- ※ 増分マイグレーションは lib/supabase/migrations/ 配下を参照
+--   - 0001_add_companies.sql: companies テーブル新規 + 各テーブルに company_id 追加 (Phase 0a)
+
+-- 会社（Phase 0a で追加）
+create table if not exists companies (
+  id uuid default gen_random_uuid() primary key,
+  name text not null,
+  created_at timestamptz default now()
+);
 
 -- プロフィール
+-- ※ company_id (Phase 0a) は nullable、Phase 0d で NOT NULL 化予定
 create table if not exists profiles (
   id uuid references auth.users primary key,
+  company_id uuid references companies(id),
   company_name text,
   logo_url text,
   created_at timestamptz default now()
 );
 
 -- プロジェクト
+-- ※ company_id (Phase 0a) は nullable、Phase 0d で NOT NULL 化予定
 create table if not exists projects (
   id uuid default gen_random_uuid() primary key,
   owner_id uuid references profiles(id) on delete cascade,
+  company_id uuid references companies(id),
   name text not null,
   address text,
   created_at timestamptz default now(),
