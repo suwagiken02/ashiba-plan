@@ -17,6 +17,8 @@ import {
   AutoLayoutResult,
   EdgeInfo,
   SequentialLayoutResult,
+  EdgeAdjustment,
+  DEFAULT_EDGE_ADJUSTMENT,
 } from '@/lib/konva/autoLayoutUtils';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
@@ -355,6 +357,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [sequentialResult1F, setSequentialResult1F] = useState<SequentialLayoutResult | null>(null);
   const [userSelections2F, setUserSelections2F] = useState<Record<number, number>>({});
   const [userSelections1F, setUserSelections1F] = useState<Record<number, number>>({});
+  // Phase I-2: 各辺ごとの「割り変更」「←/→」操作状態
+  const [userAdjustments2F, setUserAdjustments2F] = useState<Record<number, EdgeAdjustment>>({});
+  const [userAdjustments1F, setUserAdjustments1F] = useState<Record<number, EdgeAdjustment>>({});
   const [activeEdge, setActiveEdge] = useState<{ floor: 1 | 2; index: number } | null>(null);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
@@ -367,6 +372,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setSequentialResult1F(null);
     setUserSelections2F({});
     setUserSelections1F({});
+    // Phase I-2: 離れ変更時は adjustments もリセット
+    setUserAdjustments2F({});
+    setUserAdjustments1F({});
     setActiveEdge(null);
   };
 
@@ -374,7 +382,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     if (!building) return;
     // 主建物（1Fのみ→1F、2Fのみ→2F、bothmode→2F）の順次決定
     const seqRes2F = computeAutoLayoutSequential(
-      building, distances, scaffoldStart, enabledSizes, priorityConfig, userSelections2F,
+      building, distances, scaffoldStart, enabledSizes, priorityConfig, userSelections2F, userAdjustments2F,
     );
     setSequentialResult2F(seqRes2F);
     const res = sequentialResultToAutoLayoutResult(seqRes2F);
@@ -386,7 +394,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       getBuildingEdgesClockwise(building1F).forEach(e => {
         d1[e.index] = distances1F[e.index] ?? 900;
       });
-      const fullSeq1F = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig, userSelections1F);
+      const fullSeq1F = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig, userSelections1F, userAdjustments1F);
       // 下屋辺だけに edgeResults を絞り込む（filter 後の SequentialLayoutResult を組み立て）
       const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
       const filteredEdgeResults = fullSeq1F.edgeResults.filter(er => uncoveredIdxSet.has(er.edge.index));
@@ -428,7 +436,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   };
 
   // 1F 下屋辺だけの SequentialLayoutResult を組み立てるヘルパー
-  const recompute1FSubResult = (selections1F: Record<number, number>): SequentialLayoutResult | null => {
+  const recompute1FSubResult = (
+    selections1F: Record<number, number>,
+    adjustments1F: Record<number, EdgeAdjustment> = userAdjustments1F,
+  ): SequentialLayoutResult | null => {
     if (targetFloor !== 'both' || !building1F || !building2F || uncoveredEdges1F.length === 0) {
       return null;
     }
@@ -436,7 +447,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     getBuildingEdgesClockwise(building1F).forEach(e => {
       d1[e.index] = distances1F[e.index] ?? 900;
     });
-    const fullSeq1F = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig, selections1F);
+    const fullSeq1F = computeAutoLayoutSequential(
+      building1F, d1, undefined, enabledSizes, priorityConfig, selections1F, adjustments1F,
+    );
     const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
     const filteredEdgeResults = fullSeq1F.edgeResults.filter(er => uncoveredIdxSet.has(er.edge.index));
     const filteredHasUnresolved = filteredEdgeResults.some(er => !er.isLocked && !er.isAutoProgress);
@@ -453,7 +466,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       setUserSelections2F(newSelections2F);
 
       const seqRes2F = computeAutoLayoutSequential(
-        building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+        building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F, userAdjustments2F,
       );
       setSequentialResult2F(seqRes2F);
       const adapted = sequentialResultToAutoLayoutResult(seqRes2F);
@@ -526,7 +539,11 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         const newSelections1F = { ...userSelections1F };
         delete newSelections1F[prev1F.edge.index];
         setUserSelections1F(newSelections1F);
-        const seqRes1F = recompute1FSubResult(newSelections1F);
+        // Phase I-2: 戻り辺の adjustments もクリア
+        const newAdjustments1F = { ...userAdjustments1F };
+        delete newAdjustments1F[prev1F.edge.index];
+        setUserAdjustments1F(newAdjustments1F);
+        const seqRes1F = recompute1FSubResult(newSelections1F, newAdjustments1F);
         setSequentialResult1F(seqRes1F);
         setActiveEdge({ floor: 1, index: prev1F.edge.index });
         return;
@@ -540,8 +557,11 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           const newSelections2F = { ...userSelections2F };
           delete newSelections2F[last2F.edge.index];
           setUserSelections2F(newSelections2F);
+          const newAdjustments2F = { ...userAdjustments2F };
+          delete newAdjustments2F[last2F.edge.index];
+          setUserAdjustments2F(newAdjustments2F);
           const seqRes2F = computeAutoLayoutSequential(
-            building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+            building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F, newAdjustments2F,
           );
           setSequentialResult2F(seqRes2F);
           setActiveEdge({ floor: 2, index: last2F.edge.index });
@@ -561,8 +581,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       const newSelections2F = { ...userSelections2F };
       delete newSelections2F[prev2F.edge.index];
       setUserSelections2F(newSelections2F);
+      // Phase I-2: 戻り辺の adjustments もクリア
+      const newAdjustments2F = { ...userAdjustments2F };
+      delete newAdjustments2F[prev2F.edge.index];
+      setUserAdjustments2F(newAdjustments2F);
       const seqRes2F = computeAutoLayoutSequential(
-        building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+        building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F, newAdjustments2F,
       );
       setSequentialResult2F(seqRes2F);
       setActiveEdge({ floor: 2, index: prev2F.edge.index });
@@ -576,8 +600,81 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setSequentialResult1F(null);
     setUserSelections2F({});
     setUserSelections1F({});
+    // Phase I-2: adjustments もクリア
+    setUserAdjustments2F({});
+    setUserAdjustments1F({});
     setResult(null);
     setResultSub(null);
+  };
+
+  // Phase I-2: 「割り変更」「←/→」操作のハンドラ
+  // - 「割り変更」(handleVariationChange): 該当 side の variationIdx を +1
+  // - 「←/→」(handleOffsetChange): 該当 side の offsetIdx を ±1、variationIdx を 0 リセット
+  // 更新後は computeAutoLayoutSequential 全 cascade 再計算で後続辺にも伝播
+  const applyAdjustmentsUpdate = (
+    floor: 1 | 2,
+    edgeIndex: number,
+    updater: (cur: EdgeAdjustment) => EdgeAdjustment | null,
+  ) => {
+    if (!building) return;
+    const isF2 = floor === 2;
+    const cur = (isF2 ? userAdjustments2F : userAdjustments1F)[edgeIndex] ?? DEFAULT_EDGE_ADJUSTMENT;
+    const next = updater(cur);
+    if (next === null) return;
+
+    if (isF2) {
+      const newAdjustments2F = { ...userAdjustments2F, [edgeIndex]: next };
+      setUserAdjustments2F(newAdjustments2F);
+      const seqRes2F = computeAutoLayoutSequential(
+        building, distances, scaffoldStart, enabledSizes, priorityConfig, userSelections2F, newAdjustments2F,
+      );
+      setSequentialResult2F(seqRes2F);
+      const adapted = sequentialResultToAutoLayoutResult(seqRes2F);
+      setResult(adapted);
+      const sel: Record<number, number> = {};
+      adapted.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
+      setSelections(sel);
+    } else {
+      const newAdjustments1F = { ...userAdjustments1F, [edgeIndex]: next };
+      setUserAdjustments1F(newAdjustments1F);
+      const seqRes1F = recompute1FSubResult(userSelections1F, newAdjustments1F);
+      setSequentialResult1F(seqRes1F);
+      if (seqRes1F) {
+        const adaptedSub = sequentialResultToAutoLayoutResult(seqRes1F);
+        setResultSub(adaptedSub);
+        const selSub: Record<number, number> = {};
+        adaptedSub.edgeLayouts.forEach(el => { selSub[el.edge.index] = el.selectedIndex; });
+        setSelectionsSub(selSub);
+      }
+    }
+  };
+
+  const handleVariationChange = (
+    floor: 1 | 2,
+    edgeIndex: number,
+    side: 'larger' | 'smaller',
+  ) => {
+    applyAdjustmentsUpdate(floor, edgeIndex, cur => ({
+      ...cur,
+      [side]: { ...cur[side], variationIdx: cur[side].variationIdx + 1 },
+    }));
+  };
+
+  const handleOffsetChange = (
+    floor: 1 | 2,
+    edgeIndex: number,
+    side: 'larger' | 'smaller',
+    direction: 'next' | 'prev',
+  ) => {
+    applyAdjustmentsUpdate(floor, edgeIndex, cur => {
+      const curOffset = cur[side].offsetIdx;
+      if (direction === 'prev' && curOffset === 0) return null; // ガード: 進めない
+      const newOffset = direction === 'next' ? curOffset + 1 : curOffset - 1;
+      return {
+        ...cur,
+        [side]: { offsetIdx: newOffset, variationIdx: 0 }, // variationIdx リセット
+      };
+    });
   };
 
   const handlePlace = () => {

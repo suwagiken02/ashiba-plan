@@ -554,6 +554,19 @@ export type SequentialLayoutResult = {
   hasUnresolved: boolean;
 };
 
+// Phase I-2: 各辺ごとの「割り変更」「←/→」操作の状態。
+// AutoLayoutModal から computeAutoLayoutSequential 経由で
+// generateSequentialCandidates の offset/variation 引数に伝搬される。
+export type EdgeAdjustment = {
+  larger: { offsetIdx: number; variationIdx: number };
+  smaller: { offsetIdx: number; variationIdx: number };
+};
+
+export const DEFAULT_EDGE_ADJUSTMENT: EdgeAdjustment = {
+  larger: { offsetIdx: 0, variationIdx: 0 },
+  smaller: { offsetIdx: 0, variationIdx: 0 },
+};
+
 export function computeAutoLayoutSequential(
   building: BuildingShape,
   distances: Record<number, number>,
@@ -561,6 +574,9 @@ export function computeAutoLayoutSequential(
   enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
   priorityConfig?: PriorityConfig,
   userSelections?: Record<number, number>,
+  // Phase I-2: 各辺の「割り変更」「←/→」操作状態。undefined or 該当 edge 無しなら
+  // 全 0 (既存挙動と完全互換)。
+  userAdjustments?: Record<number, EdgeAdjustment>,
 ): SequentialLayoutResult {
   const edges = getBuildingEdgesClockwise(building);
   const n = edges.length;
@@ -643,6 +659,8 @@ export function computeAutoLayoutSequential(
       ? distances[edges[prevIdx].index] ?? 900
       : intermediate[prevIdx].startDistanceMm;
 
+    // Phase I-2: 該当辺の adjustments を generateSequentialCandidates へ伝搬
+    const adj = userAdjustments?.[edge.index] ?? DEFAULT_EDGE_ADJUSTMENT;
     const candidates = generateSequentialCandidates(
       edge.lengthMm,
       startDistanceMm,
@@ -652,6 +670,10 @@ export function computeAutoLayoutSequential(
       prevEdgeStartDistanceMm,
       enabledSizes,
       priorityConfig,
+      adj.larger.offsetIdx,
+      adj.smaller.offsetIdx,
+      adj.larger.variationIdx,
+      adj.smaller.variationIdx,
     );
 
     let selectedIndex = userSelections?.[edge.index] ?? 0;

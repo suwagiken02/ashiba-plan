@@ -203,4 +203,63 @@ describe('computeAutoLayoutSequential', () => {
       });
     });
   });
+
+  // Phase I-2: userAdjustments による offsetIdx/variationIdx の cascade 伝搬
+  describe('Phase I-2: userAdjustments による offsetIdx/variationIdx 伝搬', () => {
+    it('userAdjustments undefined で既存挙動と完全一致 (回帰)', () => {
+      const distances = { 0: 945, 1: 945, 2: 945, 3: 945 };
+      const r1 = computeAutoLayoutSequential(square9000, distances);
+      const r2 = computeAutoLayoutSequential(
+        square9000, distances, undefined, undefined, undefined, undefined, undefined,
+      );
+      expect(r2.edgeResults.length).toBe(r1.edgeResults.length);
+      r2.edgeResults.forEach((er, i) => {
+        expect(er.startDistanceMm).toBe(r1.edgeResults[i].startDistanceMm);
+        expect(er.candidates.length).toBe(r1.edgeResults[i].candidates.length);
+      });
+    });
+
+    it('該当辺の adjustments が generateSequentialCandidates に伝搬する', () => {
+      // 端数発生条件 + edges[0] に larger.offsetIdx=1 を指定
+      // → edges[0] の候補配列が delta を 1 つ進めた値になる
+      const distances = { 0: 945, 1: 945, 2: 945, 3: 945 };
+      const r0 = computeAutoLayoutSequential(square9000, distances);
+      const adjustments = {
+        0: {
+          larger: { offsetIdx: 1, variationIdx: 0 },
+          smaller: { offsetIdx: 0, variationIdx: 0 },
+        },
+      };
+      const r1 = computeAutoLayoutSequential(
+        square9000, distances, undefined, undefined, undefined, undefined, adjustments,
+      );
+      // edges[0] の larger 候補が r0 と異なる delta を持つ
+      const r0Larger = r0.edgeResults[0].candidates.find(c => c.side === 'larger');
+      const r1Larger = r1.edgeResults[0].candidates.find(c => c.side === 'larger');
+      expect(r0Larger).toBeDefined();
+      expect(r1Larger).toBeDefined();
+      expect(r1Larger!.diffFromDesired).toBeGreaterThan(r0Larger!.diffFromDesired);
+    });
+
+    it('該当辺以外には adjustments の影響が及ばない (該当 edge.index のみ)', () => {
+      // edges[0] に adjustments を指定 → edges[1], [2], [3] は元通り
+      // ただし cascade で edges[0] の selectedIndex (=0) が変わると
+      // 後続辺の startDist も変わるため、cascade 整合性は別途確認
+      const distances = { 0: 945, 1: 945, 2: 945, 3: 945 };
+      const adjustments = {
+        0: {
+          larger: { offsetIdx: 1, variationIdx: 0 },
+          smaller: { offsetIdx: 0, variationIdx: 0 },
+        },
+      };
+      const r1 = computeAutoLayoutSequential(
+        square9000, distances, undefined, undefined, undefined, undefined, adjustments,
+      );
+      // edges[1], [2], [3] の adjustments エントリ無し → 候補は smaller/larger 各 1 (端数 945 ケース)
+      // 但し cascade で edges[0].selectedIndex=0 (= smaller、変化なし) が伝搬されるので
+      // edges[1]'s startDist は r1 と r0 で同じ
+      const r0 = computeAutoLayoutSequential(square9000, distances);
+      expect(r1.edgeResults[1].startDistanceMm).toBe(r0.edgeResults[1].startDistanceMm);
+    });
+  });
 });
