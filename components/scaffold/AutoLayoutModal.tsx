@@ -18,6 +18,12 @@ import {
   EdgeInfo,
   SequentialLayoutResult,
 } from '@/lib/konva/autoLayoutUtils';
+import {
+  findShedRoots,
+  findSegmentSolutions,
+  SegmentSolution,
+} from '@/lib/konva/segmentSplit';
+import SegmentSolutionPickerModal from './SegmentSolutionPickerModal';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
@@ -355,7 +361,14 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [sequentialResult1F, setSequentialResult1F] = useState<SequentialLayoutResult | null>(null);
   const [userSelections2F, setUserSelections2F] = useState<Record<number, number>>({});
   const [userSelections1F, setUserSelections1F] = useState<Record<number, number>>({});
-  const [activeEdge, setActiveEdge] = useState<{ floor: 1 | 2; index: number } | null>(null);
+  // Phase H-3d-2c: activeEdge を discriminated union 化（順次決定 / 区間分割選択）
+  type ActiveEdge =
+    | { kind: 'sequential'; floor: 1 | 2; index: number }
+    | { kind: 'segmentSplit'; edge2FIndex: number };
+  const [activeEdge, setActiveEdge] = useState<ActiveEdge | null>(null);
+  // Phase H-3d-2c: 区間分割解候補（キー: 2F 辺の edge.index）
+  const [segmentSolutionsPerEdge2F, setSegmentSolutionsPerEdge2F] = useState<Record<number, SegmentSolution[]>>({});
+  const [selectedSegmentSolutionIdx, setSelectedSegmentSolutionIdx] = useState<Record<number, number>>({});
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
@@ -368,6 +381,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setUserSelections2F({});
     setUserSelections1F({});
     setActiveEdge(null);
+    // Phase H-3d-2c: 区間分割 state もリセット
+    setSegmentSolutionsPerEdge2F({});
+    setSelectedSegmentSolutionIdx({});
   };
 
   const handleCalc = () => {
@@ -414,14 +430,69 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     // activeEdge を決定: 2F が未解決ならまず 2F、2F 解決済なら 1F へ
     const firstUnresolved2F = seqRes2F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
     if (seqRes2F.hasUnresolved && firstUnresolved2F) {
-      setActiveEdge({ floor: 2, index: firstUnresolved2F.edge.index });
+      setActiveEdge({ kind: 'sequential', floor: 2, index: firstUnresolved2F.edge.index });
     } else if (seqRes1F && seqRes1F.hasUnresolved) {
       const firstUnresolved1F = seqRes1F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
       if (firstUnresolved1F) {
-        setActiveEdge({ floor: 1, index: firstUnresolved1F.edge.index });
+        setActiveEdge({ kind: 'sequential', floor: 1, index: firstUnresolved1F.edge.index });
       } else {
-        setActiveEdge(null);
+        // 2F 解決 + 1F 解決 → 区間分割評価へ
+        transitionToSegmentSplitOrDone(seqRes2F);
       }
+    } else {
+      // 2F 解決、1F なし or 解決済み → 区間分割評価へ
+      transitionToSegmentSplitOrDone(seqRes2F);
+    }
+  };
+
+  /**
+   * Phase H-3d-2c: 2F + 1F の順次決定が両方完了した時点で呼ぶ。
+   * 各 2F 辺について区間分割解を計算し、分割が必要な辺があればモーダル続行。
+   * なければ activeEdge=null（結果表示画面）。
+   * - ロック辺は分割対象外
+   * - 引数で seqRes2F を受け取る（state 更新の非同期性回避）
+   */
+  const transitionToSegmentSplitOrDone = (seqRes2F: SequentialLayoutResult) => {
+    // bothmode 以外、または下屋辺なし → 即終了
+    if (targetFloor !== 'both' || !building1F || !building2F || uncoveredEdges1F.length === 0) {
+      setActiveEdge(null);
+      setSegmentSolutionsPerEdge2F({});
+      setSelectedSegmentSolutionIdx({});
+      return;
+    }
+
+    const desired1F: Record<number, number> = {};
+    getBuildingEdgesClockwise(building1F).forEach(e => {
+      desired1F[e.index] = distances1F[e.index] ?? 900;
+    });
+
+    const sols: Record<number, SegmentSolution[]> = {};
+    for (const er2F of seqRes2F.edgeResults) {
+      if (er2F.isLocked) continue; // ロック辺は分割対象外
+      const shedRoots = findShedRoots(building1F, building2F, er2F.edge, uncoveredEdges1F, desired1F);
+      if (shedRoots.length === 0) continue;
+      const solutions = findSegmentSolutions({
+        edge2F: er2F.edge,
+        cursorStart: er2F.cursorStart,
+        cursorEnd: er2F.cursorEnd,
+        confirmedDistance2FMm: er2F.startDistanceMm,
+        shedRoots,
+        enabledSizes,
+        priorityConfig,
+      });
+      if (solutions.length > 0) {
+        sols[er2F.edge.index] = solutions;
+      }
+    }
+
+    setSegmentSolutionsPerEdge2F(sols);
+    const initSel: Record<number, number> = {};
+    Object.keys(sols).map(Number).forEach(idx => { initSel[idx] = 0; });
+    setSelectedSegmentSolutionIdx(initSel);
+
+    const sortedIndices = Object.keys(sols).map(Number).sort((a, b) => a - b);
+    if (sortedIndices.length > 0) {
+      setActiveEdge({ kind: 'segmentSplit', edge2FIndex: sortedIndices[0] });
     } else {
       setActiveEdge(null);
     }
@@ -469,7 +540,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         .find(er => !er.isLocked && !er.isAutoProgress);
 
       if (next2F) {
-        setActiveEdge({ floor: 2, index: next2F.edge.index });
+        setActiveEdge({ kind: 'sequential', floor: 2, index: next2F.edge.index });
         return;
       }
 
@@ -477,11 +548,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       if (sequentialResult1F && sequentialResult1F.hasUnresolved) {
         const first1F = sequentialResult1F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
         if (first1F) {
-          setActiveEdge({ floor: 1, index: first1F.edge.index });
+          setActiveEdge({ kind: 'sequential', floor: 1, index: first1F.edge.index });
           return;
         }
       }
-      setActiveEdge(null);
+      // 2F 解決 + 1F も解決済み（または bothmode 以外）→ 区間分割評価へ
+      transitionToSegmentSplitOrDone(seqRes2F);
     } else {
       // 1F 下屋辺の選択
       const newSelections1F = { ...userSelections1F, [edgeIndex]: candIdx };
@@ -502,7 +574,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           .slice(currentIdx1F + 1)
           .find(er => !er.isLocked && !er.isAutoProgress);
         if (next1F) {
-          setActiveEdge({ floor: 1, index: next1F.edge.index });
+          setActiveEdge({ kind: 'sequential', floor: 1, index: next1F.edge.index });
+          return;
+        }
+        // 1F 全解決 → 区間分割評価（sequentialResult2F は最新を使う）
+        if (sequentialResult2F) {
+          transitionToSegmentSplitOrDone(sequentialResult2F);
           return;
         }
       }
@@ -513,7 +590,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
   // Phase H-3d-1: 順次決定で前の辺に戻る（2F / 1F 両対応、floor 跨ぎあり）
   const handleSequentialBack = () => {
-    if (!building || !activeEdge) return;
+    if (!building || !activeEdge || activeEdge.kind !== 'sequential') return;
 
     if (activeEdge.floor === 1 && sequentialResult1F) {
       // 1F 内で前の未解決辺を探す
@@ -528,7 +605,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         setUserSelections1F(newSelections1F);
         const seqRes1F = recompute1FSubResult(newSelections1F);
         setSequentialResult1F(seqRes1F);
-        setActiveEdge({ floor: 1, index: prev1F.edge.index });
+        setActiveEdge({ kind: 'sequential', floor: 1, index: prev1F.edge.index });
         return;
       }
       // 1F 内に戻る先なし → 2F の最後の解決辺に戻る
@@ -544,7 +621,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
           );
           setSequentialResult2F(seqRes2F);
-          setActiveEdge({ floor: 2, index: last2F.edge.index });
+          setActiveEdge({ kind: 'sequential', floor: 2, index: last2F.edge.index });
         }
       }
       return;
@@ -565,11 +642,11 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
       );
       setSequentialResult2F(seqRes2F);
-      setActiveEdge({ floor: 2, index: prev2F.edge.index });
+      setActiveEdge({ kind: 'sequential', floor: 2, index: prev2F.edge.index });
     }
   };
 
-  // 順次決定をキャンセル（両 floor の state をクリア）
+  // 順次決定をキャンセル（両 floor の state + 区間分割 state を全クリア）
   const handleSequentialCancel = () => {
     setActiveEdge(null);
     setSequentialResult2F(null);
@@ -578,6 +655,65 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     setUserSelections1F({});
     setResult(null);
     setResultSub(null);
+    setSegmentSolutionsPerEdge2F({});
+    setSelectedSegmentSolutionIdx({});
+  };
+
+  // Phase H-3d-2c: 区間分割解の選択
+  const handleSegmentSolutionSelect = (edge2FIndex: number, solutionIdx: number) => {
+    setSelectedSegmentSolutionIdx(prev => ({ ...prev, [edge2FIndex]: solutionIdx }));
+    // 次の分割対象辺へ進む
+    const allEdges = Object.keys(segmentSolutionsPerEdge2F).map(Number).sort((a, b) => a - b);
+    const remainingEdges = allEdges.filter(idx => idx > edge2FIndex);
+    if (remainingEdges.length > 0) {
+      setActiveEdge({ kind: 'segmentSplit', edge2FIndex: remainingEdges[0] });
+    } else {
+      setActiveEdge(null); // 全選択完了 → 結果表示画面へ
+    }
+  };
+
+  // Phase H-3d-2c: 区間分割選択で前の辺に戻る
+  const handleSegmentSolutionBack = () => {
+    if (!activeEdge || activeEdge.kind !== 'segmentSplit') return;
+    const allEdges = Object.keys(segmentSolutionsPerEdge2F).map(Number).sort((a, b) => a - b);
+    const currentIdx = allEdges.indexOf(activeEdge.edge2FIndex);
+    if (currentIdx > 0) {
+      // 前の分割対象辺へ
+      setActiveEdge({ kind: 'segmentSplit', edge2FIndex: allEdges[currentIdx - 1] });
+      return;
+    }
+    // 区間分割の最初の辺で「戻る」→ 1F 順次決定の最後の辺へ
+    if (sequentialResult1F && sequentialResult1F.edgeResults.length > 0) {
+      const last1F = [...sequentialResult1F.edgeResults]
+        .reverse()
+        .find(er => !er.isLocked && !er.isAutoProgress);
+      if (last1F) {
+        // userSelections1F の最後の選択を解除
+        const newSelections1F = { ...userSelections1F };
+        delete newSelections1F[last1F.edge.index];
+        setUserSelections1F(newSelections1F);
+        const newSeq1F = recompute1FSubResult(newSelections1F);
+        setSequentialResult1F(newSeq1F);
+        setActiveEdge({ kind: 'sequential', floor: 1, index: last1F.edge.index });
+        return;
+      }
+    }
+    // 1F 下屋辺がなければ 2F の最後の辺へ
+    if (sequentialResult2F) {
+      const last2F = [...sequentialResult2F.edgeResults]
+        .reverse()
+        .find(er => !er.isLocked && !er.isAutoProgress);
+      if (last2F && building) {
+        const newSelections2F = { ...userSelections2F };
+        delete newSelections2F[last2F.edge.index];
+        setUserSelections2F(newSelections2F);
+        const newSeq2F = computeAutoLayoutSequential(
+          building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+        );
+        setSequentialResult2F(newSeq2F);
+        setActiveEdge({ kind: 'sequential', floor: 2, index: last2F.edge.index });
+      }
+    }
   };
 
   const handlePlace = () => {
@@ -1051,8 +1187,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         </div>
       )}
 
-      {/* Phase H-3d-1: 順次決定モーダル（2F / 1F 両対応） */}
-      {activeEdge !== null && (() => {
+      {/* Phase H-3d-1: 順次決定モーダル（2F / 1F 両対応、kind=sequential のみ） */}
+      {activeEdge !== null && activeEdge.kind === 'sequential' && (() => {
         // activeEdge.floor に応じて対応する SequentialLayoutResult を取り出す
         const activeSeqResult = activeEdge.floor === 2 ? sequentialResult2F : sequentialResult1F;
         if (!activeSeqResult) return null;
@@ -1160,6 +1296,34 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               </div>
             </div>
           </div>
+        );
+      })()}
+
+      {/* Phase H-3d-2c: 区間分割解選択モーダル */}
+      {activeEdge !== null && activeEdge.kind === 'segmentSplit' && (() => {
+        const sols = segmentSolutionsPerEdge2F[activeEdge.edge2FIndex];
+        if (!sols || sols.length === 0) return null;
+        const selIdx = selectedSegmentSolutionIdx[activeEdge.edge2FIndex] ?? 0;
+        // 該当 2F 辺の情報を取り出す
+        const er2F = sequentialResult2F?.edgeResults.find(er => er.edge.index === activeEdge.edge2FIndex);
+        const edgeLabel = er2F
+          ? `${er2F.edge.label}面（${FACE_LABEL[er2F.edge.face]} / ${er2F.edge.lengthMm}mm）`
+          : `辺 ${activeEdge.edge2FIndex}`;
+        // 進捗ラベル
+        const allEdges = Object.keys(segmentSolutionsPerEdge2F).map(Number).sort((a, b) => a - b);
+        const currentNum = allEdges.indexOf(activeEdge.edge2FIndex) + 1;
+        const totalNum = allEdges.length;
+        const progressLabel = `区間分割 ${currentNum}/${totalNum}`;
+        return (
+          <SegmentSolutionPickerModal
+            solutions={sols}
+            selectedIdx={selIdx}
+            edgeLabel={edgeLabel}
+            progressLabel={progressLabel}
+            onSelect={(idx) => handleSegmentSolutionSelect(activeEdge.edge2FIndex, idx)}
+            onBack={handleSegmentSolutionBack}
+            onCancel={handleSequentialCancel}
+          />
         );
       })()}
 
