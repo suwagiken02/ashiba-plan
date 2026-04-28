@@ -2,7 +2,11 @@
 
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
+import { useAuthStore, DEFAULT_COMPANY_ID } from '@/stores/authStore';
 import { HandrailLengthMm, DEFAULT_ENABLED_SIZES, ALL_HANDRAIL_SIZES, PriorityConfig, DEFAULT_PRIORITY_CONFIG } from '@/types';
+
+/** Phase 0b: 現在の company_id を取得（authStore 未ロード時は Default Company にフォールバック） */
+const getCompanyId = () => useAuthStore.getState().currentCompanyId ?? DEFAULT_COMPANY_ID;
 
 type HandrailSettingsStore = {
   /** 現在有効な手摺サイズ（部材パレット・自動割付で使用可能なサイズ） */
@@ -78,10 +82,14 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
 
   loadHandrailSettings: async () => {
     try {
+      // Phase 0b: company_id で絞り込み（owner_id null の既存レコードは Phase 0a で
+      // Default Company に backfill 済みのため、両条件マッチで動作維持）
+      const companyId = getCompanyId();
       const { data, error } = await supabase
         .from('handrail_settings')
         .select('enabled_sizes, priority_config')
         .is('owner_id', null)
+        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (error) {
@@ -121,11 +129,13 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
     const ordered = ALL_HANDRAIL_SIZES.filter(s => sizes.includes(s));
     set({ enabledSizes: ordered });
     try {
-      // 既存レコード（owner_id=null）を update。無ければ insert。
+      // Phase 0b: company_id で絞り込み。既存レコードを update、無ければ insert
+      const companyId = getCompanyId();
       const { data: existing } = await supabase
         .from('handrail_settings')
         .select('id')
         .is('owner_id', null)
+        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (existing?.id) {
@@ -136,7 +146,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
       } else {
         await supabase
           .from('handrail_settings')
-          .insert({ owner_id: null, enabled_sizes: ordered });
+          .insert({ owner_id: null, company_id: companyId, enabled_sizes: ordered });
       }
     } catch (e) {
       console.warn('[handrailSettings] save exception:', e);
@@ -147,11 +157,13 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
     // 楽観的更新: 先に state を更新して UI 即応、失敗時はログのみ
     set({ priorityConfig: { ...config, order: [...config.order] } });
     try {
-      // 既存レコード（owner_id=null）を update。無ければ insert。
+      // Phase 0b: company_id で絞り込み
+      const companyId = getCompanyId();
       const { data: existing } = await supabase
         .from('handrail_settings')
         .select('id')
         .is('owner_id', null)
+        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (existing?.id) {
@@ -162,7 +174,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
       } else {
         await supabase
           .from('handrail_settings')
-          .insert({ owner_id: null, priority_config: config });
+          .insert({ owner_id: null, company_id: companyId, priority_config: config });
       }
     } catch (e) {
       console.warn('[handrailSettings] savePriorityConfig exception:', e);
