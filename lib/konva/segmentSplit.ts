@@ -1,5 +1,5 @@
-import { BuildingShape, Point } from '@/types';
-import { EdgeInfo, getBuildingEdgesClockwise } from './autoLayoutUtils';
+import { BuildingShape, Point, HandrailLengthMm, PriorityConfig } from '@/types';
+import { EdgeInfo, getBuildingEdgesClockwise, scoreCombination } from './autoLayoutUtils';
 
 /**
  * 1F 下屋辺の根本（凸の根本）を表す。
@@ -190,5 +190,341 @@ export function calculateBreakpoint(
     desiredDistance1FMm: root.desiredDistance1FMm,
     adjustmentMm,
   };
+}
+
+// ============================================================
+// Phase H-3d-2b: 区間分割 + 手摺再割付
+// ============================================================
+
+/** 区間（cursorStart → cursorEnd の中の 1 区切り）*/
+export type Segment = {
+  /** 区間の開始軸座標（grid 単位）*/
+  startAxis: number;
+  /** 区間の終了軸座標（grid 単位）*/
+  endAxis: number;
+  /** 区間長 (mm)、必ず enabledSizes の組み合わせで作成可能な値 */
+  lengthMm: number;
+  /** この区間に割り付ける手摺リスト（合計 == lengthMm）*/
+  rails: HandrailLengthMm[];
+};
+
+/** 区間分割の解（1 つの 2F 辺に対する切れ目 + 区間の組み合わせ）*/
+export type SegmentSolution = {
+  breakpoints: BreakPoint[];
+  segments: Segment[];
+  /** 全切れ目の調整量の合計 (mm) */
+  totalAdjustmentMm: number;
+  /** 全切れ目の調整量の最大 (mm)、偏り検出用 */
+  maxAdjustmentMm: number;
+  /** 手摺総本数 */
+  totalRailCount: number;
+  /** 総合スコア（高いほど良い）*/
+  score: number;
+  /** フォールバック解か（探索範囲内に解が無く強制的に提示）*/
+  isFallback?: boolean;
+};
+
+/** 区間分割計算の入力 */
+export type SegmentSplitInput = {
+  edge2F: EdgeInfo;
+  /** 2F 順次決定で確定した cursorStart / cursorEnd（grid 単位）*/
+  cursorStart: number;
+  cursorEnd: number;
+  /** 確定済み 2F 離れ（変更不可）*/
+  confirmedDistance2FMm: number;
+  /** この 2F 辺に紐付く 1F 下屋辺の根本リスト */
+  shedRoots: ShedRoot[];
+  /** 使える手摺サイズ */
+  enabledSizes: HandrailLengthMm[];
+  /** 優先度設定（スコアリング用）*/
+  priorityConfig?: PriorityConfig;
+  /** 探索範囲（mm）。デフォルト 50mm、段階拡大あり */
+  searchRangeMm?: number;
+};
+
+/* ----- 内部ヘルパー ----- */
+
+const MAX_DEPTH = 20;
+const MAX_RESULTS_PER_TARGET = 100;
+const MAX_SOLUTIONS = 8;
+const MAX_DFS_COMBOS = 50000;
+const SEARCH_RANGES = [50, 100, 200] as const;
+const FALLBACK_RANGE = 1000;
+
+/** ユークリッド GCD */
+function gcd(a: number, b: number): number {
+  while (b) {
+    const t = b;
+    b = a % b;
+    a = t;
+  }
+  return a;
+}
+
+/** 配列の GCD */
+function gcdAll(arr: number[]): number {
+  return arr.reduce((g, v) => gcd(g, v), arr[0]);
+}
+
+/**
+ * targetMm にぴったり合計する手摺の組み合わせを全列挙する DFS。
+ * - 早期 reject: target <= 0 / sizes 空 / GCD 不整合
+ * - 深さ MAX_DEPTH、結果数 MAX_RESULTS_PER_TARGET で打ち切り
+ */
+function findCombinationsExactlySumToTarget(
+  targetMm: number,
+  enabledSizes: HandrailLengthMm[],
+): HandrailLengthMm[][] {
+  if (targetMm <= 0 || enabledSizes.length === 0) return [];
+  const sortedSizes: HandrailLengthMm[] = [...enabledSizes].sort((a, b) => b - a);
+  const stepGcd = gcdAll(sortedSizes);
+  if (targetMm % stepGcd !== 0) return [];
+
+  const results: HandrailLengthMm[][] = [];
+  const dfs = (remaining: number, current: HandrailLengthMm[], maxIndex: number): void => {
+    if (results.length >= MAX_RESULTS_PER_TARGET) return;
+    if (remaining === 0) {
+      results.push([...current]);
+      return;
+    }
+    if (current.length >= MAX_DEPTH) return;
+    for (let i = maxIndex; i < sortedSizes.length; i++) {
+      const size = sortedSizes[i];
+      if (size > remaining) continue;
+      current.push(size);
+      dfs(remaining - size, current, i);
+      current.pop();
+      if (results.length >= MAX_RESULTS_PER_TARGET) return;
+    }
+  };
+  dfs(targetMm, [], 0);
+  return results;
+}
+
+/**
+ * targetMm にぴったり合計する rails のうち、最良スコアのもの 1 つを返す。
+ * priorityConfig あり: scoreCombination で評価
+ * priorityConfig なし: 本数最少を優先（短い rails ほど高スコア）
+ */
+export function findBestRailsExactly(
+  targetMm: number,
+  enabledSizes: HandrailLengthMm[],
+  priorityConfig?: PriorityConfig,
+): HandrailLengthMm[] | null {
+  const combos = findCombinationsExactlySumToTarget(targetMm, enabledSizes);
+  if (combos.length === 0) return null;
+  const scoreFn = (rails: HandrailLengthMm[]) =>
+    priorityConfig ? scoreCombination(rails, priorityConfig) : -rails.length;
+  return combos.reduce((best, cur) => (scoreFn(cur) > scoreFn(best) ? cur : best));
+}
+
+/**
+ * 切れ目組み合わせを評価して SegmentSolution を生成。
+ * 不成立なら null。
+ */
+function evaluateCombo(
+  breakpoints: BreakPoint[],
+  input: SegmentSplitInput,
+  edge2FSign: 1 | -1,
+  minSegmentMm: number,
+): SegmentSolution | null {
+  const { cursorStart, cursorEnd, enabledSizes, priorityConfig } = input;
+
+  // 軸方向に進行方向順でソート
+  const sorted = [...breakpoints].sort((a, b) => edge2FSign * (a.axisCoord - b.axisCoord));
+
+  // 切れ目間隔チェック（隣接 BP 間の grid 距離 → mm）
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const gapGrid = edge2FSign * (sorted[i + 1].axisCoord - sorted[i].axisCoord);
+    if (gapGrid * 10 < minSegmentMm) return null;
+  }
+
+  // 区間境界
+  const boundaries = [cursorStart, ...sorted.map(bp => bp.axisCoord), cursorEnd];
+
+  // 各区間の rails 割付
+  const segments: Segment[] = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const lengthGrid = edge2FSign * (boundaries[i + 1] - boundaries[i]);
+    const lengthMm = Math.round(lengthGrid * 10);
+    if (lengthMm < minSegmentMm) return null;
+    const rails = findBestRailsExactly(lengthMm, enabledSizes, priorityConfig);
+    if (!rails) return null;
+    segments.push({
+      startAxis: boundaries[i],
+      endAxis: boundaries[i + 1],
+      lengthMm,
+      rails,
+    });
+  }
+
+  const totalAdj = sorted.reduce((s, bp) => s + Math.abs(bp.adjustmentMm), 0);
+  const maxAdj = sorted.reduce((m, bp) => Math.max(m, Math.abs(bp.adjustmentMm)), 0);
+  const totalRails = segments.reduce((s, seg) => s + seg.rails.length, 0);
+  const score = computeScore(segments, totalAdj, maxAdj, totalRails, priorityConfig);
+
+  return {
+    breakpoints: sorted,
+    segments,
+    totalAdjustmentMm: totalAdj,
+    maxAdjustmentMm: maxAdj,
+    totalRailCount: totalRails,
+    score,
+  };
+}
+
+/** スコア計算（高いほど良い）*/
+function computeScore(
+  segments: Segment[],
+  totalAdj: number,
+  maxAdj: number,
+  totalRails: number,
+  pc?: PriorityConfig,
+): number {
+  const ADJ_TOTAL_W = 1.0;
+  const ADJ_MAX_W = 2.0;
+  const RAIL_COUNT_W = 3.0;
+  const priorityBonus = pc
+    ? segments.reduce((s, seg) => s + scoreCombination(seg.rails, pc), 0)
+    : 0;
+  return -totalAdj * ADJ_TOTAL_W
+       - maxAdj * ADJ_MAX_W
+       - totalRails * RAIL_COUNT_W
+       + priorityBonus;
+}
+
+/** 指定範囲内で解を探索 */
+function findSegmentSolutionsWithRange(
+  input: SegmentSplitInput,
+  searchRangeMm: number,
+): SegmentSolution[] {
+  const { edge2F, cursorStart, cursorEnd, shedRoots, enabledSizes } = input;
+  const minSegmentMm = enabledSizes.length > 0 ? Math.min(...enabledSizes) : 200;
+
+  // 進行方向の sign
+  const { sign: edge2FSign } = (() => {
+    if (edge2F.handrailDir === 'horizontal') {
+      return { sign: (edge2F.p2.x >= edge2F.p1.x ? 1 : -1) as 1 | -1 };
+    }
+    return { sign: (edge2F.p2.y >= edge2F.p1.y ? 1 : -1) as 1 | -1 };
+  })();
+
+  // shedRoots ごとの BreakPoint 候補（cursor 範囲外を除外、|adj| 昇順）
+  const breakpointCandidatesPerRoot: BreakPoint[][] = shedRoots.map(root => {
+    const candidates: BreakPoint[] = [];
+    for (let adj = -searchRangeMm; adj <= searchRangeMm; adj++) {
+      const appliedMm = root.desiredDistance1FMm + adj;
+      if (appliedMm <= 0) continue;
+      const bp = calculateBreakpoint(root, edge2FSign, adj);
+      // cursor 範囲外チェック
+      if (edge2FSign * (bp.axisCoord - cursorStart) <= 0) continue;
+      if (edge2FSign * (cursorEnd - bp.axisCoord) <= 0) continue;
+      candidates.push(bp);
+    }
+    candidates.sort((a, b) => Math.abs(a.adjustmentMm) - Math.abs(b.adjustmentMm));
+    return candidates;
+  });
+
+  // shedRoots が 0 個 → 単一区間として評価
+  if (shedRoots.length === 0) {
+    const sol = evaluateCombo([], input, edge2FSign, minSegmentMm);
+    return sol ? [sol] : [];
+  }
+
+  // 全組み合わせを列挙して合計 |adj| 昇順でソート → 早期に良解到達
+  const allCombos: BreakPoint[][] = [];
+  const gen = (rootIdx: number, current: BreakPoint[]): void => {
+    if (rootIdx === shedRoots.length) {
+      allCombos.push([...current]);
+      return;
+    }
+    for (const bp of breakpointCandidatesPerRoot[rootIdx]) {
+      current.push(bp);
+      gen(rootIdx + 1, current);
+      current.pop();
+    }
+  };
+  gen(0, []);
+  allCombos.sort((a, b) => {
+    const sumA = a.reduce((s, bp) => s + Math.abs(bp.adjustmentMm), 0);
+    const sumB = b.reduce((s, bp) => s + Math.abs(bp.adjustmentMm), 0);
+    return sumA - sumB;
+  });
+
+  // 評価（先頭から MAX_DFS_COMBOS 件まで）
+  const solutions: SegmentSolution[] = [];
+  const evalCount = Math.min(allCombos.length, MAX_DFS_COMBOS);
+  for (let i = 0; i < evalCount; i++) {
+    const sol = evaluateCombo(allCombos[i], input, edge2FSign, minSegmentMm);
+    if (sol) solutions.push(sol);
+  }
+
+  solutions.sort((a, b) => b.score - a.score);
+  return solutions.slice(0, MAX_SOLUTIONS);
+}
+
+/** フォールバック解: 探索範囲を 1000mm まで広げて、それでも 0 件なら adjustment=0 で空 rails の解を返す */
+function findFallbackSolution(input: SegmentSplitInput): SegmentSolution[] {
+  // 最終探索範囲（1000mm）でリトライ
+  const wide = findSegmentSolutionsWithRange(input, FALLBACK_RANGE);
+  if (wide.length > 0) return wide.map(s => ({ ...s, isFallback: true }));
+
+  // それでも 0 件 → adjustment=0、各区間は rails=[]（割付不能）として返す
+  const { edge2F, cursorStart, cursorEnd, shedRoots, enabledSizes } = input;
+  const minSegmentMm = enabledSizes.length > 0 ? Math.min(...enabledSizes) : 200;
+  const edge2FSign: 1 | -1 = (
+    edge2F.handrailDir === 'horizontal'
+      ? (edge2F.p2.x >= edge2F.p1.x ? 1 : -1)
+      : (edge2F.p2.y >= edge2F.p1.y ? 1 : -1)
+  );
+  const breakpoints: BreakPoint[] = shedRoots.map(r => calculateBreakpoint(r, edge2FSign, 0));
+  const sorted = [...breakpoints].sort((a, b) => edge2FSign * (a.axisCoord - b.axisCoord));
+  const boundaries = [cursorStart, ...sorted.map(bp => bp.axisCoord), cursorEnd];
+  const segments: Segment[] = [];
+  for (let i = 0; i < boundaries.length - 1; i++) {
+    const lengthGrid = edge2FSign * (boundaries[i + 1] - boundaries[i]);
+    const lengthMm = Math.max(0, Math.round(lengthGrid * 10));
+    const rails = findBestRailsExactly(lengthMm, enabledSizes, input.priorityConfig) ?? [];
+    segments.push({
+      startAxis: boundaries[i],
+      endAxis: boundaries[i + 1],
+      lengthMm,
+      rails,
+    });
+  }
+  // segments の minSegmentMm 違反は許容（フォールバックなのでベストエフォート）
+  void minSegmentMm;
+  return [{
+    breakpoints: sorted,
+    segments,
+    totalAdjustmentMm: 0,
+    maxAdjustmentMm: 0,
+    totalRailCount: segments.reduce((s, seg) => s + seg.rails.length, 0),
+    score: -Infinity,
+    isFallback: true,
+  }];
+}
+
+/**
+ * 区間分割解を求める。
+ * 段階探索: ±50mm → ±100mm → ±200mm。それでも 0 件なら ±1000mm のフォールバック。
+ * 最終的に最低 1 件の解を返す（fallback フラグ付き）。
+ *
+ * @returns スコア降順の上位 8 件、または fallback 解
+ */
+export function findSegmentSolutions(input: SegmentSplitInput): SegmentSolution[] {
+  // 入力の searchRangeMm が指定されている場合はそれだけで実行
+  if (input.searchRangeMm !== undefined) {
+    const sols = findSegmentSolutionsWithRange(input, input.searchRangeMm);
+    if (sols.length > 0) return sols;
+    return findFallbackSolution(input);
+  }
+  // 段階拡大
+  for (const range of SEARCH_RANGES) {
+    const sols = findSegmentSolutionsWithRange(input, range);
+    if (sols.length > 0) return sols;
+  }
+  // フォールバック
+  return findFallbackSolution(input);
 }
 
