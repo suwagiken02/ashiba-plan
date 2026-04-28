@@ -348,123 +348,236 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [showLockedAlert, setShowLockedAlert] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
-  // Phase H-3b-2-1: 順次決定の状態管理
-  const [sequentialResult, setSequentialResult] = useState<SequentialLayoutResult | null>(null);
-  const [userSelections, setUserSelections] = useState<Record<number, number>>({});
-  const [activeEdgeIndex, setActiveEdgeIndex] = useState<number | null>(null);
+  // Phase H-3b-2-1 / H-3d-1: 順次決定の状態管理を 2F / 1F の 2 本立てに拡張
+  // - 1Fのみ・2Fのみモードでは sequentialResult2F のみ使用、1F は null 維持
+  // - bothmode では 2F 全周 + 1F 下屋辺の両方を保持
+  const [sequentialResult2F, setSequentialResult2F] = useState<SequentialLayoutResult | null>(null);
+  const [sequentialResult1F, setSequentialResult1F] = useState<SequentialLayoutResult | null>(null);
+  const [userSelections2F, setUserSelections2F] = useState<Record<number, number>>({});
+  const [userSelections1F, setUserSelections1F] = useState<Record<number, number>>({});
+  const [activeEdge, setActiveEdge] = useState<{ floor: 1 | 2; index: number } | null>(null);
 
   const getDistance = (idx: number) => distances[idx] ?? defaultDist;
 
   const setDistance = (idx: number, value: number) => {
     setDistances(prev => ({ ...prev, [idx]: value }));
     setResult(null);
-    // Phase H-3b-2-1: 順次決定 state もリセット
-    setSequentialResult(null);
-    setUserSelections({});
-    setActiveEdgeIndex(null);
+    // 順次決定 state もリセット（1F/2F 両方）
+    setSequentialResult2F(null);
+    setSequentialResult1F(null);
+    setUserSelections2F({});
+    setUserSelections1F({});
+    setActiveEdge(null);
   };
 
   const handleCalc = () => {
     if (!building) return;
-    // Phase H-3b-2-1: 順次決定アルゴリズムによる計算（userSelections を反映）
-    const seqRes = computeAutoLayoutSequential(
-      building, distances, scaffoldStart, enabledSizes, priorityConfig, userSelections,
+    // 主建物（1Fのみ→1F、2Fのみ→2F、bothmode→2F）の順次決定
+    const seqRes2F = computeAutoLayoutSequential(
+      building, distances, scaffoldStart, enabledSizes, priorityConfig, userSelections2F,
     );
-    setSequentialResult(seqRes);
-    const res = sequentialResultToAutoLayoutResult(seqRes);
+    setSequentialResult2F(seqRes2F);
+    const res = sequentialResultToAutoLayoutResult(seqRes2F);
 
-    // 1F+2F 同時モード: 1F のうち 2F で覆われていない辺（下屋辺）を計算（従来通り）
+    // bothmode: 1F 下屋辺の順次決定（H-3d-1: 1F 用 sequentialResult を独立保持）
+    let seqRes1F: SequentialLayoutResult | null = null;
     if (targetFloor === 'both' && building1F && building2F && uncoveredEdges1F.length > 0) {
       const d1: Record<number, number> = {};
       getBuildingEdgesClockwise(building1F).forEach(e => {
         d1[e.index] = distances1F[e.index] ?? 900;
       });
-      const seqRes1 = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig);
-      const res1 = sequentialResultToAutoLayoutResult(seqRes1);
+      const fullSeq1F = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig, userSelections1F);
+      // 下屋辺だけに edgeResults を絞り込む（filter 後の SequentialLayoutResult を組み立て）
       const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
-      const filtered = res1.edgeLayouts.filter(el => uncoveredIdxSet.has(el.edge.index));
-      setResultSub({ edgeLayouts: filtered });
-      const sel: Record<number, number> = {};
-      filtered.forEach(el => { sel[el.edge.index] = 0; });
-      setSelectionsSub(sel);
+      const filteredEdgeResults = fullSeq1F.edgeResults.filter(er => uncoveredIdxSet.has(er.edge.index));
+      // hasUnresolved を filter 後の辺で再判定
+      const filteredHasUnresolved = filteredEdgeResults.some(er => !er.isLocked && !er.isAutoProgress);
+      seqRes1F = { edgeResults: filteredEdgeResults, hasUnresolved: filteredHasUnresolved };
+      setSequentialResult1F(seqRes1F);
+      // 旧形式 resultSub も互換のため作成（handlePlace のため）
+      const filteredAdapted = sequentialResultToAutoLayoutResult(seqRes1F);
+      setResultSub(filteredAdapted);
+      const selSub: Record<number, number> = {};
+      filteredAdapted.edgeLayouts.forEach(el => { selSub[el.edge.index] = el.selectedIndex; });
+      setSelectionsSub(selSub);
     } else {
+      setSequentialResult1F(null);
       setResultSub(null);
       setSelectionsSub({});
     }
 
-    // 既存の問題辺検出ロジックは廃止（順次決定の hasUnresolved で分岐）
     setResult(res);
     const sel: Record<number, number> = {};
-    res.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
+    res.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
     setSelections(sel);
 
-    // 未解決辺があれば最初の辺をフォーカス（新モーダルは H-3b-2-2 で実装）
-    if (seqRes.hasUnresolved) {
-      const firstUnresolved = seqRes.edgeResults.find(
-        er => !er.isLocked && !er.isAutoProgress
-      );
-      setActiveEdgeIndex(firstUnresolved ? firstUnresolved.edge.index : null);
+    // activeEdge を決定: 2F が未解決ならまず 2F、2F 解決済なら 1F へ
+    const firstUnresolved2F = seqRes2F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
+    if (seqRes2F.hasUnresolved && firstUnresolved2F) {
+      setActiveEdge({ floor: 2, index: firstUnresolved2F.edge.index });
+    } else if (seqRes1F && seqRes1F.hasUnresolved) {
+      const firstUnresolved1F = seqRes1F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
+      if (firstUnresolved1F) {
+        setActiveEdge({ floor: 1, index: firstUnresolved1F.edge.index });
+      } else {
+        setActiveEdge(null);
+      }
     } else {
-      setActiveEdgeIndex(null);
+      setActiveEdge(null);
     }
   };
 
-  // Phase H-3b-2-2: 順次決定の候補選択
-  const handleSequentialSelect = (edgeIndex: number, candIdx: number) => {
+  // 1F 下屋辺だけの SequentialLayoutResult を組み立てるヘルパー
+  const recompute1FSubResult = (selections1F: Record<number, number>): SequentialLayoutResult | null => {
+    if (targetFloor !== 'both' || !building1F || !building2F || uncoveredEdges1F.length === 0) {
+      return null;
+    }
+    const d1: Record<number, number> = {};
+    getBuildingEdgesClockwise(building1F).forEach(e => {
+      d1[e.index] = distances1F[e.index] ?? 900;
+    });
+    const fullSeq1F = computeAutoLayoutSequential(building1F, d1, undefined, enabledSizes, priorityConfig, selections1F);
+    const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
+    const filteredEdgeResults = fullSeq1F.edgeResults.filter(er => uncoveredIdxSet.has(er.edge.index));
+    const filteredHasUnresolved = filteredEdgeResults.some(er => !er.isLocked && !er.isAutoProgress);
+    return { edgeResults: filteredEdgeResults, hasUnresolved: filteredHasUnresolved };
+  };
+
+  // Phase H-3d-1: 順次決定の候補選択（2F / 1F 両対応）
+  const handleSequentialSelect = (floor: 1 | 2, edgeIndex: number, candIdx: number) => {
     if (!building) return;
-    const newSelections = { ...userSelections, [edgeIndex]: candIdx };
-    setUserSelections(newSelections);
 
-    const seqRes = computeAutoLayoutSequential(
-      building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections,
-    );
-    setSequentialResult(seqRes);
-    const adapted = sequentialResultToAutoLayoutResult(seqRes);
-    setResult(adapted);
-    const sel: Record<number, number> = {};
-    adapted.edgeLayouts.forEach((_, i) => { sel[i] = 0; });
-    setSelections(sel);
+    if (floor === 2) {
+      // 2F の選択
+      const newSelections2F = { ...userSelections2F, [edgeIndex]: candIdx };
+      setUserSelections2F(newSelections2F);
 
-    // 現在の辺より後ろの未解決辺を探す
-    const currentIdx = seqRes.edgeResults.findIndex(er => er.edge.index === edgeIndex);
-    const next = seqRes.edgeResults
-      .slice(currentIdx + 1)
-      .find(er => !er.isLocked && !er.isAutoProgress);
+      const seqRes2F = computeAutoLayoutSequential(
+        building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+      );
+      setSequentialResult2F(seqRes2F);
+      const adapted = sequentialResultToAutoLayoutResult(seqRes2F);
+      setResult(adapted);
+      const sel: Record<number, number> = {};
+      adapted.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
+      setSelections(sel);
 
-    if (next) {
-      setActiveEdgeIndex(next.edge.index);
+      // 2F 内で次の未解決辺を探す
+      const currentIdx2F = seqRes2F.edgeResults.findIndex(er => er.edge.index === edgeIndex);
+      const next2F = seqRes2F.edgeResults
+        .slice(currentIdx2F + 1)
+        .find(er => !er.isLocked && !er.isAutoProgress);
+
+      if (next2F) {
+        setActiveEdge({ floor: 2, index: next2F.edge.index });
+        return;
+      }
+
+      // 2F 全解決 → 1F 下屋辺の最初の未解決へ（あれば）
+      if (sequentialResult1F && sequentialResult1F.hasUnresolved) {
+        const first1F = sequentialResult1F.edgeResults.find(er => !er.isLocked && !er.isAutoProgress);
+        if (first1F) {
+          setActiveEdge({ floor: 1, index: first1F.edge.index });
+          return;
+        }
+      }
+      setActiveEdge(null);
     } else {
-      setActiveEdgeIndex(null);
+      // 1F 下屋辺の選択
+      const newSelections1F = { ...userSelections1F, [edgeIndex]: candIdx };
+      setUserSelections1F(newSelections1F);
+
+      const seqRes1F = recompute1FSubResult(newSelections1F);
+      setSequentialResult1F(seqRes1F);
+      if (seqRes1F) {
+        const adaptedSub = sequentialResultToAutoLayoutResult(seqRes1F);
+        setResultSub(adaptedSub);
+        const selSub: Record<number, number> = {};
+        adaptedSub.edgeLayouts.forEach(el => { selSub[el.edge.index] = el.selectedIndex; });
+        setSelectionsSub(selSub);
+
+        // 1F 内で次の未解決辺を探す
+        const currentIdx1F = seqRes1F.edgeResults.findIndex(er => er.edge.index === edgeIndex);
+        const next1F = seqRes1F.edgeResults
+          .slice(currentIdx1F + 1)
+          .find(er => !er.isLocked && !er.isAutoProgress);
+        if (next1F) {
+          setActiveEdge({ floor: 1, index: next1F.edge.index });
+          return;
+        }
+      }
+      // 1F 全解決
+      setActiveEdge(null);
     }
   };
 
-  // Phase H-3b-2-2: 順次決定で前の辺に戻る
+  // Phase H-3d-1: 順次決定で前の辺に戻る（2F / 1F 両対応、floor 跨ぎあり）
   const handleSequentialBack = () => {
-    if (!building || !sequentialResult || activeEdgeIndex === null) return;
-    const currentIdx = sequentialResult.edgeResults.findIndex(er => er.edge.index === activeEdgeIndex);
-    const prev = sequentialResult.edgeResults
-      .slice(0, currentIdx)
-      .reverse()
-      .find(er => !er.isLocked && !er.isAutoProgress);
-    if (!prev) return;
+    if (!building || !activeEdge) return;
 
-    const newSelections = { ...userSelections };
-    delete newSelections[prev.edge.index];
-    setUserSelections(newSelections);
+    if (activeEdge.floor === 1 && sequentialResult1F) {
+      // 1F 内で前の未解決辺を探す
+      const currentIdx = sequentialResult1F.edgeResults.findIndex(er => er.edge.index === activeEdge.index);
+      const prev1F = sequentialResult1F.edgeResults
+        .slice(0, currentIdx)
+        .reverse()
+        .find(er => !er.isLocked && !er.isAutoProgress);
+      if (prev1F) {
+        const newSelections1F = { ...userSelections1F };
+        delete newSelections1F[prev1F.edge.index];
+        setUserSelections1F(newSelections1F);
+        const seqRes1F = recompute1FSubResult(newSelections1F);
+        setSequentialResult1F(seqRes1F);
+        setActiveEdge({ floor: 1, index: prev1F.edge.index });
+        return;
+      }
+      // 1F 内に戻る先なし → 2F の最後の解決辺に戻る
+      if (sequentialResult2F) {
+        const last2F = [...sequentialResult2F.edgeResults]
+          .reverse()
+          .find(er => !er.isLocked && !er.isAutoProgress);
+        if (last2F) {
+          const newSelections2F = { ...userSelections2F };
+          delete newSelections2F[last2F.edge.index];
+          setUserSelections2F(newSelections2F);
+          const seqRes2F = computeAutoLayoutSequential(
+            building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+          );
+          setSequentialResult2F(seqRes2F);
+          setActiveEdge({ floor: 2, index: last2F.edge.index });
+        }
+      }
+      return;
+    }
 
-    const seqRes = computeAutoLayoutSequential(
-      building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections,
-    );
-    setSequentialResult(seqRes);
-    setActiveEdgeIndex(prev.edge.index);
+    // 2F の場合
+    if (activeEdge.floor === 2 && sequentialResult2F) {
+      const currentIdx = sequentialResult2F.edgeResults.findIndex(er => er.edge.index === activeEdge.index);
+      const prev2F = sequentialResult2F.edgeResults
+        .slice(0, currentIdx)
+        .reverse()
+        .find(er => !er.isLocked && !er.isAutoProgress);
+      if (!prev2F) return;
+      const newSelections2F = { ...userSelections2F };
+      delete newSelections2F[prev2F.edge.index];
+      setUserSelections2F(newSelections2F);
+      const seqRes2F = computeAutoLayoutSequential(
+        building, distances, scaffoldStart, enabledSizes, priorityConfig, newSelections2F,
+      );
+      setSequentialResult2F(seqRes2F);
+      setActiveEdge({ floor: 2, index: prev2F.edge.index });
+    }
   };
 
-  // Phase H-3b-2-2: 順次決定をキャンセル
+  // 順次決定をキャンセル（両 floor の state をクリア）
   const handleSequentialCancel = () => {
-    setActiveEdgeIndex(null);
-    setSequentialResult(null);
-    setUserSelections({});
+    setActiveEdge(null);
+    setSequentialResult2F(null);
+    setSequentialResult1F(null);
+    setUserSelections2F({});
+    setUserSelections1F({});
     setResult(null);
+    setResultSub(null);
   };
 
   const handlePlace = () => {
@@ -578,7 +691,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   }
 
   return (
-    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || activeEdgeIndex !== null) ? undefined : onClose}>
+    <div className="fixed inset-0 modal-overlay flex items-end sm:items-center justify-center z-50" onClick={(showConflictConfirm || activeEdge !== null) ? undefined : onClose}>
       <div className="bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
         <div className="sticky top-0 bg-dark-surface px-4 py-3 border-b border-dark-border flex items-center justify-between z-10">
           <h2 className="font-bold text-lg">自動割付</h2>
@@ -729,10 +842,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                       onChange={v => {
                         setDistances1F(prev => ({ ...prev, [edge.index]: Math.max(0, v) }));
                         setResultSub(null);
-                        // Phase H-3b-2-1: 順次決定 state もリセット
-                        setSequentialResult(null);
-                        setUserSelections({});
-                        setActiveEdgeIndex(null);
+                        // 順次決定 state をリセット（1F の距離変更は 1F のみ影響だが、安全のため両方）
+                        setSequentialResult2F(null);
+                        setSequentialResult1F(null);
+                        setUserSelections2F({});
+                        setUserSelections1F({});
+                        setActiveEdge(null);
                       }}
                       onFocus={() => setFocusedSubEdgeIndex(edge.index)}
                       onBlur={() => setFocusedSubEdgeIndex(null)}
@@ -936,14 +1051,31 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         </div>
       )}
 
-      {/* Phase H-3b-2-2: 順次決定モーダル */}
-      {activeEdgeIndex !== null && sequentialResult && (() => {
-        const activeEdge = sequentialResult.edgeResults.find(er => er.edge.index === activeEdgeIndex);
-        if (!activeEdge) return null;
+      {/* Phase H-3d-1: 順次決定モーダル（2F / 1F 両対応） */}
+      {activeEdge !== null && (() => {
+        // activeEdge.floor に応じて対応する SequentialLayoutResult を取り出す
+        const activeSeqResult = activeEdge.floor === 2 ? sequentialResult2F : sequentialResult1F;
+        if (!activeSeqResult) return null;
+        const activeEdgeResult = activeSeqResult.edgeResults.find(er => er.edge.index === activeEdge.index);
+        if (!activeEdgeResult) return null;
 
-        const allUnresolved = sequentialResult.edgeResults.filter(er => !er.isLocked && !er.isAutoProgress);
-        const currentNum = allUnresolved.findIndex(er => er.edge.index === activeEdgeIndex) + 1;
-        const totalNum = allUnresolved.length;
+        // 進捗: 2F の未解決数 + 1F の未解決数の合計内で「現在何番目か」
+        const unresolved2F = sequentialResult2F
+          ? sequentialResult2F.edgeResults.filter(er => !er.isLocked && !er.isAutoProgress)
+          : [];
+        const unresolved1F = sequentialResult1F
+          ? sequentialResult1F.edgeResults.filter(er => !er.isLocked && !er.isAutoProgress)
+          : [];
+        const totalNum = unresolved2F.length + unresolved1F.length;
+        const currentNum = activeEdge.floor === 2
+          ? unresolved2F.findIndex(er => er.edge.index === activeEdge.index) + 1
+          : unresolved2F.length + unresolved1F.findIndex(er => er.edge.index === activeEdge.index) + 1;
+
+        // プレビュー用: 1F の場合は building1F の points / edges を使用
+        const previewBuilding = activeEdge.floor === 2 ? building : building1F;
+        const previewEdges = activeEdge.floor === 2 ? edges : edges1FAll;
+
+        const floorLabel = activeEdge.floor === 2 ? '2F' : '1F 下屋辺';
 
         return (
           <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
@@ -951,43 +1083,45 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             <div className="relative bg-dark-surface border-t sm:border border-dark-border rounded-t-2xl sm:rounded-2xl w-full sm:max-w-lg max-h-[90vh] overflow-y-auto z-10">
               {/* ヘッダー */}
               <div className="px-4 py-3 border-b border-dark-border">
-                <p className="font-bold text-sm">足場の繋ぎ方を選んでください</p>
+                <p className="font-bold text-sm">足場の繋ぎ方を選んでください（{floorLabel}）</p>
                 <p className="text-xs text-dimension mt-0.5">未解決 {currentNum} / {totalNum} 面</p>
               </div>
 
               {/* プレビュー */}
-              <div className="px-4 pt-3">
-                <PreviewSVG
-                  points={building!.points}
-                  edges={edges}
-                  focusedIndex={activeEdgeIndex}
-                  blinkEdgeIndex={activeEdgeIndex}
-                  scaffoldStart={scaffoldStart}
-                />
-              </div>
+              {previewBuilding && (
+                <div className="px-4 pt-3">
+                  <PreviewSVG
+                    points={previewBuilding.points}
+                    edges={previewEdges}
+                    focusedIndex={activeEdge.index}
+                    blinkEdgeIndex={activeEdge.index}
+                    scaffoldStart={activeEdge.floor === 2 ? scaffoldStart : undefined}
+                  />
+                </div>
+              )}
 
               {/* 該当辺の情報 */}
               <div className="mx-4 mt-2 px-3 py-2 rounded-xl bg-dark-bg border border-dark-border">
                 <div className="text-sm font-bold">
-                  📍 {activeEdge.edge.label}面（{FACE_LABEL[activeEdge.edge.face]} / {activeEdge.edge.lengthMm}mm）
+                  📍 {floorLabel} {activeEdgeResult.edge.label}面（{FACE_LABEL[activeEdgeResult.edge.face]} / {activeEdgeResult.edge.lengthMm}mm）
                 </div>
                 <div className="text-[11px] text-dimension mt-1">
-                  始点離れ: <span className="font-mono text-canvas">{activeEdge.startDistanceMm}mm</span>
+                  始点離れ: <span className="font-mono text-canvas">{activeEdgeResult.startDistanceMm}mm</span>
                   <span className="ml-1">（前辺の終端から継承）</span>
                 </div>
                 <div className="text-[11px] text-dimension">
-                  希望する次の面の離れ: <span className="font-mono text-canvas">{activeEdge.desiredEndDistanceMm}mm</span>
+                  希望する次の面の離れ: <span className="font-mono text-canvas">{activeEdgeResult.desiredEndDistanceMm}mm</span>
                 </div>
               </div>
 
               {/* 候補ボタン */}
               <div className="p-4 space-y-2">
-                {activeEdge.candidates.map((cand, idx) => {
+                {activeEdgeResult.candidates.map((cand, idx) => {
                   const isSmaller = cand.diffFromDesired < 0;
                   return (
                     <button
                       key={idx}
-                      onClick={() => handleSequentialSelect(activeEdgeIndex, idx)}
+                      onClick={() => handleSequentialSelect(activeEdge.floor, activeEdge.index, idx)}
                       className="w-full p-3 border border-dark-border rounded-xl bg-dark-bg hover:border-accent hover:bg-accent/10 transition-colors text-left"
                     >
                       <div className="text-[10px] text-dimension mb-1">

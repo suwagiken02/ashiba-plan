@@ -877,9 +877,49 @@ export function placeHandrailsForEdge(
 }
 
 // ============================================================
+// 内側の辺 inner が外側の辺 outer に「乗っている（包含されている）」かを判定。
+// 軸並行（水平/垂直）の辺のみ対応。足場図面は基本これで十分。
+// ============================================================
+function isEdgeContainedIn(inner: EdgeInfo, outer: EdgeInfo): boolean {
+  // 水平線同士: 同じ Y、X 範囲が outer に含まれる
+  if (
+    inner.p1.y === inner.p2.y &&
+    outer.p1.y === outer.p2.y &&
+    inner.p1.y === outer.p1.y
+  ) {
+    const innerXMin = Math.min(inner.p1.x, inner.p2.x);
+    const innerXMax = Math.max(inner.p1.x, inner.p2.x);
+    const outerXMin = Math.min(outer.p1.x, outer.p2.x);
+    const outerXMax = Math.max(outer.p1.x, outer.p2.x);
+    return innerXMin >= outerXMin && innerXMax <= outerXMax;
+  }
+  // 垂直線同士: 同じ X、Y 範囲が outer に含まれる
+  if (
+    inner.p1.x === inner.p2.x &&
+    outer.p1.x === outer.p2.x &&
+    inner.p1.x === outer.p1.x
+  ) {
+    const innerYMin = Math.min(inner.p1.y, inner.p2.y);
+    const innerYMax = Math.max(inner.p1.y, inner.p2.y);
+    const outerYMin = Math.min(outer.p1.y, outer.p2.y);
+    const outerYMax = Math.max(outer.p1.y, outer.p2.y);
+    return innerYMin >= outerYMin && innerYMax <= outerYMax;
+  }
+  // 斜め辺は対象外
+  return false;
+}
+
+// ============================================================
 // target 建物の辺のうち、cover 建物で「覆われていない」辺を返す。
-// 判定: target の辺の中点から外向き法線方向に 1 グリッド (=10mm) ずらした点が
-//      cover ポリゴンの「外側」にあれば、その辺は cover で覆われていない。
+//
+// 判定:
+//   1. target の辺が cover の辺と完全一致するなら共通辺扱い → 覆われている (false)
+//      （1F が 2F と同じ位置の辺を持つケースで誤判定回避）
+//   2. target の辺が cover のいずれかの辺の上に完全に乗っている（包含）なら
+//      共通部分扱い → 覆われている (false)
+//      （1F の C 辺・G 辺などが 2F の長い1辺の一部分と重なるケース）
+//   3. それ以外は、辺の中点から外向き法線方向に 1 グリッド (=10mm) ずらした点が
+//      cover ポリゴンの「外側」にあれば、その辺は覆われていない (true)
 //
 // 使用例（1F+2F同時モード）:
 //   getEdgesNotCoveredBy(building1F, building2F)
@@ -891,14 +931,25 @@ export function getEdgesNotCoveredBy(
   cover: BuildingShape,
 ): EdgeInfo[] {
   const edges = getBuildingEdgesClockwise(target);
+  const coverEdges = getBuildingEdgesClockwise(cover);
   const polyCover = cover.points;
   return edges.filter(edge => {
+    // 1. cover の辺と完全一致するなら共通辺 → 覆われている扱い
+    const isSharedEdge = coverEdges.some(ce =>
+      (edge.p1.x === ce.p1.x && edge.p1.y === ce.p1.y && edge.p2.x === ce.p2.x && edge.p2.y === ce.p2.y) ||
+      (edge.p1.x === ce.p2.x && edge.p1.y === ce.p2.y && edge.p2.x === ce.p1.x && edge.p2.y === ce.p1.y)
+    );
+    if (isSharedEdge) return false;
+
+    // 2. target の辺が cover のいずれかの辺に包含されているなら共通部分扱い
+    const isContainedInCoverEdge = coverEdges.some(ce => isEdgeContainedIn(edge, ce));
+    if (isContainedInCoverEdge) return false;
+
+    // 3. 中点を外向きに 1 グリッドずらした点が cover ポリゴン外なら覆われていない
     const midX = (edge.p1.x + edge.p2.x) / 2;
     const midY = (edge.p1.y + edge.p2.y) / 2;
-    // 外向きに 1 グリッド = 10mm ずらす
     const testX = midX + edge.nx * 1;
     const testY = midY + edge.ny * 1;
-    // cover ポリゴンの外側なら覆われていない
     return !isPointInPolygon(testX, testY, polyCover);
   });
 }
