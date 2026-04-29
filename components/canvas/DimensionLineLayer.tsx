@@ -5,7 +5,8 @@ import { Layer, Line, Rect, Text } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX, gridToMm } from '@/lib/konva/gridUtils';
 import { getEdgeOverhangs, computeOffsetPolygon } from '@/lib/konva/roofUtils';
-import type { BuildingShape, Point } from '@/types';
+import { getHandrailEndpoints } from '@/lib/konva/snapUtils';
+import type { BuildingShape, Handrail, Point } from '@/types';
 
 // ============================================================
 // Phase J-2: 建物寸法線リニューアル
@@ -32,11 +33,21 @@ const PAD_X = 3;
 const PAD_Y = 2;
 
 // 軸オフセット (建物 BBox 端からの距離 px、外向き)
-// 1F が建物寄り、2F は更に外。各 floor で内→外の順。
-const OFF_INNER_1F = 60;
-const OFF_OUTER_1F = 110;
-const OFF_INNER_2F = 170;
-const OFF_OUTER_2F = 220;
+// Phase J-4: floor 別 + bothmode 切替。
+// solo (1F のみ or 2F のみ): 30 (足場) → 60 (外壁) → 110 (屋根) の 3 段。
+// bothmode: 2F 足場 20 → 1F 足場 35 → 2F 外壁 70 → 2F 屋根 120 →
+//          1F 外壁 180 → 1F 屋根 240 の 6 段。
+//          建物に近いほど内側、2F 寸法線が 1F より建物寄りに位置。
+const OFF_SCAFFOLD_SOLO = 30;
+const OFF_WALL_SOLO = 60;
+const OFF_ROOF_SOLO = 110;
+
+const OFF_SCAFFOLD_2F_BOTH = 20;
+const OFF_SCAFFOLD_1F_BOTH = 35;
+const OFF_WALL_2F_BOTH = 70;
+const OFF_ROOF_2F_BOTH = 120;
+const OFF_WALL_1F_BOTH = 180;
+const OFF_ROOF_1F_BOTH = 240;
 
 type Face = 'north' | 'south' | 'east' | 'west';
 type BB = { minX: number; minY: number; maxX: number; maxY: number };
@@ -289,8 +300,63 @@ function getFaceEdges(pts: Point[]): Record<Face, { from: number; to: number }[]
   return result;
 }
 
-/* ===== 全 floor + 屋根輪郭の合算 BBox (axis refPx 用) ===== */
-function getOverallBB(buildings: BuildingShape[]): BB {
+/* ===== 足場線用: 該当 floor の手摺を方位別に分類
+   旧ロジック踏襲 = 「手摺端点が手摺 BBox の方位端と一致する」もののみ抽出。
+   L 字内角の手摺など外周にない手摺は除外される (旧仕様通り)。
+   各手摺 1 本 = 1 span として、長さがそのまま表示される。 */
+function getFloorScaffoldEdges(
+  handrails: Handrail[],
+): { byFace: Record<Face, { from: number; to: number }[]>; bb: BB } {
+  const byFace: Record<Face, { from: number; to: number }[]> = {
+    north: [], south: [], east: [], west: [],
+  };
+  let bb = bb0();
+  if (handrails.length === 0) return { byFace, bb };
+
+  // 手摺 BBox 計算
+  for (const h of handrails) {
+    const [p1, p2] = getHandrailEndpoints(h);
+    bb = bbG(bb, p1.x, p1.y);
+    bb = bbG(bb, p2.x, p2.y);
+  }
+  if (!bbOk(bb)) return { byFace, bb };
+
+  const TOL = 0.01;
+  for (const h of handrails) {
+    const [p1, p2] = getHandrailEndpoints(h);
+    // 北面: 両端点 Y == bb.minY
+    if (Math.abs(p1.y - bb.minY) < TOL && Math.abs(p2.y - bb.minY) < TOL) {
+      const from = Math.min(p1.x, p2.x);
+      const to = Math.max(p1.x, p2.x);
+      if (to > from) byFace.north.push({ from, to });
+    }
+    // 南面: 両端点 Y == bb.maxY
+    if (Math.abs(p1.y - bb.maxY) < TOL && Math.abs(p2.y - bb.maxY) < TOL) {
+      const from = Math.min(p1.x, p2.x);
+      const to = Math.max(p1.x, p2.x);
+      if (to > from) byFace.south.push({ from, to });
+    }
+    // 西面: 両端点 X == bb.minX
+    if (Math.abs(p1.x - bb.minX) < TOL && Math.abs(p2.x - bb.minX) < TOL) {
+      const from = Math.min(p1.y, p2.y);
+      const to = Math.max(p1.y, p2.y);
+      if (to > from) byFace.west.push({ from, to });
+    }
+    // 東面: 両端点 X == bb.maxX
+    if (Math.abs(p1.x - bb.maxX) < TOL && Math.abs(p2.x - bb.maxX) < TOL) {
+      const from = Math.min(p1.y, p2.y);
+      const to = Math.max(p1.y, p2.y);
+      if (to > from) byFace.east.push({ from, to });
+    }
+  }
+  for (const f of ['north', 'south', 'east', 'west'] as Face[]) {
+    byFace[f].sort((a, b) => a.from - b.from);
+  }
+  return { byFace, bb };
+}
+
+/* ===== 全 floor + 屋根輪郭 + 手摺の合算 BBox (axis refPx 用) ===== */
+function getOverallBB(buildings: BuildingShape[], handrails: Handrail[]): BB {
   let bb = bb0();
   for (const b of buildings) {
     for (const p of b.points) bb = bbG(bb, p.x, p.y);
@@ -299,6 +365,11 @@ function getOverallBB(buildings: BuildingShape[]): BB {
       const roofPts = computeOffsetPolygon(b.points, ohs);
       for (const p of roofPts) bb = bbG(bb, p.x, p.y);
     }
+  }
+  for (const h of handrails) {
+    const [p1, p2] = getHandrailEndpoints(h);
+    bb = bbG(bb, p1.x, p1.y);
+    bb = bbG(bb, p2.x, p2.y);
   }
   return bb;
 }
@@ -318,19 +389,40 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
     const gx = (g: number) => g * gridPx + panX;
     const gy = (g: number) => g * gridPx + panY;
 
-    // refPx は全建物 + 屋根輪郭の合算 BBox の方位端 (1F + 2F 両方含む)
-    const overallBB = getOverallBB(canvasData.buildings);
+    // refPx は全建物 + 屋根輪郭 + 手摺の合算 BBox の方位端
+    const overallBB = getOverallBB(canvasData.buildings, canvasData.handrails);
     if (!bbOk(overallBB)) return [];
 
+    // bothmode 判定 (1F と 2F の両方に建物がある)
+    const has1FBuilding = canvasData.buildings.some(b => (b.floor ?? 1) === 1);
+    const has2FBuilding = canvasData.buildings.some(b => b.floor === 2);
+    const isBothmode = has1FBuilding && has2FBuilding;
+
+    // axis オフセット (bothmode で 6 段並ぶときラベル重なり回避のため広め)
+    const offsets = isBothmode
+      ? {
+          wall1F: OFF_WALL_1F_BOTH, roof1F: OFF_ROOF_1F_BOTH,
+          wall2F: OFF_WALL_2F_BOTH, roof2F: OFF_ROOF_2F_BOTH,
+          scaffold1F: OFF_SCAFFOLD_1F_BOTH, scaffold2F: OFF_SCAFFOLD_2F_BOTH,
+        }
+      : {
+          wall1F: OFF_WALL_SOLO, roof1F: OFF_ROOF_SOLO,
+          wall2F: OFF_WALL_SOLO, roof2F: OFF_ROOF_SOLO,
+          scaffold1F: OFF_SCAFFOLD_SOLO, scaffold2F: OFF_SCAFFOLD_SOLO,
+        };
+
     // floor 別の描画パラメータ
-    const floors: Array<{ floor: 1 | 2; offInner: number; offOuter: number; color: string }> = [
-      { floor: 1, offInner: OFF_INNER_1F, offOuter: OFF_OUTER_1F, color: COLOR_1F },
-      { floor: 2, offInner: OFF_INNER_2F, offOuter: OFF_OUTER_2F, color: COLOR_2F },
+    const floors: Array<{
+      floor: 1 | 2; offWall: number; offRoof: number; offScaffold: number; color: string;
+    }> = [
+      { floor: 1, offWall: offsets.wall1F, offRoof: offsets.roof1F, offScaffold: offsets.scaffold1F, color: COLOR_1F },
+      { floor: 2, offWall: offsets.wall2F, offRoof: offsets.roof2F, offScaffold: offsets.scaffold2F, color: COLOR_2F },
     ];
 
-    for (const { floor, offInner, offOuter, color } of floors) {
+    for (const { floor, offWall, offRoof, offScaffold, color } of floors) {
       const floorBuildings = canvasData.buildings.filter(b => (b.floor ?? 1) === floor);
       if (floorBuildings.length === 0) continue;
+      const floorHandrails = canvasData.handrails.filter(h => (h.floor ?? 1) === floor);
 
       // 該当 floor の本体辺・屋根輪郭辺を方位別に集約
       const wallEdges: Record<Face, { from: number; to: number }[]> = {
@@ -367,7 +459,10 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
         overhangEdges[f].sort((a, b) => a.from - b.from);
       }
 
-      // 各方位で 2 段描画
+      // Phase J-4: 該当 floor の足場 (= 手摺) を方位別に集約
+      const scaffoldData = getFloorScaffoldEdges(floorHandrails);
+
+      // 各方位で 3 段描画 (足場 → 外壁 → 屋根、外向きに)
       for (const face of ['north', 'south', 'east', 'west'] as Face[]) {
         const isH = face === 'north' || face === 'south';
         const sign = (face === 'north' || face === 'west') ? -1 : 1;
@@ -379,10 +474,26 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
           : (face === 'west' ? overallBB.minX : overallBB.maxX);
         const refPx = isH ? gy(refGrid) : gx(refGrid);
 
-        // 内側の段: 本体
+        // 段 (足場): 該当 floor の手摺を直列寸法
+        const scfEdges = scaffoldData.byFace[face];
+        if (scfEdges.length > 0) {
+          const axisScaffold = refPx + sign * offScaffold;
+          const spans: Span[] = scfEdges.map(e => ({
+            s: isH ? gx(e.from) : gy(e.from),
+            e: isH ? gx(e.to) : gy(e.to),
+            mm: Math.round(gridToMm(e.to - e.from)),
+          }));
+          const total = spans.reduce((sum, sp) => sum + sp.mm, 0);
+          els.push(...renderDimLine(
+            `D${floor}S${face}`, isH, axisScaffold, innerDir, spans,
+            spans.length > 1, total, fs, color,
+          ));
+        }
+
+        // 段 (外壁): 本体辺
         const wEdges = wallEdges[face];
         if (wEdges.length > 0) {
-          const axisInner = refPx + sign * offInner;
+          const axisWall = refPx + sign * offWall;
           const spans: Span[] = wEdges.map(e => ({
             s: isH ? gx(e.from) : gy(e.from),
             e: isH ? gx(e.to) : gy(e.to),
@@ -390,7 +501,7 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
           }));
           const total = spans.reduce((sum, sp) => sum + sp.mm, 0);
           els.push(...renderDimLine(
-            `D${floor}I${face}`, isH, axisInner, innerDir, spans,
+            `D${floor}I${face}`, isH, axisWall, innerDir, spans,
             spans.length > 1, total, fs, color,
           ));
         }
@@ -401,7 +512,7 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
         const rEdges = roofEdges[face];
         const ovEdges = overhangEdges[face];
         if (rEdges.length > 0 && ovEdges.length > 0) {
-          const axisOuter = refPx + sign * offOuter;
+          const axisOuter = refPx + sign * offRoof;
           const lineStartGrid = Math.min(...rEdges.map(r => r.from));
           const lineEndGrid = Math.max(...rEdges.map(r => r.to));
           const lineStartPx = isH ? gx(lineStartGrid) : gy(lineStartGrid);
