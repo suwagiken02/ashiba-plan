@@ -1878,6 +1878,89 @@ export function computeBothmode1FLayout(
 }
 
 // ============================================================
+// Phase H-3d-2 Stage 5 Part D-1: bothmode 結果を AutoLayoutResult に変換
+// ------------------------------------------------------------
+// 既存の描画コード (Konva Canvas 等) は AutoLayoutResult.edgeLayouts を消費する。
+// bothmode の Bothmode2FResult / Bothmode1FResult を、各セグメント単位で
+// EdgeLayout に展開して全部 edgeLayouts に格納する。
+// 同じ edge2FIndex / edge1FIndex を持つセグメントが複数 edgeLayouts に並ぶ点に注意。
+// ============================================================
+
+function bothmodeSegmentToEdgeLayout(seg: {
+  startPoint: Point;
+  endPoint: Point;
+  segmentLengthMm: number;
+  face: FaceDir;
+  handrailDir: 'horizontal' | 'vertical';
+  nx: number;
+  ny: number;
+  startDistanceMm: number;
+  candidates: SequentialCandidate[];
+  selectedIndex: number;
+  isLocked: boolean;
+  scaffoldCoord: number;
+  cursorStart: number;
+}, edgeIndex: number): EdgeLayout {
+  const selectedCandidate = seg.candidates[seg.selectedIndex];
+  const railsTotal = selectedCandidate
+    ? selectedCandidate.rails.reduce((a, b) => a + b, 0)
+    : 0;
+
+  // cursorEnd を rails 合計ベースに再計算 (sequentialResultToAutoLayoutResult と同方式)
+  const railsTotalGrid = railsTotal / 10;
+  const sign = seg.handrailDir === 'horizontal'
+    ? (seg.endPoint.x > seg.startPoint.x ? 1 : -1)
+    : (seg.endPoint.y > seg.startPoint.y ? 1 : -1);
+  const cursorEndAdjusted = seg.cursorStart + sign * railsTotalGrid;
+
+  const edge: EdgeInfo = {
+    index: edgeIndex,
+    label: String.fromCharCode(65 + edgeIndex),
+    p1: seg.startPoint,
+    p2: seg.endPoint,
+    lengthMm: seg.segmentLengthMm,
+    face: seg.face,
+    handrailDir: seg.handrailDir,
+    nx: seg.nx,
+    ny: seg.ny,
+  };
+
+  // 提案モーダル抑止のため remainder=0 (sequentialResultToAutoLayoutResult と同方式)
+  const candidates: LayoutCombination[] = seg.candidates.map(c => ({
+    rails: c.rails,
+    remainder: 0,
+    count: c.rails.length,
+  }));
+
+  return {
+    edge,
+    distanceMm: seg.startDistanceMm,
+    edgeLengthMm: seg.segmentLengthMm,
+    effectiveMm: railsTotal,
+    scaffoldCoord: seg.scaffoldCoord,
+    cursorStart: seg.cursorStart,
+    cursorEnd: cursorEndAdjusted,
+    candidates,
+    selectedIndex: seg.selectedIndex,
+    locked: seg.isLocked,
+  };
+}
+
+export function bothmodeResultsToAutoLayoutResult(
+  result2F: Bothmode2FResult,
+  result1F: Bothmode1FResult,
+): AutoLayoutResult {
+  const edgeLayouts: EdgeLayout[] = [];
+  for (const seg of result2F.edgeSegments) {
+    edgeLayouts.push(bothmodeSegmentToEdgeLayout(seg, seg.edge2FIndex));
+  }
+  for (const seg of result1F.edgeSegments) {
+    edgeLayouts.push(bothmodeSegmentToEdgeLayout(seg, seg.edge1FIndex));
+  }
+  return { edgeLayouts };
+}
+
+// ============================================================
 // 優先度評価ヘルパー（Phase 5-B 以降でアルゴリズム本体に組み込み）
 // ============================================================
 
