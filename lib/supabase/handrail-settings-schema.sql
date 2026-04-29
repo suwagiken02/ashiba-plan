@@ -41,3 +41,9 @@ alter table handrail_settings
     "subCount": 6,
     "adjustCount": 5
   }'::jsonb;
+
+-- Phase J-5: 寸法線の段別表示設定
+-- 1F/2F × 屋根/外壁/足場 の 6 段を個別 ON/OFF
+alter table handrail_settings
+  add column if not exists dimension_visibility jsonb not null default
+    '{"roof1F":true,"wall1F":true,"scaffold1F":false,"roof2F":true,"wall2F":true,"scaffold2F":false}'::jsonb;

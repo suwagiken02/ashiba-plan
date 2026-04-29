@@ -8,11 +8,43 @@ import { HandrailLengthMm, DEFAULT_ENABLED_SIZES, ALL_HANDRAIL_SIZES, PriorityCo
 /** Phase 0b: 現在の company_id を取得（authStore 未ロード時は Default Company にフォールバック） */
 const getCompanyId = () => useAuthStore.getState().currentCompanyId ?? DEFAULT_COMPANY_ID;
 
+// Phase J-5: 寸法線の段別表示設定
+export type DimensionVisibility = {
+  roof1F: boolean;
+  wall1F: boolean;
+  scaffold1F: boolean;
+  roof2F: boolean;
+  wall2F: boolean;
+  scaffold2F: boolean;
+};
+
+export const DEFAULT_DIMENSION_VISIBILITY: DimensionVisibility = {
+  roof1F: true, wall1F: true, scaffold1F: false,
+  roof2F: true, wall2F: true, scaffold2F: false,
+};
+
+function parseDimensionVisibility(raw: unknown): DimensionVisibility {
+  if (!raw || typeof raw !== 'object') return { ...DEFAULT_DIMENSION_VISIBILITY };
+  const r = raw as Record<string, unknown>;
+  const pick = (k: keyof DimensionVisibility) =>
+    typeof r[k] === 'boolean' ? (r[k] as boolean) : DEFAULT_DIMENSION_VISIBILITY[k];
+  return {
+    roof1F: pick('roof1F'),
+    wall1F: pick('wall1F'),
+    scaffold1F: pick('scaffold1F'),
+    roof2F: pick('roof2F'),
+    wall2F: pick('wall2F'),
+    scaffold2F: pick('scaffold2F'),
+  };
+}
+
 type HandrailSettingsStore = {
   /** 現在有効な手摺サイズ（部材パレット・自動割付で使用可能なサイズ） */
   enabledSizes: HandrailLengthMm[];
   /** 優先部材リスト設定（自動割付用） */
   priorityConfig: PriorityConfig;
+  /** Phase J-5: 寸法線の段別表示 ON/OFF */
+  dimensionVisibility: DimensionVisibility;
   /** ロード中フラグ（初回 load 前は true） */
   loading: boolean;
   /** DB から設定を読み込む（アプリ起動時に呼ぶ） */
@@ -23,6 +55,8 @@ type HandrailSettingsStore = {
   savePriorityConfig: (config: PriorityConfig) => Promise<void>;
   /** サイズ単位のトグル（UI のスイッチから呼ぶ） */
   toggleSize: (size: HandrailLengthMm) => Promise<void>;
+  /** Phase J-5: 寸法線の段別表示を更新して DB に保存 (楽観的更新) */
+  updateDimensionVisibility: (updates: Partial<DimensionVisibility>) => Promise<void>;
 };
 
 /** enabled_sizes を HandrailLengthMm[] にサニタイズ（不正な値は除去） */
@@ -78,6 +112,7 @@ function adjustPriorityOnToggle(
 export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get) => ({
   enabledSizes: [...DEFAULT_ENABLED_SIZES],
   priorityConfig: { ...DEFAULT_PRIORITY_CONFIG, order: [...DEFAULT_PRIORITY_CONFIG.order] },
+  dimensionVisibility: { ...DEFAULT_DIMENSION_VISIBILITY },
   loading: true,
 
   loadHandrailSettings: async () => {
@@ -87,7 +122,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
       const companyId = getCompanyId();
       const { data, error } = await supabase
         .from('handrail_settings')
-        .select('enabled_sizes, priority_config')
+        .select('enabled_sizes, priority_config, dimension_visibility')
         .is('owner_id', null)
         .eq('company_id', companyId)
         .limit(1)
@@ -97,6 +132,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
         set({
           enabledSizes: [...DEFAULT_ENABLED_SIZES],
           priorityConfig: { ...DEFAULT_PRIORITY_CONFIG, order: [...DEFAULT_PRIORITY_CONFIG.order] },
+          dimensionVisibility: { ...DEFAULT_DIMENSION_VISIBILITY },
           loading: false,
         });
         return;
@@ -113,12 +149,15 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
             adjustCount: typeof rawPc.adjustCount === 'number' ? rawPc.adjustCount : DEFAULT_PRIORITY_CONFIG.adjustCount,
           }
         : { ...DEFAULT_PRIORITY_CONFIG, order: [...DEFAULT_PRIORITY_CONFIG.order] };
-      set({ enabledSizes, priorityConfig, loading: false });
+      // Phase J-5: dimension_visibility（null/旧データなら DEFAULT）
+      const dimensionVisibility = parseDimensionVisibility(data?.dimension_visibility);
+      set({ enabledSizes, priorityConfig, dimensionVisibility, loading: false });
     } catch (e) {
       console.warn('[handrailSettings] load exception:', e);
       set({
         enabledSizes: [...DEFAULT_ENABLED_SIZES],
         priorityConfig: { ...DEFAULT_PRIORITY_CONFIG, order: [...DEFAULT_PRIORITY_CONFIG.order] },
+        dimensionVisibility: { ...DEFAULT_DIMENSION_VISIBILITY },
         loading: false,
       });
     }
@@ -197,6 +236,35 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
     await saveHandrailSettings(next);
     if (nextConfig !== priorityConfig) {
       await savePriorityConfig(nextConfig);
+    }
+  },
+
+  // Phase J-5: 寸法線の段別表示を更新 (楽観的更新 + DB 保存)
+  updateDimensionVisibility: async (updates) => {
+    const cur = get().dimensionVisibility;
+    const next = { ...cur, ...updates };
+    set({ dimensionVisibility: next });
+    try {
+      const companyId = getCompanyId();
+      const { data: existing } = await supabase
+        .from('handrail_settings')
+        .select('id')
+        .is('owner_id', null)
+        .eq('company_id', companyId)
+        .limit(1)
+        .maybeSingle();
+      if (existing?.id) {
+        await supabase
+          .from('handrail_settings')
+          .update({ dimension_visibility: next, updated_at: new Date().toISOString() })
+          .eq('id', existing.id);
+      } else {
+        await supabase
+          .from('handrail_settings')
+          .insert({ owner_id: null, company_id: companyId, dimension_visibility: next });
+      }
+    } catch (e) {
+      console.warn('[handrailSettings] updateDimensionVisibility exception:', e);
     }
   },
 }));

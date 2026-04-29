@@ -1,6 +1,7 @@
 'use client';
 import React from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
+import DimensionVisibilityCheckboxes from '@/components/dimension/DimensionVisibilityCheckboxes';
 
 export default function SettingsPanel({ onClose }: { onClose: () => void }) {
   const {
@@ -29,16 +30,24 @@ export default function SettingsPanel({ onClose }: { onClose: () => void }) {
           <button onClick={onClose} className="text-dimension text-lg px-2">✕</button>
         </div>
         {items.map(item => (
-          <button key={item.label} onClick={item.toggle}
-            className="w-full flex items-center justify-between px-3 py-2.5 bg-dark-bg rounded-xl border border-dark-border">
-            <span className="text-sm flex items-center gap-2">
-              <span>{item.icon}</span>
-              <span>{item.label}</span>
-            </span>
-            <span className={`w-10 h-6 rounded-full transition-colors flex items-center ${item.value ? 'bg-accent' : 'bg-dark-border'}`}>
-              <span className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-1 ${item.value ? 'translate-x-4' : 'translate-x-0'}`} />
-            </span>
-          </button>
+          <React.Fragment key={item.label}>
+            <button onClick={item.toggle}
+              className="w-full flex items-center justify-between px-3 py-2.5 bg-dark-bg rounded-xl border border-dark-border">
+              <span className="text-sm flex items-center gap-2">
+                <span>{item.icon}</span>
+                <span>{item.label}</span>
+              </span>
+              <span className={`w-10 h-6 rounded-full transition-colors flex items-center ${item.value ? 'bg-accent' : 'bg-dark-border'}`}>
+                <span className={`w-4 h-4 bg-white rounded-full shadow transition-transform mx-1 ${item.value ? 'translate-x-4' : 'translate-x-0'}`} />
+              </span>
+            </button>
+            {/* Phase J-5: 「寸法表示」(マスター) の直下に段別チェックボックス */}
+            {item.label === '寸法表示' && (
+              <div className="px-1">
+                <DimensionVisibilityCheckboxes disabled={!showDimensionLines} />
+              </div>
+            )}
+          </React.Fragment>
         ))}
         {/* グリッド強弱 */}
         <div className="px-3 py-2.5 bg-dark-bg rounded-xl border border-dark-border">

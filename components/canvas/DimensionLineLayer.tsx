@@ -3,6 +3,7 @@
 import React, { useMemo } from 'react';
 import { Layer, Line, Rect, Text } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
+import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { INITIAL_GRID_PX, gridToMm } from '@/lib/konva/gridUtils';
 import { getEdgeOverhangs, computeOffsetPolygon } from '@/lib/konva/roofUtils';
 import { getHandrailEndpoints } from '@/lib/konva/snapUtils';
@@ -379,6 +380,8 @@ function getOverallBB(buildings: BuildingShape[], handrails: Handrail[]): BB {
    ================================================================ */
 export default function DimensionLineLayer({ visible = true }: { visible?: boolean }) {
   const { canvasData, zoom, panX, panY } = useCanvasStore();
+  // Phase J-5: 段別表示 ON/OFF (DB 連動)
+  const dimensionVisibility = useHandrailSettingsStore(s => s.dimensionVisibility);
   const gridPx = INITIAL_GRID_PX * zoom;
 
   const elements = useMemo(() => {
@@ -475,8 +478,9 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
         const refPx = isH ? gy(refGrid) : gx(refGrid);
 
         // 段 (足場): 該当 floor の手摺を直列寸法
+        const scaffoldVisKey = floor === 1 ? 'scaffold1F' : 'scaffold2F';
         const scfEdges = scaffoldData.byFace[face];
-        if (scfEdges.length > 0) {
+        if (dimensionVisibility[scaffoldVisKey] && scfEdges.length > 0) {
           const axisScaffold = refPx + sign * offScaffold;
           const spans: Span[] = scfEdges.map(e => ({
             s: isH ? gx(e.from) : gy(e.from),
@@ -491,8 +495,9 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
         }
 
         // 段 (外壁): 本体辺
+        const wallVisKey = floor === 1 ? 'wall1F' : 'wall2F';
         const wEdges = wallEdges[face];
-        if (wEdges.length > 0) {
+        if (dimensionVisibility[wallVisKey] && wEdges.length > 0) {
           const axisWall = refPx + sign * offWall;
           const spans: Span[] = wEdges.map(e => ({
             s: isH ? gx(e.from) : gy(e.from),
@@ -509,9 +514,10 @@ export default function DimensionLineLayer({ visible = true }: { visible?: boole
         // 外側の段: 屋根の出幅 (Phase J-3-fix: 各辺ごとの差分を使用)
         // overhangEdges = 元の建物の各辺と対応する屋根輪郭の辺を 1 対 1 で比較した差分。
         // 主線範囲は roofEdges (屋根輪郭の face 別 X 範囲の最小〜最大) で決定。
+        const roofVisKey = floor === 1 ? 'roof1F' : 'roof2F';
         const rEdges = roofEdges[face];
         const ovEdges = overhangEdges[face];
-        if (rEdges.length > 0 && ovEdges.length > 0) {
+        if (dimensionVisibility[roofVisKey] && rEdges.length > 0 && ovEdges.length > 0) {
           const axisOuter = refPx + sign * offRoof;
           const lineStartGrid = Math.min(...rEdges.map(r => r.from));
           const lineEndGrid = Math.max(...rEdges.map(r => r.to));

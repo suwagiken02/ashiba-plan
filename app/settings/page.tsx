@@ -7,6 +7,7 @@ import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { supabase } from '@/lib/supabase/client';
 import { ALL_HANDRAIL_SIZES } from '@/types';
 import DraggablePriorityList from '@/components/settings/DraggablePriorityList';
+import DimensionVisibilityCheckboxes from '@/components/dimension/DimensionVisibilityCheckboxes';
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -171,6 +172,17 @@ export default function SettingsPage() {
                 <DraggablePriorityList />
               </div>
             )}
+          </div>
+        </section>
+
+        <section>
+          <h2 className="text-sm text-dimension mb-2 font-bold">寸法表示</h2>
+          <div className="bg-dark-surface border border-dark-border rounded-xl p-4">
+            <p className="text-xs text-dimension mb-3">
+              図面に表示する寸法線の段を選択します。<br />
+              マスタートグル (図面右上 / フッター設定) が OFF のときは全段非表示です。
+            </p>
+            <DimensionVisibilityCheckboxes />
           </div>
         </section>
 

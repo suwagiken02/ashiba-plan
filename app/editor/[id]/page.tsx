@@ -24,6 +24,7 @@ import MoveSelectMovePanel from '@/components/scaffold/MoveSelectMovePanel';
 import DarkModeToggle from '@/components/DarkModeToggle';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
+import DimensionVisibilityCheckboxes from '@/components/dimension/DimensionVisibilityCheckboxes';
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import DirectionInputModal from '@/components/building/DirectionInputModal';
 import PinDistanceInputModal from '@/components/canvas/PinDistanceInputModal';
@@ -481,6 +482,13 @@ export default function EditorPage() {
               <line x1="13" y1="11" x2="16" y2="9" />
             </svg>
           </button>
+
+          {/* Phase J-5: 寸法線の段別チェックボックス (マスター ON 時のみ表示) */}
+          {showDimensionLines && (
+            <div className="bg-dark-surface border border-dark-border rounded-xl p-2 shadow-lg">
+              <DimensionVisibilityCheckboxes disabled={!showDimensionLines} />
+            </div>
+          )}
 
           {/* 離れ表示トグル */}
           <button
