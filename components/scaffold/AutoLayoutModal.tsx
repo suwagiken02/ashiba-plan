@@ -1329,23 +1329,25 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                     {/* 候補カードリスト */}
                     <div className="px-4 pb-4 space-y-2">
                       {activeEdgeResult.candidates.map((cand, idx) => {
-                        // exact は ←/→ が無意味なので disabled。割り変更は smallerVariationIdx 流用で機能。
+                        // exact は ←/→ が無意味なので disabled。部材変更は smallerVariationIdx 流用で機能。
                         const isExact = cand.side === 'exact';
-                        const sideLabel = isExact ? 'ぴったり' : cand.side === 'smaller' ? '小さめ' : '大きめ';
                         // ←/→ ハンドラに渡す side: exact のときは smaller (Phase I-1 仕様準拠)
                         const sideForHandler: 'larger' | 'smaller' = cand.side === 'exact' ? 'smaller' : cand.side;
                         const sideOffsetIdx = sideForHandler === 'larger'
                           ? activeAdj.larger.offsetIdx
                           : activeAdj.smaller.offsetIdx;
 
-                        // 「割り変更←」: variationIdx === 0 で disabled
+                        // 部材変更←: variationIdx === 0 で disabled
                         const variationPrevDisabled = cand.variationIdx === 0;
-                        // 「割り変更→」: 次の variation がない (= 最後 or 唯一) で disabled
+                        // 部材変更→: 次の variation がない で disabled
                         const variationNextDisabled = cand.variationIdx + 1 >= cand.variationCount;
-                        // 「←」: exact / 閉じ辺 / offsetIdx===0 で disabled
+                        // 離れ変更←: exact / 閉じ辺 / offsetIdx===0 で disabled
                         const prevDisabled = isExact || isCloseCorner || sideOffsetIdx === 0;
-                        // 「→」: exact / 閉じ辺 / probe で枯れ で disabled
+                        // 離れ変更→: exact / 閉じ辺 / probe で枯れ で disabled
                         const nextDisabled = isExact || isCloseCorner || !canAdvanceOffset(sideForHandler);
+
+                        const arrowBtnClass =
+                          'px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed';
 
                         return (
                           <div
@@ -1356,9 +1358,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                               onClick={() => handleSequentialSelect(activeEdge.floor, activeEdge.index, idx)}
                               className="w-full p-3 hover:bg-accent/10 hover:border-accent transition-colors text-left"
                             >
-                              <div className="text-[10px] text-dimension mb-1">
-                                候補{idx + 1}（{sideLabel}）
-                              </div>
                               <div className="flex flex-wrap gap-1 mb-2">
                                 {cand.rails.map((r, ri) => (
                                   <span key={ri} className="px-1.5 py-0.5 bg-handrail/20 text-handrail text-[11px] font-mono rounded">
@@ -1370,47 +1369,57 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                                 → {nextEdge.label}面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
                               </div>
                             </button>
-                            {/* Phase I-3-fix: 操作ボタン行
-                                [割り変更←] [(n/N)] [割り変更→] | [←] [→]
-                                左グループ = 同じ離れの rails パターン切替 (variation)
-                                右グループ = 離れを進める/戻す (offsetIdx) */}
-                            <div className="px-3 pb-3 flex gap-1.5 items-center flex-wrap">
-                              <button
-                                onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
-                                disabled={variationPrevDisabled}
-                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="前の rails パターンに戻る"
-                              >
-                                割り変更←
-                              </button>
-                              <span className="px-1 text-[11px] font-mono text-dimension">
-                                ({cand.variationIdx + 1}/{cand.variationCount})
-                              </span>
-                              <button
-                                onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
-                                disabled={variationNextDisabled}
-                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="次の rails パターンに切替"
-                              >
-                                割り変更→
-                              </button>
-                              <span className="mx-1 text-dimension/30">|</span>
-                              <button
-                                onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
-                                disabled={prevDisabled}
-                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="前の離れに戻る"
-                              >
-                                ←
-                              </button>
-                              <button
-                                onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
-                                disabled={nextDisabled}
-                                className="px-2 py-1 text-xs rounded bg-dark-border/50 text-dimension hover:bg-dark-border hover:text-canvas disabled:opacity-30 disabled:cursor-not-allowed"
-                                title="次の離れに進む"
-                              >
-                                →
-                              </button>
+                            {/* Phase I-3-fix2: 操作ボタン
+                                [←] 部材変更 [→] / [←] 離れ変更 [→]
+                                各グループは ←/→ ボタン + 中央ラベル、部材変更のみ下にカウンタ */}
+                            <div className="px-3 pb-3 flex flex-wrap gap-x-4 gap-y-2 items-start">
+                              {/* 部材変更グループ */}
+                              <div className="flex flex-col items-center gap-0.5">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
+                                    disabled={variationPrevDisabled}
+                                    className={arrowBtnClass}
+                                    title="前の rails パターンに戻る"
+                                  >
+                                    ←
+                                  </button>
+                                  <span className="text-xs text-dimension/70 px-1 select-none">部材変更</span>
+                                  <button
+                                    onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
+                                    disabled={variationNextDisabled}
+                                    className={arrowBtnClass}
+                                    title="次の rails パターンに切替"
+                                  >
+                                    →
+                                  </button>
+                                </div>
+                                <span className="text-[10px] font-mono text-dimension/50">
+                                  {cand.variationIdx + 1}/{cand.variationCount}
+                                </span>
+                              </div>
+                              {/* 離れ変更グループ */}
+                              <div className="flex flex-col items-center gap-0.5">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
+                                    disabled={prevDisabled}
+                                    className={arrowBtnClass}
+                                    title="前の離れに戻る"
+                                  >
+                                    ←
+                                  </button>
+                                  <span className="text-xs text-dimension/70 px-1 select-none">離れ変更</span>
+                                  <button
+                                    onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
+                                    disabled={nextDisabled}
+                                    className={arrowBtnClass}
+                                    title="次の離れに進む"
+                                  >
+                                    →
+                                  </button>
+                                </div>
+                              </div>
                             </div>
                           </div>
                         );
