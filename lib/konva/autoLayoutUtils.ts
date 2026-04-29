@@ -1080,6 +1080,479 @@ export function getEdgesNotCoveredBy(
 }
 
 // ============================================================
+// Phase H-3d-2 Stage 2: 1F辺と2F辺の「同一直線上で連動」判定
+//
+// bothmode の自動割付で、1F の壁と 2F の壁が同じ直線上にあるとき、
+// それらは「連動」して扱われる必要がある (= 足場ラインも揃える)。
+// この判定を機械的に行うための純粋関数を提供する。
+//
+// 連動条件 (全て満たすとき true):
+//   1. 両辺とも軸並行 (水平または垂直、斜めは false)
+//   2. 両辺の handrailDir が一致
+//   3. 固定軸座標が一致 (horizontal: Y、vertical: X)
+//   4. 1F辺の可変軸範囲が 2F辺の可変軸範囲に完全に含まれる
+//   5. 法線方向が一致 (外向き法線が同じ向き)
+// ============================================================
+export function isCollinearWith(edge1F: EdgeInfo, edge2F: EdgeInfo): boolean {
+  // 1. 両辺とも軸並行 (handrailDir が定まっていれば軸並行)
+  // handrailDir は 'horizontal' | 'vertical' で、getBuildingEdgesClockwise で
+  // 既に face/handrailDir が決まっている。axis-aligned 確認のため明示的に座標で判定。
+  const e1IsH = edge1F.p1.y === edge1F.p2.y;
+  const e1IsV = edge1F.p1.x === edge1F.p2.x;
+  const e2IsH = edge2F.p1.y === edge2F.p2.y;
+  const e2IsV = edge2F.p1.x === edge2F.p2.x;
+  if (!(e1IsH || e1IsV)) return false;
+  if (!(e2IsH || e2IsV)) return false;
+
+  // 2. handrailDir 一致
+  if (edge1F.handrailDir !== edge2F.handrailDir) return false;
+
+  // 3. 固定軸座標一致
+  if (edge1F.handrailDir === 'horizontal') {
+    if (edge1F.p1.y !== edge2F.p1.y) return false;
+  } else {
+    if (edge1F.p1.x !== edge2F.p1.x) return false;
+  }
+
+  // 4. 1F の可変軸範囲が 2F の可変軸範囲に完全に含まれる
+  if (edge1F.handrailDir === 'horizontal') {
+    const min1 = Math.min(edge1F.p1.x, edge1F.p2.x);
+    const max1 = Math.max(edge1F.p1.x, edge1F.p2.x);
+    const min2 = Math.min(edge2F.p1.x, edge2F.p2.x);
+    const max2 = Math.max(edge2F.p1.x, edge2F.p2.x);
+    if (min1 < min2 || max1 > max2) return false;
+  } else {
+    const min1 = Math.min(edge1F.p1.y, edge1F.p2.y);
+    const max1 = Math.max(edge1F.p1.y, edge1F.p2.y);
+    const min2 = Math.min(edge2F.p1.y, edge2F.p2.y);
+    const max2 = Math.max(edge2F.p1.y, edge2F.p2.y);
+    if (min1 < min2 || max1 > max2) return false;
+  }
+
+  // 5. 法線方向一致 (外向き法線、getBuildingEdgesClockwise で計算済み)
+  if (edge1F.nx !== edge2F.nx || edge1F.ny !== edge2F.ny) return false;
+
+  return true;
+}
+
+/**
+ * 建物全体の連動ペア (1F辺 ↔ 2F辺) を抽出する。
+ * 各 1F 辺について、isCollinearWith(edge1F, edge2F) が true になる
+ * 最初の 2F 辺をペアとして登録 (1F 辺 1 本に対して 2F 辺は最大 1 本対応する想定)。
+ */
+export function findCollinearEdgePairs(
+  building1F: BuildingShape,
+  building2F: BuildingShape,
+): Array<{ edge1FIndex: number; edge2FIndex: number }> {
+  const edges1F = getBuildingEdgesClockwise(building1F);
+  const edges2F = getBuildingEdgesClockwise(building2F);
+  const pairs: Array<{ edge1FIndex: number; edge2FIndex: number }> = [];
+  for (const e1 of edges1F) {
+    const e2 = edges2F.find(e => isCollinearWith(e1, e));
+    if (e2) {
+      pairs.push({ edge1FIndex: e1.index, edge2FIndex: e2.index });
+    }
+  }
+  return pairs;
+}
+
+// ============================================================
+// Phase H-3d-2 Stage 3: bothmode 専用の 2F 計算関数
+//
+// 2F 面が 1F 下屋と交差する場合、その 2F 面を N 個のセグメントに分割。
+// 各セグメント間に柱を仕込み、対応する 1F 面の希望離れを参照して位置を決める。
+// 同一直線連動する交差点では柱仕込みを省略する (次の 2F 面で処理されるため)。
+// ============================================================
+
+/** Bothmode 2F edge の 1 セグメント */
+export type Bothmode2FEdgeSegment = {
+  edge2FIndex: number;
+  segmentIndex: number;          // この 2F 面の中で何番目のセグメントか (0-based)
+  segmentCount: number;          // この 2F 面の総セグメント数
+
+  // セグメント自体の物理情報
+  startPoint: Point;
+  endPoint: Point;
+  segmentLengthMm: number;
+  face: FaceDir;
+  handrailDir: 'horizontal' | 'vertical';
+  nx: number;
+  ny: number;
+
+  // 離れ情報
+  startDistanceMm: number;
+  desiredEndDistanceMm: number;
+  desiredEndSource:
+    | { kind: 'next-2F-face'; edge2FIndex: number }
+    | { kind: '1F-face-pillar'; edge1FIndex: number };
+
+  // 候補と選択 (既存 SequentialCandidate を流用)
+  candidates: SequentialCandidate[];
+  selectedIndex: number;
+  isLocked: boolean;
+  isAutoProgress: boolean;
+  prevCornerIsConvex: boolean;
+  nextCornerIsConvex: boolean;
+
+  // 描画用座標 (セグメント単位)
+  scaffoldCoord: number;
+  cursorStart: number;
+  cursorEnd: number;
+  effectiveMm: number;
+};
+
+export type Bothmode2FResult = {
+  edgeSegments: Bothmode2FEdgeSegment[];
+  hasUnresolved: boolean;
+};
+
+/**
+ * 2F 面の足場ライン (壁から離れだけ離れた直線) と交差する 1F 壁を、
+ * 進行方向順に並べて返す。
+ * 「次の 2F 面と同一直線連動」する 1F 壁は除外される (柱仕込み不要)。
+ */
+function findPillarPointsAlong2FEdge(
+  edge2F: EdgeInfo,
+  distance2FMm: number,
+  edges1F: EdgeInfo[],
+  collinearPairs: Array<{ edge1FIndex: number; edge2FIndex: number }>,
+  nextEdge2FIndex: number,
+): Array<{ edge1FIndex: number; intersectPoint: Point }> {
+  const distGrid = mmToGrid(distance2FMm);
+  // 2F 足場ラインの軸座標 (edge2F の壁から法線方向に distGrid 離れる)
+  const e2IsH = edge2F.handrailDir === 'horizontal';
+  const scaffoldAxisCoord = e2IsH
+    ? (edge2F.p1.y + edge2F.p2.y) / 2 + edge2F.ny * distGrid
+    : (edge2F.p1.x + edge2F.p2.x) / 2 + edge2F.nx * distGrid;
+
+  // edge2F の進行方向沿いの範囲 (可変軸)
+  const edgeMinAlong = e2IsH
+    ? Math.min(edge2F.p1.x, edge2F.p2.x)
+    : Math.min(edge2F.p1.y, edge2F.p2.y);
+  const edgeMaxAlong = e2IsH
+    ? Math.max(edge2F.p1.x, edge2F.p2.x)
+    : Math.max(edge2F.p1.y, edge2F.p2.y);
+
+  // 進行方向 (edge2F.p1 → edge2F.p2 で増えるか減るか)
+  const progressDelta = e2IsH
+    ? edge2F.p2.x - edge2F.p1.x
+    : edge2F.p2.y - edge2F.p1.y;
+  const progressSign = progressDelta >= 0 ? 1 : -1;
+
+  type Pillar = { edge1FIndex: number; intersectPoint: Point; alongCoord: number };
+  const result: Pillar[] = [];
+
+  for (const e1 of edges1F) {
+    const e1IsH = e1.handrailDir === 'horizontal';
+    const e1IsAxisAligned = (e1.p1.x === e1.p2.x) || (e1.p1.y === e1.p2.y);
+    if (!e1IsAxisAligned) continue;
+
+    // edge2F と平行 (両方 H or 両方 V) なら交差せず
+    if (e1IsH === e2IsH) continue;
+
+    // セグメント分割点 = edge2F 壁上の交差投影点 (進行軸は 1F 壁の位置、固定軸は edge2F の壁座標)
+    // ※ 足場ライン上の座標ではなく edge2F 壁上に取ることで、セグメントの startPoint/endPoint が
+    //    edge2F の物理上を順次区切る形になる。
+    let intersectPoint: Point;
+    if (e2IsH) {
+      intersectPoint = { x: e1.p1.x, y: edge2F.p1.y };
+    } else {
+      intersectPoint = { x: edge2F.p1.x, y: e1.p1.y };
+    }
+
+    // 交差点が edge2F の進行方向範囲内か (内部、端点除外)
+    const alongCoord = e2IsH ? intersectPoint.x : intersectPoint.y;
+    if (alongCoord <= edgeMinAlong || alongCoord >= edgeMaxAlong) continue;
+
+    // 交差点が 1F 壁のセグメント範囲内か (1F 壁の固定軸方向で確認)
+    const e1AlongCoord = e1IsH ? intersectPoint.x : intersectPoint.y;
+    const e1Min = e1IsH
+      ? Math.min(e1.p1.x, e1.p2.x)
+      : Math.min(e1.p1.y, e1.p2.y);
+    const e1Max = e1IsH
+      ? Math.max(e1.p1.x, e1.p2.x)
+      : Math.max(e1.p1.y, e1.p2.y);
+    // ただし 1F 壁延長線の場合、交差点が 1F 壁の固定軸 (e1IsH なら Y) と一致する必要あり
+    const e1FixedCoord = e1IsH ? e1.p1.y : e1.p1.x;
+    const intersectFixed = e1IsH ? intersectPoint.y : intersectPoint.x;
+    // 注: 上の構築で intersectFixed は scaffoldAxisCoord (2F 足場の固定軸)
+    // 1F 壁の延長線は無限長と考えるので、固定軸の一致確認は不要
+    void e1FixedCoord;
+    void intersectFixed;
+    // 1F 壁が「延長線上の交差点を含む」= 2F 足場ライン側に伸びている必要がある
+    // 1F 壁の進行方向範囲 (e1IsH なら X 範囲) と交差点の対応軸が一致
+    void e1AlongCoord; // ここは実は 1F 壁の固定軸座標と異なる
+    // 1F 壁が交差点まで届くかは、1F 壁の固定軸 (e1IsH なら Y) と交差点の Y を比較
+    // ただし 1F 壁の Y は 1 点 (固定軸)、交差点の Y は scaffoldAxisCoord
+    // → 1F 壁の延長線が 2F 足場ラインに到達するなら、固定軸的な距離は問題ない
+    // → 必要なのは「1F 壁の進行方向範囲が交差点の対応軸座標を含むか」
+    //   1F が水平 (Y=固定): 進行方向 X、交差点 X = e1.p1.x → 必ず e1 の端点 (= 含まない、等しい)
+    //   1F が垂直 (X=固定): 進行方向 Y、交差点 Y = e1.p1.y → 必ず e1 の端点
+    // → 上の構築は「1F 壁の延長点として、2F 足場ラインと交わる点」なので
+    //   常に 1F 壁の端点のうち固定軸が一致するもの (その方向の延長線)
+    // → 1F 壁の延長線が 2F 足場ラインに「到達するか」のチェックは:
+    //   1F 壁の固定軸 (e1IsH なら e1.p1.y) と 2F 足場ラインの軸 (scaffoldAxisCoord) を比較し、
+    //   1F 壁が 2F 足場ライン側に伸びる方向にあるかを確認
+    // 簡略化: 1F 壁の壁長が (1F 壁の固定軸 - 2F 足場ラインの固定軸) の絶対値以上か。
+    // ここでは 1F 壁が「2F 足場ライン側に伸びている」(= 範囲に交差点を含む) ものに限定:
+    if (e1IsH) {
+      // 1F 水平: 固定軸 Y = e1.p1.y、進行軸 X = [e1Min, e1Max]
+      // 2F 垂直: 足場ライン X = scaffoldAxisCoord
+      // 交差点: (scaffoldAxisCoord, e1.p1.y)
+      // 1F 壁が 2F 足場ライン側に伸びるか: scaffoldAxisCoord が e1 の X 範囲内か
+      if (scaffoldAxisCoord < e1Min || scaffoldAxisCoord > e1Max) continue;
+    } else {
+      // 1F 垂直: 固定軸 X = e1.p1.x、進行軸 Y = [e1Min, e1Max]
+      // 2F 水平: 足場ライン Y = scaffoldAxisCoord
+      // 交差点: (e1.p1.x, scaffoldAxisCoord)
+      if (scaffoldAxisCoord < e1Min || scaffoldAxisCoord > e1Max) continue;
+    }
+
+    // collinearPairs フィルタ: この 1F edge が「次の 2F edge」と連動なら除外
+    const isCollinearWithNext = collinearPairs.some(
+      p => p.edge1FIndex === e1.index && p.edge2FIndex === nextEdge2FIndex,
+    );
+    if (isCollinearWithNext) continue;
+
+    result.push({ edge1FIndex: e1.index, intersectPoint, alongCoord });
+  }
+
+  // edge2F の進行方向順にソート
+  result.sort((a, b) => progressSign * (a.alongCoord - b.alongCoord));
+
+  return result.map(r => ({
+    edge1FIndex: r.edge1FIndex,
+    intersectPoint: r.intersectPoint,
+  }));
+}
+
+/**
+ * bothmode 専用: 2F 全周を順次決定で割付。
+ * 1F 下屋と交差する 2F 面はセグメント分割し、各交差点で柱を仕込む。
+ * 同一直線連動する交差点は柱仕込みを省略。
+ */
+export function computeBothmode2FLayout(
+  building2F: BuildingShape,
+  building1F: BuildingShape,
+  distances2F: Record<number, number>,
+  distances1F: Record<number, number>,
+  scaffoldStart: ScaffoldStartConfig,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  priorityConfig?: PriorityConfig,
+  userSelections?: Record<string, number>,        // key: `${edge2FIndex}-${segmentIndex}`
+  userAdjustments?: Record<string, EdgeAdjustment>,
+): Bothmode2FResult {
+  const edges2F = getBuildingEdgesClockwise(building2F);
+  const edges1F = getBuildingEdgesClockwise(building1F);
+  const collinearPairs = findCollinearEdgePairs(building1F, building2F);
+
+  const n2F = edges2F.length;
+  if (n2F < 3) return { edgeSegments: [], hasUnresolved: false };
+
+  const startIdx = (scaffoldStart.startVertexIndex ?? 0) % n2F;
+  const lockedIndices = new Set<number>();
+  if (n2F >= 2) {
+    lockedIndices.add(edges2F[startIdx].index);
+    lockedIndices.add(edges2F[(startIdx - 1 + n2F) % n2F].index);
+  }
+
+  // 各 2F edge ごとのコーナー凸/凹判定
+  const cornerConvexity2F: boolean[] = [];
+  for (let i = 0; i < n2F; i++) {
+    cornerConvexity2F.push(isConvexCorner(edges2F[i], edges2F[(i + 1) % n2F]));
+  }
+
+  // 各 2F edge を物理的にセグメント分割 (柱仕込み点で区切り)
+  type RawSegment = {
+    edge2F: EdgeInfo;
+    segmentIndex: number;
+    segmentCount: number;
+    startPoint: Point;
+    endPoint: Point;
+    segmentLengthMm: number;
+    desiredEndSource:
+      | { kind: 'next-2F-face'; edge2FIndex: number }
+      | { kind: '1F-face-pillar'; edge1FIndex: number };
+  };
+  const segmentsByEdge: Record<number, RawSegment[]> = {};
+  for (let i = 0; i < n2F; i++) {
+    const edge2F = edges2F[i];
+    const nextEdge2F = edges2F[(i + 1) % n2F];
+    const distance2F = distances2F[edge2F.index] ?? 900;
+    const pillarPoints = findPillarPointsAlong2FEdge(
+      edge2F, distance2F, edges1F, collinearPairs, nextEdge2F.index,
+    );
+    const segCount = pillarPoints.length + 1;
+    const segs: RawSegment[] = [];
+    let prevPoint = edge2F.p1;
+    for (let s = 0; s < segCount; s++) {
+      const isLast = s === segCount - 1;
+      const endPoint = isLast ? edge2F.p2 : pillarPoints[s].intersectPoint;
+      const dx = endPoint.x - prevPoint.x;
+      const dy = endPoint.y - prevPoint.y;
+      const segLengthMm = Math.round(Math.sqrt(dx * dx + dy * dy) * 10);
+      const desiredEndSource: RawSegment['desiredEndSource'] = isLast
+        ? { kind: 'next-2F-face', edge2FIndex: nextEdge2F.index }
+        : { kind: '1F-face-pillar', edge1FIndex: pillarPoints[s].edge1FIndex };
+      segs.push({
+        edge2F,
+        segmentIndex: s,
+        segmentCount: segCount,
+        startPoint: prevPoint,
+        endPoint,
+        segmentLengthMm: segLengthMm,
+        desiredEndSource,
+      });
+      prevPoint = endPoint;
+    }
+    segmentsByEdge[edge2F.index] = segs;
+  }
+
+  // 順次決定パス: scaffoldStart 起点で 2F edges を巡回し、各 edge 内のセグメントを順次処理
+  const intermediate: Bothmode2FEdgeSegment[] = [];
+  let prevEndDistanceMm: number | undefined = undefined;
+  let prevSegmentStartDist: number | undefined = undefined;
+  let hasUnresolved = false;
+
+  for (let k = 0; k < n2F; k++) {
+    const i = (startIdx + k) % n2F;
+    const edge2F = edges2F[i];
+    const isLockedEdge = lockedIndices.has(edge2F.index);
+    const edgeSegs = segmentsByEdge[edge2F.index];
+
+    for (let s = 0; s < edgeSegs.length; s++) {
+      const seg = edgeSegs[s];
+      const isFirstSegOfEdge = s === 0;
+      const isLastSegOfEdge = s === edgeSegs.length - 1;
+      const isFirstInLoop = k === 0 && s === 0;
+      const isLastInLoop = k === n2F - 1 && s === edgeSegs.length - 1;
+
+      // セグメント内の凸判定: edge 跨ぎは実 cornerConvexity、edge 内 (segment 間) は直線扱い (true)
+      const prevCornerIsConvex = isFirstSegOfEdge
+        ? cornerConvexity2F[(i - 1 + n2F) % n2F]
+        : true;
+      const nextCornerIsConvex = isLastSegOfEdge
+        ? cornerConvexity2F[i]
+        : true;
+
+      // 始点離れ
+      let startDistanceMm: number;
+      if (isFirstInLoop) {
+        if (isLockedEdge) {
+          startDistanceMm = edge2F.handrailDir === 'horizontal'
+            ? scaffoldStart.face1DistanceMm
+            : scaffoldStart.face2DistanceMm;
+        } else {
+          startDistanceMm = distances2F[edge2F.index] ?? 900;
+        }
+      } else if (isLastInLoop && isLockedEdge) {
+        // 閉じ辺の最終セグメント: face で上書き (cascade を捨てる)
+        startDistanceMm = edge2F.handrailDir === 'horizontal'
+          ? scaffoldStart.face1DistanceMm
+          : scaffoldStart.face2DistanceMm;
+      } else {
+        startDistanceMm = prevEndDistanceMm ?? distances2F[edge2F.index] ?? 900;
+      }
+
+      // 終点希望離れ
+      let desiredEndDistanceMm: number;
+      if (seg.desiredEndSource.kind === 'next-2F-face') {
+        desiredEndDistanceMm = distances2F[seg.desiredEndSource.edge2FIndex] ?? 900;
+      } else {
+        desiredEndDistanceMm = distances1F[seg.desiredEndSource.edge1FIndex] ?? 900;
+      }
+
+      // prev edge の startDist (cursor 整合用)
+      // 直前のセグメント (intermediate 末尾) があればその startDistanceMm
+      // なければ物理 prev edge の distances2F (フォールバック)
+      const prevEdgeStartDistanceMm = prevSegmentStartDist
+        ?? (distances2F[edges2F[(i - 1 + n2F) % n2F].index] ?? 900);
+
+      // userAdjustments
+      const segKey = `${edge2F.index}-${seg.segmentIndex}`;
+      const adj = userAdjustments?.[segKey] ?? DEFAULT_EDGE_ADJUSTMENT;
+
+      const candidates = generateSequentialCandidates(
+        seg.segmentLengthMm,
+        startDistanceMm,
+        desiredEndDistanceMm,
+        prevCornerIsConvex,
+        nextCornerIsConvex,
+        prevEdgeStartDistanceMm,
+        enabledSizes,
+        priorityConfig,
+        adj.larger.offsetIdx,
+        adj.smaller.offsetIdx,
+        adj.larger.variationIdx,
+        adj.smaller.variationIdx,
+      );
+
+      let selectedIndex = userSelections?.[segKey] ?? 0;
+      if (selectedIndex >= candidates.length) selectedIndex = 0;
+
+      const isAutoProgress = candidates.length === 1;
+      // locked 判定: scaffoldStart の locked edge かつ first/last セグメント
+      const isLocked = isLockedEdge && (isFirstInLoop || (isLastInLoop && s === edgeSegs.length - 1));
+
+      if (!isLocked && !isAutoProgress) hasUnresolved = true;
+
+      // 描画用座標 (シンプル化: scaffoldCoord は startDistanceMm 由来、
+      //   cursorStart/End は startPoint/endPoint 起点で rails 合計から逆算)
+      const distGrid = mmToGrid(startDistanceMm);
+      const scaffoldCoord = edge2F.handrailDir === 'horizontal'
+        ? (seg.startPoint.y + edge2F.ny * distGrid)
+        : (seg.startPoint.x + edge2F.nx * distGrid);
+      const dx = seg.endPoint.x - seg.startPoint.x;
+      const dy = seg.endPoint.y - seg.startPoint.y;
+      const sign = edge2F.handrailDir === 'horizontal'
+        ? (dx >= 0 ? 1 : -1)
+        : (dy >= 0 ? 1 : -1);
+      const cursorStart = edge2F.handrailDir === 'horizontal'
+        ? seg.startPoint.x
+        : seg.startPoint.y;
+      const railsTotal = candidates[selectedIndex]?.totalMm ?? seg.segmentLengthMm;
+      const cursorEnd = cursorStart + sign * (railsTotal / 10);
+      const effectiveMm = railsTotal;
+
+      intermediate.push({
+        edge2FIndex: edge2F.index,
+        segmentIndex: seg.segmentIndex,
+        segmentCount: seg.segmentCount,
+        startPoint: seg.startPoint,
+        endPoint: seg.endPoint,
+        segmentLengthMm: seg.segmentLengthMm,
+        face: edge2F.face,
+        handrailDir: edge2F.handrailDir,
+        nx: edge2F.nx,
+        ny: edge2F.ny,
+        startDistanceMm,
+        desiredEndDistanceMm,
+        desiredEndSource: seg.desiredEndSource,
+        candidates,
+        selectedIndex,
+        isLocked,
+        isAutoProgress,
+        prevCornerIsConvex,
+        nextCornerIsConvex,
+        scaffoldCoord,
+        cursorStart,
+        cursorEnd,
+        effectiveMm,
+      });
+
+      if (candidates.length > 0) {
+        prevEndDistanceMm = candidates[selectedIndex].actualEndDistanceMm;
+      } else {
+        prevEndDistanceMm = desiredEndDistanceMm;
+      }
+      prevSegmentStartDist = startDistanceMm;
+    }
+  }
+
+  return { edgeSegments: intermediate, hasUnresolved };
+}
+
+// ============================================================
 // 優先度評価ヘルパー（Phase 5-B 以降でアルゴリズム本体に組み込み）
 // ============================================================
 
