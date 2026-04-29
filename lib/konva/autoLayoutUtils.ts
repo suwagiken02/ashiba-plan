@@ -1553,6 +1553,331 @@ export function computeBothmode2FLayout(
 }
 
 // ============================================================
+// Phase H-3d-2 Stage 4: bothmode 専用の 1F 計算関数
+//
+// Stage 3 の Bothmode2FResult を入力として受け取り、1F 全周を時計回りに
+// 割付する。1F 開始点は 2F で仕込んだ柱、各 1F 辺は次の 3 パターンに分類:
+//   - covered: 2F に覆われる辺 → スキップ (1F 足場不要)
+//   - collinear: 2F と同一直線連動する辺 → 1 セグメント、両端固定
+//   - independent: 下屋部分の独立辺 → 通常処理、始点/終点制約で動作変化
+// ============================================================
+
+/** 1F セグメントの始点制約 */
+export type Bothmode1FSegmentStartConstraint =
+  | { kind: 'pillar-from-2F'; pillarPoint: Point }
+  | { kind: 'cascade-from-prev-1F-segment' }
+  | { kind: 'collinear-with-2F'; edge2FIndex: number };
+
+/** 1F セグメントの終点制約 */
+export type Bothmode1FSegmentEndConstraint =
+  | { kind: 'pillar-to-2F'; pillarPoint: Point }
+  | { kind: 'collinear-with-2F'; edge2FIndex: number }
+  | { kind: 'next-1F-face'; edge1FIndex: number };
+
+/** 1F セグメント */
+export type Bothmode1FEdgeSegment = {
+  edge1FIndex: number;
+  segmentIndex: number;
+  segmentCount: number;
+
+  startPoint: Point;
+  endPoint: Point;
+  segmentLengthMm: number;
+  face: FaceDir;
+  handrailDir: 'horizontal' | 'vertical';
+  nx: number;
+  ny: number;
+
+  startDistanceMm: number;
+  desiredEndDistanceMm: number;
+  startConstraint: Bothmode1FSegmentStartConstraint;
+  endConstraint: Bothmode1FSegmentEndConstraint;
+
+  candidates: SequentialCandidate[];
+  selectedIndex: number;
+  isLocked: boolean;
+  isAutoProgress: boolean;
+  prevCornerIsConvex: boolean;
+  nextCornerIsConvex: boolean;
+
+  scaffoldCoord: number;
+  cursorStart: number;
+  cursorEnd: number;
+  effectiveMm: number;
+};
+
+export type Bothmode1FResult = {
+  edgeSegments: Bothmode1FEdgeSegment[];
+  hasUnresolved: boolean;
+};
+
+/** 1F 辺分類の結果 */
+export type Edge1FClassification =
+  | { kind: 'covered' }
+  | { kind: 'collinear'; edge2FIndex: number; fixedDistanceMm: number }
+  | { kind: 'independent' };
+
+/** 抽出した柱仕込み点情報 */
+export type PillarPointInfo = {
+  point: Point;
+  edge1FIndex: number;
+  edge2FIndex: number;
+  segment2FIndex: number;
+};
+
+/** result2F から 1F 向け柱仕込み点を進行順に抽出 */
+function extractPillarPointsFromResult2F(
+  result2F: Bothmode2FResult,
+): PillarPointInfo[] {
+  const result: PillarPointInfo[] = [];
+  for (const seg of result2F.edgeSegments) {
+    if (seg.desiredEndSource.kind === '1F-face-pillar') {
+      result.push({
+        point: seg.endPoint,
+        edge1FIndex: seg.desiredEndSource.edge1FIndex,
+        edge2FIndex: seg.edge2FIndex,
+        segment2FIndex: seg.segmentIndex,
+      });
+    }
+  }
+  return result;
+}
+
+/** 1F 辺を 'covered' / 'collinear' / 'independent' に分類 */
+function classify1FEdge(
+  edge1F: EdgeInfo,
+  building2F: BuildingShape,
+  collinearPairs: Array<{ edge1FIndex: number; edge2FIndex: number }>,
+  result2F: Bothmode2FResult,
+): Edge1FClassification {
+  // 1. collinear 判定 (連動ペア優先、独立判定より優先)
+  const collinearPair = collinearPairs.find(p => p.edge1FIndex === edge1F.index);
+  if (collinearPair) {
+    // 連動辺は同一直線 = 同じ離れ。result2F の該当 2F 辺の任意セグメントの startDist を採用
+    const matchSeg = result2F.edgeSegments.find(s => s.edge2FIndex === collinearPair.edge2FIndex);
+    const fixedDistanceMm = matchSeg?.startDistanceMm ?? 900;
+    return { kind: 'collinear', edge2FIndex: collinearPair.edge2FIndex, fixedDistanceMm };
+  }
+  // 2. covered 判定: 中点を法線方向 (外向き) に少しずらした点が 2F polygon 内なら覆われる隣接
+  const midX = (edge1F.p1.x + edge1F.p2.x) / 2;
+  const midY = (edge1F.p1.y + edge1F.p2.y) / 2;
+  const testX = midX + edge1F.nx * 1;
+  const testY = midY + edge1F.ny * 1;
+  if (isPointInPolygon(testX, testY, building2F.points)) {
+    return { kind: 'covered' };
+  }
+  return { kind: 'independent' };
+}
+
+/**
+ * bothmode 専用: 1F 全周を順次決定で割付。
+ * Stage 3 の computeBothmode2FLayout の結果を受け取り、
+ * 2F で仕込んだ柱位置を 1F 足場の起点として、1F 全周を時計回りに割付する。
+ */
+export function computeBothmode1FLayout(
+  building1F: BuildingShape,
+  building2F: BuildingShape,
+  result2F: Bothmode2FResult,
+  distances1F: Record<number, number>,
+  enabledSizes: HandrailLengthMm[] = HANDRAIL_SIZES,
+  priorityConfig?: PriorityConfig,
+  userSelections?: Record<string, number>,
+  userAdjustments?: Record<string, EdgeAdjustment>,
+): Bothmode1FResult {
+  const edges1F = getBuildingEdgesClockwise(building1F);
+  const n1F = edges1F.length;
+  if (n1F < 3) return { edgeSegments: [], hasUnresolved: false };
+
+  const collinearPairs = findCollinearEdgePairs(building1F, building2F);
+  const pillarPoints = extractPillarPointsFromResult2F(result2F);
+
+  // 1F 開始辺: 進行順最初の柱仕込み点が指す 1F 辺、なければ 0
+  const startEdge1FIndex = pillarPoints.length > 0
+    ? pillarPoints[0].edge1FIndex % n1F
+    : 0;
+
+  // 各 1F 辺を分類
+  const classifications: Edge1FClassification[] = edges1F.map(e =>
+    classify1FEdge(e, building2F, collinearPairs, result2F)
+  );
+
+  // 1F の cornerConvexity
+  const cornerConvexity1F: boolean[] = [];
+  for (let i = 0; i < n1F; i++) {
+    cornerConvexity1F.push(isConvexCorner(edges1F[i], edges1F[(i + 1) % n1F]));
+  }
+
+  // 座標一致判定
+  const pointsMatch = (a: Point, b: Point) =>
+    Math.abs(a.x - b.x) < 0.001 && Math.abs(a.y - b.y) < 0.001;
+
+  const intermediate: Bothmode1FEdgeSegment[] = [];
+  let prevEndDistanceMm: number | undefined = undefined;
+  let prevSegmentStartDist: number | undefined = undefined;
+
+  // 共通の描画用座標計算
+  const computeDrawCoords = (
+    edge: EdgeInfo,
+    startPoint: Point,
+    endPoint: Point,
+    startDist: number,
+    railsTotal: number,
+  ) => {
+    const distGrid = mmToGrid(startDist);
+    const scaffoldCoord = edge.handrailDir === 'horizontal'
+      ? startPoint.y + edge.ny * distGrid
+      : startPoint.x + edge.nx * distGrid;
+    const dx = endPoint.x - startPoint.x;
+    const dy = endPoint.y - startPoint.y;
+    const sign = edge.handrailDir === 'horizontal'
+      ? (dx >= 0 ? 1 : -1)
+      : (dy >= 0 ? 1 : -1);
+    const cursorStart = edge.handrailDir === 'horizontal' ? startPoint.x : startPoint.y;
+    const cursorEnd = cursorStart + sign * (railsTotal / 10);
+    return { scaffoldCoord, cursorStart, cursorEnd };
+  };
+
+  for (let k = 0; k < n1F; k++) {
+    const i = (startEdge1FIndex + k) % n1F;
+    const edge = edges1F[i];
+    const cls = classifications[i];
+
+    if (cls.kind === 'covered') continue;
+
+    const prevCornerIsConvex = cornerConvexity1F[(i - 1 + n1F) % n1F];
+    const nextCornerIsConvex = cornerConvexity1F[i];
+    const segKey = `${i}-0`;
+    const adj = userAdjustments?.[segKey] ?? DEFAULT_EDGE_ADJUSTMENT;
+    const prevEdgeStartDist = prevSegmentStartDist
+      ?? (distances1F[edges1F[(i - 1 + n1F) % n1F].index] ?? 900);
+
+    if (cls.kind === 'collinear') {
+      const startDist = cls.fixedDistanceMm;
+      const endDist = cls.fixedDistanceMm;
+
+      const candidates = generateSequentialCandidates(
+        edge.lengthMm, startDist, endDist,
+        prevCornerIsConvex, nextCornerIsConvex,
+        prevEdgeStartDist,
+        enabledSizes, priorityConfig,
+        adj.larger.offsetIdx, adj.smaller.offsetIdx,
+        adj.larger.variationIdx, adj.smaller.variationIdx,
+      );
+      let selectedIndex = userSelections?.[segKey] ?? 0;
+      if (selectedIndex >= candidates.length) selectedIndex = 0;
+      const isAutoProgress = candidates.length === 1;
+      const railsTotal = candidates[selectedIndex]?.totalMm ?? edge.lengthMm;
+      const { scaffoldCoord, cursorStart, cursorEnd } = computeDrawCoords(
+        edge, edge.p1, edge.p2, startDist, railsTotal,
+      );
+
+      intermediate.push({
+        edge1FIndex: i, segmentIndex: 0, segmentCount: 1,
+        startPoint: edge.p1, endPoint: edge.p2, segmentLengthMm: edge.lengthMm,
+        face: edge.face, handrailDir: edge.handrailDir, nx: edge.nx, ny: edge.ny,
+        startDistanceMm: startDist, desiredEndDistanceMm: endDist,
+        startConstraint: { kind: 'collinear-with-2F', edge2FIndex: cls.edge2FIndex },
+        endConstraint: { kind: 'collinear-with-2F', edge2FIndex: cls.edge2FIndex },
+        candidates, selectedIndex,
+        isLocked: true, isAutoProgress,
+        prevCornerIsConvex, nextCornerIsConvex,
+        scaffoldCoord, cursorStart, cursorEnd, effectiveMm: railsTotal,
+      });
+
+      prevEndDistanceMm = candidates.length > 0
+        ? candidates[selectedIndex].actualEndDistanceMm
+        : endDist;
+      prevSegmentStartDist = startDist;
+      continue;
+    }
+
+    // cls.kind === 'independent'
+    let startConstraint: Bothmode1FSegmentStartConstraint;
+    let startDist: number;
+    const prevPillarMatch = pillarPoints.find(p =>
+      pointsMatch(p.point, edge.p1) && p.edge1FIndex === i,
+    );
+    if (prevPillarMatch) {
+      startConstraint = { kind: 'pillar-from-2F', pillarPoint: prevPillarMatch.point };
+      const seg2F = result2F.edgeSegments.find(s => s.edge2FIndex === prevPillarMatch.edge2FIndex);
+      startDist = seg2F?.startDistanceMm ?? distances1F[edge.index] ?? 900;
+    } else {
+      startConstraint = { kind: 'cascade-from-prev-1F-segment' };
+      startDist = prevEndDistanceMm ?? distances1F[edge.index] ?? 900;
+    }
+
+    // 終点制約判定 (次の 1F 辺の状態で分岐)
+    const nextEdgeIdx = (i + 1) % n1F;
+    const nextCls = classifications[nextEdgeIdx];
+    let endConstraint: Bothmode1FSegmentEndConstraint;
+    let desiredEndDist: number;
+    let isLockedEnd: boolean;
+
+    if (nextCls.kind === 'collinear') {
+      endConstraint = { kind: 'collinear-with-2F', edge2FIndex: nextCls.edge2FIndex };
+      desiredEndDist = nextCls.fixedDistanceMm;
+      isLockedEnd = true;
+    } else if (nextCls.kind === 'covered') {
+      const endPillarMatch = pillarPoints.find(p =>
+        pointsMatch(p.point, edge.p2) && p.edge1FIndex === nextEdgeIdx,
+      );
+      if (endPillarMatch) {
+        endConstraint = { kind: 'pillar-to-2F', pillarPoint: endPillarMatch.point };
+        const seg2F = result2F.edgeSegments.find(s => s.edge2FIndex === endPillarMatch.edge2FIndex);
+        desiredEndDist = seg2F?.startDistanceMm ?? distances1F[nextEdgeIdx] ?? 900;
+        isLockedEnd = true;
+      } else {
+        endConstraint = { kind: 'next-1F-face', edge1FIndex: nextEdgeIdx };
+        desiredEndDist = distances1F[nextEdgeIdx] ?? 900;
+        isLockedEnd = false;
+      }
+    } else {
+      // 次も independent
+      endConstraint = { kind: 'next-1F-face', edge1FIndex: nextEdgeIdx };
+      desiredEndDist = distances1F[nextEdgeIdx] ?? 900;
+      isLockedEnd = false;
+    }
+
+    const candidates = generateSequentialCandidates(
+      edge.lengthMm, startDist, desiredEndDist,
+      prevCornerIsConvex, nextCornerIsConvex,
+      prevEdgeStartDist,
+      enabledSizes, priorityConfig,
+      adj.larger.offsetIdx, adj.smaller.offsetIdx,
+      adj.larger.variationIdx, adj.smaller.variationIdx,
+    );
+    let selectedIndex = userSelections?.[segKey] ?? 0;
+    if (selectedIndex >= candidates.length) selectedIndex = 0;
+    const isAutoProgress = candidates.length === 1;
+    const isLocked = isLockedEnd;
+    const railsTotal = candidates[selectedIndex]?.totalMm ?? edge.lengthMm;
+    const { scaffoldCoord, cursorStart, cursorEnd } = computeDrawCoords(
+      edge, edge.p1, edge.p2, startDist, railsTotal,
+    );
+
+    intermediate.push({
+      edge1FIndex: i, segmentIndex: 0, segmentCount: 1,
+      startPoint: edge.p1, endPoint: edge.p2, segmentLengthMm: edge.lengthMm,
+      face: edge.face, handrailDir: edge.handrailDir, nx: edge.nx, ny: edge.ny,
+      startDistanceMm: startDist, desiredEndDistanceMm: desiredEndDist,
+      startConstraint, endConstraint,
+      candidates, selectedIndex,
+      isLocked, isAutoProgress,
+      prevCornerIsConvex, nextCornerIsConvex,
+      scaffoldCoord, cursorStart, cursorEnd, effectiveMm: railsTotal,
+    });
+
+    prevEndDistanceMm = candidates.length > 0
+      ? candidates[selectedIndex].actualEndDistanceMm
+      : desiredEndDist;
+    prevSegmentStartDist = startDist;
+  }
+
+  const hasUnresolved = intermediate.some(s => !s.isLocked && !s.isAutoProgress);
+  return { edgeSegments: intermediate, hasUnresolved };
+}
+
+// ============================================================
 // 優先度評価ヘルパー（Phase 5-B 以降でアルゴリズム本体に組み込み）
 // ============================================================
 
