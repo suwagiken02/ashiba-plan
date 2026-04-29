@@ -1354,9 +1354,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                             key={idx}
                             className="border border-dark-border rounded-xl bg-dark-bg overflow-hidden"
                           >
+                            {/* Phase I-3-fix3: タップ可能エリアを青ストロークで明示
+                                通常時は accent/40 の薄い青、hover で accent (=#378ADD) 100% に。
+                                左右 margin は操作ボタン群の px-3 と揃える */}
                             <button
                               onClick={() => handleSequentialSelect(activeEdge.floor, activeEdge.index, idx)}
-                              className="w-full p-3 hover:bg-accent/10 hover:border-accent transition-colors text-left"
+                              className="block w-[calc(100%-1.5rem)] mx-3 mt-3 mb-2 p-3 border border-accent/40 hover:border-accent hover:bg-accent/10 rounded-lg transition-colors text-left"
                             >
                               <div className="flex flex-wrap gap-1 mb-2">
                                 {cand.rails.map((r, ri) => (
