@@ -7,6 +7,7 @@ import { BUILDING_TEMPLATES, buildFromTemplate } from '@/lib/konva/buildingBuild
 import { BuildingTemplateId, BuildingInputMethod, RoofType, RoofConfig, Point } from '@/types';
 import { DEFAULT_COLS, DEFAULT_ROWS } from '@/lib/konva/gridUtils';
 import NumInput from '@/components/ui/NumInput';
+import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
 
 type Props = { onClose: () => void; floor?: 1 | 2; floor1Building?: import('@/types').BuildingShape };
 
@@ -137,18 +138,34 @@ function PreviewSVG({ templateId, dims, focusedKey }: {
     );
   }
 
-  const labels: { cx: number; cy: number; letter: string; highlighted: boolean; hasDimKey: boolean }[] = [];
-  for (let i = 0; i < edgeCount; i++) {
-    const p1 = svgPts[i], p2 = svgPts[(i + 1) % edgeCount];
-    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+  // Phase J-1: 各辺の外向き法線 (centroid 比較で算出) と
+  // computeEdgeLabelPosition の凹角内側配置を統合
+  const edgesForLabel = svgPts.map((p1, i) => {
+    const p2 = svgPts[(i + 1) % edgeCount];
     const dx = p2.x - p1.x, dy = p2.y - p1.y;
     const len = Math.sqrt(dx * dx + dy * dy) || 1;
     let nx = -dy / len, ny = dx / len;
-    if ((mx + nx - centroidX) ** 2 + (my + ny - centroidY) ** 2 <
-        (mx - nx - centroidX) ** 2 + (my - ny - centroidY) ** 2) { nx = -nx; ny = -ny; }
+    if ((((p1.x + p2.x) / 2 + nx - centroidX) ** 2 + ((p1.y + p2.y) / 2 + ny - centroidY) ** 2) <
+        (((p1.x + p2.x) / 2 - nx - centroidX) ** 2 + ((p1.y + p2.y) / 2 - ny - centroidY) ** 2)) {
+      nx = -nx; ny = -ny;
+    }
+    return { nx, ny, p1, p2 };
+  });
+
+  type LabelEntry = {
+    cx: number; cy: number; isInside: boolean;
+    letter: string; highlighted: boolean; hasDimKey: boolean;
+  };
+  const labels: LabelEntry[] = [];
+  for (let i = 0; i < edgeCount; i++) {
+    const e = edgesForLabel[i];
+    const prev = edgesForLabel[(i - 1 + edgeCount) % edgeCount];
+    const next = edgesForLabel[(i + 1) % edgeCount];
+    const mx = (e.p1.x + e.p2.x) / 2, my = (e.p1.y + e.p2.y) / 2;
+    const labelPos = computeEdgeLabelPosition(e, prev, next, mx, my, 16);
     const dk = edgeKeyMap[i];
     labels.push({
-      cx: mx + nx * 16, cy: my + ny * 16,
+      cx: labelPos.x, cy: labelPos.y, isInside: labelPos.isInside,
       letter: String.fromCharCode(65 + i),
       highlighted: dk !== undefined && focusedKey === dk,
       hasDimKey: dk !== undefined,
@@ -168,6 +185,9 @@ function PreviewSVG({ templateId, dims, focusedKey }: {
           fill={el.highlighted ? '#378ADD' : el.hasDimKey ? '#ccc' : '#666'}
           fontWeight={el.highlighted ? 'bold' : 'normal'}
           fontSize={el.highlighted ? 14 : 12} fontFamily="monospace"
+          paintOrder={el.isInside ? 'stroke' : undefined}
+          stroke={el.isInside ? '#3d3d3a' : undefined}
+          strokeWidth={el.isInside ? 3 : undefined}
         >{el.letter}</text>
       ))}
     </svg>

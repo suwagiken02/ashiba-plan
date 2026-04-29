@@ -9,6 +9,7 @@ import { StartCorner, HandrailLengthMm, Point } from '@/types';
 import { mmToGrid } from '@/lib/konva/gridUtils';
 import { getHandrailColor } from '@/lib/konva/handrailColors';
 import { getBuildingEdgesClockwise, EdgeInfo } from '@/lib/konva/autoLayoutUtils';
+import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
 
 type Props = { onClose: () => void };
 
@@ -314,19 +315,34 @@ function VertexSelector({
         {/* 建物ポリゴン */}
         <polygon points={polyStr} fill="#3d3d3a" stroke="#666" strokeWidth={1.5} />
 
-        {/* 辺ラベル（辺の中点に表示） */}
-        {edges.map((e, i) => {
-          const mx = (tx(e.p1.x) + tx(e.p2.x)) / 2;
-          const my = (tx(e.p1.y) + tx(e.p2.y)) / 2;
-          // 辺の中点のY座標を正しく計算
-          const myy = (ty(e.p1.y) + ty(e.p2.y)) / 2;
-          return (
-            <text key={`el-${i}`} x={mx} y={myy} textAnchor="middle"
-              fontSize={9} fill="#888" dominantBaseline="central">
-              {e.label}
-            </text>
-          );
-        })}
+        {/* Phase J-1: 辺ラベルを画面座標系に変換し、凹角隣接辺は内側配置 */}
+        {(() => {
+          // 画面座標系の edge を構築 (法線も画面座標スケール 1 単位で再計算)
+          const edgesScreen = edges.map((e) => {
+            const sp1 = { x: tx(e.p1.x), y: ty(e.p1.y) };
+            const sp2 = { x: tx(e.p2.x), y: ty(e.p2.y) };
+            // 法線は元の建物座標 nx, ny の符号を保持 (Y 下向き同士で符号一致)
+            return { nx: e.nx, ny: e.ny, p1: sp1, p2: sp2 };
+          });
+          return edges.map((e, i) => {
+            const eScreen = edgesScreen[i];
+            const prev = edgesScreen[(i - 1 + edgesScreen.length) % edgesScreen.length];
+            const next = edgesScreen[(i + 1) % edgesScreen.length];
+            const mx = (eScreen.p1.x + eScreen.p2.x) / 2;
+            const my = (eScreen.p1.y + eScreen.p2.y) / 2;
+            const labelPos = computeEdgeLabelPosition(eScreen, prev, next, mx, my, 12);
+            return (
+              <text key={`el-${i}`} x={labelPos.x} y={labelPos.y} textAnchor="middle"
+                fontSize={9} fill="#888" dominantBaseline="central"
+                paintOrder={labelPos.isInside ? 'stroke' : undefined}
+                stroke={labelPos.isInside ? '#3d3d3a' : undefined}
+                strokeWidth={labelPos.isInside ? 2.5 : undefined}
+              >
+                {e.label}
+              </text>
+            );
+          });
+        })()}
 
         {/* 頂点ドット（クリック可能） */}
         {pts.map((p, i) => {

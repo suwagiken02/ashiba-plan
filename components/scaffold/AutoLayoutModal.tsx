@@ -13,7 +13,6 @@ import {
   sequentialResultToAutoLayoutResult,
   placeHandrailsForEdge,
   getEdgesNotCoveredBy,
-  isConvexCorner,
   generateSequentialCandidates,
   AutoLayoutResult,
   EdgeInfo,
@@ -21,6 +20,7 @@ import {
   EdgeAdjustment,
   DEFAULT_EDGE_ADJUSTMENT,
 } from '@/lib/konva/autoLayoutUtils';
+import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
@@ -87,20 +87,20 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
           const N = subEdges.length;
           const prevEdge = subEdges[(edge.index - 1 + N) % N];
           const nextEdge = subEdges[(edge.index + 1) % N];
-          const concavePrev = !isConvexCorner(prevEdge, edge);
-          const concaveNext = !isConvexCorner(edge, nextEdge);
-          const labelDist = (concavePrev || concaveNext) ? 22 : 14;
-          const lx = mx + edge.nx * labelDist;
-          const ly = my + edge.ny * labelDist;
+          // Phase J-1: 凹角隣接辺は内側配置で重なり回避
+          const labelPos = computeEdgeLabelPosition(edge, prevEdge, nextEdge, mx, my, 14);
           return (
             <React.Fragment key={`sub-${edge.index}`}>
               <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
                 stroke={isFocused ? '#fbbf24' : '#10b981'} strokeWidth={isFocused ? 5 : 3} strokeLinecap="round" />
-              <text x={lx} y={ly}
+              <text x={labelPos.x} y={labelPos.y}
                 textAnchor="middle" dominantBaseline="central"
                 fill={isFocused ? '#fbbf24' : '#10b981'}
                 fontWeight="bold"
                 fontSize={11} fontFamily="monospace"
+                paintOrder={labelPos.isInside ? 'stroke' : undefined}
+                stroke={labelPos.isInside ? '#3d3d3a' : undefined}
+                strokeWidth={labelPos.isInside ? 3 : undefined}
               >{`1${edge.label}`}</text>
             </React.Fragment>
           );
@@ -138,11 +138,8 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
           const N = edges.length;
           const prevEdge = edges[(edge.index - 1 + N) % N];
           const nextEdge = edges[(edge.index + 1) % N];
-          const concavePrev = !isConvexCorner(prevEdge, edge);
-          const concaveNext = !isConvexCorner(edge, nextEdge);
-          const labelDist = (concavePrev || concaveNext) ? 22 : 14;
-          const lx = mx + edge.nx * labelDist;
-          const ly = my + edge.ny * labelDist;
+          // Phase J-1: 凹角隣接辺は内側配置で重なり回避
+          const labelPos = computeEdgeLabelPosition(edge, prevEdge, nextEdge, mx, my, 14);
 
           return (
             <React.Fragment key={edge.index}>
@@ -150,11 +147,14 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
                 <line x1={s1.x} y1={s1.y} x2={s2.x} y2={s2.y}
                   stroke="#378ADD" strokeWidth={4} strokeLinecap="round" />
               )}
-              <text x={lx} y={ly}
+              <text x={labelPos.x} y={labelPos.y}
                 textAnchor="middle" dominantBaseline="central"
                 fill={isFocused ? '#378ADD' : '#ccc'}
                 fontWeight={isFocused ? 'bold' : 'normal'}
                 fontSize={isFocused ? 14 : 12} fontFamily="monospace"
+                paintOrder={labelPos.isInside ? 'stroke' : undefined}
+                stroke={labelPos.isInside ? '#3d3d3a' : undefined}
+                strokeWidth={labelPos.isInside ? 3 : undefined}
               >{edge.label}</text>
             </React.Fragment>
           );

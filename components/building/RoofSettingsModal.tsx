@@ -4,7 +4,8 @@ import React, { useState, useMemo } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { RoofType, RoofConfig, Point } from '@/types';
 import NumInput from '@/components/ui/NumInput';
-import { getBuildingEdgesClockwise, isConvexCorner } from '@/lib/konva/autoLayoutUtils';
+import { getBuildingEdgesClockwise } from '@/lib/konva/autoLayoutUtils';
+import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
 
 type Props = {
   buildingId: string;
@@ -117,16 +118,18 @@ export default function RoofSettingsModal({ buildingId, buildingPoints, initialR
                     const N = edgeLabels.length;
                     const prevEdge = edgeLabels[(i - 1 + N) % N];
                     const nextEdge = edgeLabels[(i + 1) % N];
-                    const concavePrev = !isConvexCorner(prevEdge, edge);
-                    const concaveNext = !isConvexCorner(edge, nextEdge);
                     const baseOffset = Math.max(w, h) * 0.06;
-                    const offset = (concavePrev || concaveNext) ? baseOffset * (22 / 14) : baseOffset;
-                    const lx = mx + edge.nx * offset;
-                    const ly = my + edge.ny * offset;
+                    // Phase J-1: 凹角隣接辺は内側配置で重なり回避
+                    const labelPos = computeEdgeLabelPosition(edge, prevEdge, nextEdge, mx, my, baseOffset);
                     const fontSize = Math.max(w, h) * 0.06;
                     return (
-                      <text key={i} x={lx} y={ly} textAnchor="middle" dominantBaseline="central"
-                        fill="#3B82F6" fontSize={fontSize} fontWeight="bold">
+                      <text key={i} x={labelPos.x} y={labelPos.y}
+                        textAnchor="middle" dominantBaseline="central"
+                        fill="#3B82F6" fontSize={fontSize} fontWeight="bold"
+                        paintOrder={labelPos.isInside ? 'stroke' : undefined}
+                        stroke={labelPos.isInside ? '#0f172a' : undefined}
+                        strokeWidth={labelPos.isInside ? Math.max(2, fontSize * 0.25) : undefined}
+                      >
                         {edge.label}
                       </text>
                     );
