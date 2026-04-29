@@ -21,6 +21,7 @@ import {
   DEFAULT_EDGE_ADJUSTMENT,
 } from '@/lib/konva/autoLayoutUtils';
 import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
+import VariationChangeButtons from '@/components/scaffold/VariationChangeButtons';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
@@ -1032,6 +1033,18 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 const candidate = el.candidates[selIdx];
                 if (!candidate) return null;
 
+                // Phase I-5: 部材変更用の seq 候補を取得
+                // 規約: 主要建物の sequentialResult は常に sequentialResult2F に保存される
+                // (handleCalc / handleSequentialSelect の規約)。
+                // targetFloor=1 (1F のみモード) でも seqRes2F が使われる。
+                // よって主要建物の handleVariationChange も常に floor=2 で呼ぶ。
+                const mainFloor: 1 | 2 = 2;
+                const seqEdge = sequentialResult2F?.edgeResults.find(er => er.edge.index === el.edge.index);
+                const seqCand = seqEdge?.candidates[seqEdge.selectedIndex];
+                const sideForVariation: 'larger' | 'smaller' | null = seqCand
+                  ? (seqCand.side === 'exact' ? 'smaller' : seqCand.side)
+                  : null;
+
                 return (
                   <div key={i} className="bg-dark-bg rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
@@ -1072,6 +1085,17 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                       <span className="text-[10px] text-dimension">{candidate.count}本</span>
                     </div>
 
+                    {/* Phase I-5: 部材変更ボタン (同じ離れで rails パターン切替) */}
+                    {seqCand && sideForVariation && (
+                      <div className="mt-2 pt-2 border-t border-dark-border flex justify-center">
+                        <VariationChangeButtons
+                          variationIdx={seqCand.variationIdx}
+                          variationCount={seqCand.variationCount}
+                          onChange={(dir) => handleVariationChange(mainFloor, el.edge.index, sideForVariation, dir)}
+                        />
+                      </div>
+                    )}
+
                     {el.candidates.length > 1 && (
                       <div className="mt-2 pt-2 border-t border-dark-border">
                         <p className="text-[10px] text-dimension mb-1">候補：</p>
@@ -1105,6 +1129,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                     const selIdx = selectionsSub[el.edge.index] ?? 0;
                     const candidate = el.candidates[selIdx];
                     if (!candidate) return null;
+                    // Phase I-5: 1F 下屋辺の部材変更用 seq 候補
+                    const seqEdgeSub = sequentialResult1F?.edgeResults.find(er => er.edge.index === el.edge.index);
+                    const seqCandSub = seqEdgeSub?.candidates[seqEdgeSub.selectedIndex];
+                    const sideForVariationSub: 'larger' | 'smaller' | null = seqCandSub
+                      ? (seqCandSub.side === 'exact' ? 'smaller' : seqCandSub.side)
+                      : null;
                     return (
                       <div key={`sub-${el.edge.index}`} className="bg-dark-bg rounded-xl p-3 border-l-2 border-green-500">
                         <div className="flex items-center justify-between mb-1">
@@ -1141,6 +1171,16 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           </span>
                           <span className="text-[10px] text-dimension">{candidate.count}本</span>
                         </div>
+                        {/* Phase I-5: 1F 下屋辺の部材変更ボタン */}
+                        {seqCandSub && sideForVariationSub && (
+                          <div className="mt-2 pt-2 border-t border-dark-border flex justify-center">
+                            <VariationChangeButtons
+                              variationIdx={seqCandSub.variationIdx}
+                              variationCount={seqCandSub.variationCount}
+                              onChange={(dir) => handleVariationChange(1, el.edge.index, sideForVariationSub, dir)}
+                            />
+                          </div>
+                        )}
                         {el.candidates.length > 1 && (
                           <div className="mt-2 pt-2 border-t border-dark-border">
                             <p className="text-[10px] text-dimension mb-1">候補：</p>
@@ -1337,10 +1377,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           ? activeAdj.larger.offsetIdx
                           : activeAdj.smaller.offsetIdx;
 
-                        // 部材変更←: variationIdx === 0 で disabled
-                        const variationPrevDisabled = cand.variationIdx === 0;
-                        // 部材変更→: 次の variation がない で disabled
-                        const variationNextDisabled = cand.variationIdx + 1 >= cand.variationCount;
                         // 離れ変更←: exact / 閉じ辺 / offsetIdx===0 で disabled
                         const prevDisabled = isExact || isCloseCorner || sideOffsetIdx === 0;
                         // 離れ変更→: exact / 閉じ辺 / probe で枯れ で disabled
@@ -1376,31 +1412,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                                 [←] 部材変更 [→] / [←] 離れ変更 [→]
                                 各グループは ←/→ ボタン + 中央ラベル、部材変更のみ下にカウンタ */}
                             <div className="px-3 pb-3 flex flex-wrap gap-x-4 gap-y-2 items-start">
-                              {/* 部材変更グループ */}
-                              <div className="flex flex-col items-center gap-0.5">
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
-                                    disabled={variationPrevDisabled}
-                                    className={arrowBtnClass}
-                                    title="前の rails パターンに戻る"
-                                  >
-                                    ←
-                                  </button>
-                                  <span className="text-xs text-dimension/70 px-1 select-none">部材変更</span>
-                                  <button
-                                    onClick={() => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
-                                    disabled={variationNextDisabled}
-                                    className={arrowBtnClass}
-                                    title="次の rails パターンに切替"
-                                  >
-                                    →
-                                  </button>
-                                </div>
-                                <span className="text-[10px] font-mono text-dimension/50">
-                                  {cand.variationIdx + 1}/{cand.variationCount}
-                                </span>
-                              </div>
+                              {/* 部材変更グループ (Phase I-5: 共通コンポーネント化) */}
+                              <VariationChangeButtons
+                                variationIdx={cand.variationIdx}
+                                variationCount={cand.variationCount}
+                                onChange={(dir) => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, dir)}
+                              />
                               {/* 離れ変更グループ */}
                               <div className="flex flex-col items-center gap-0.5">
                                 <div className="flex items-center gap-1">
