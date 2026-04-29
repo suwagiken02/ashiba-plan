@@ -1261,7 +1261,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         const previewBuilding = activeEdge.floor === 2 ? building : building1F;
         const previewEdges = activeEdge.floor === 2 ? edges : edges1FAll;
 
-        const floorLabel = activeEdge.floor === 2 ? '2F' : '1F 下屋辺';
+        // Phase K-2-fix: floorLabel は targetFloor を見て判定
+        // (activeEdge.floor は内部規約値。主要建物は常に 2 だが、
+        //  表示は targetFloor=1 (1F のみ) でも '1F' にする必要がある)
+        const floorLabel = activeEdge.floor === 1
+          ? '1F 下屋辺'
+          : (targetFloor === 1 ? '1F' : '2F');
 
         return (
           <div className="fixed inset-0 z-[60] flex items-end sm:items-center justify-center">
@@ -1292,26 +1297,46 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                   📍 {floorLabel} {activeEdgeResult.edge.label}面（{FACE_LABEL[activeEdgeResult.edge.face]} / {activeEdgeResult.edge.lengthMm}mm）
                 </div>
                 <div className="text-[11px] text-dimension mt-1">
-                  始点離れ: <span className="font-mono text-canvas">{activeEdgeResult.startDistanceMm}mm</span>
+                  {/* Phase K-2-fix2: 「{currentFaceLabel}面の離れ ◯◯mm（...）」 */}
+                  {activeEdgeResult.edge.label}面の離れ <span className="font-mono text-canvas">{activeEdgeResult.startDistanceMm}mm</span>
                   <span className="ml-1">
                     {(() => {
                       // 起点辺/閉じ辺判定: 2F のみ scaffoldStart 利用、1F は scaffoldStart=undefined
                       if (activeEdge.floor !== 2 || !scaffoldStart) {
-                        return '（前辺の終端から継承）';
+                        return '（前辺の終端から継承されています）';
                       }
                       const nP = previewEdges.length;
                       const sIdx = (scaffoldStart.startVertexIndex ?? 0) % nP;
                       const cIdx = (sIdx - 1 + nP) % nP;
-                      if (activeEdgeResult.edge.index === sIdx) return '（足場開始で固定）';
-                      if (activeEdgeResult.edge.index === cIdx) return '（足場開始で固定 - 閉じ辺）';
-                      return '（前辺の終端から継承）';
+                      if (activeEdgeResult.edge.index === sIdx) return '（足場開始で固定されています）';
+                      if (activeEdgeResult.edge.index === cIdx) return '（足場開始で固定されています - 閉じ辺）';
+                      return '（前辺の終端から継承されています）';
                     })()}
                   </span>
                 </div>
-                <div className="text-[11px] text-dimension">
-                  希望する次の面の離れ: <span className="font-mono text-canvas">{activeEdgeResult.desiredEndDistanceMm}mm</span>
-                </div>
               </div>
+
+              {/* Phase K-2-fix: 警告ボックス常時表示。
+                  モーダルが立ち上がる時点で「希望離れが達成不可能」が確定しているため、
+                  ロック辺/非ロック辺問わず警告色で表示する。
+                  Phase K-2-fix2: 次の面ラベル ({nextFaceLabel}) を文言に含める。 */}
+              {(() => {
+                const nP = previewEdges.length;
+                const nextFaceLabel = previewEdges[(activeEdgeResult.edge.index + 1) % nP].label;
+                return (
+                  <div className="mx-4 mt-2 px-3 py-2 rounded-xl bg-yellow-500/5 border border-yellow-500/50">
+                    <div className="text-sm font-bold text-yellow-400 flex items-center gap-1">
+                      <span>⚠️</span>
+                      <span>
+                        {nextFaceLabel}面を希望の離れ <span className="font-mono">{activeEdgeResult.desiredEndDistanceMm}mm</span> にすることは不可能です
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-yellow-300/80 mt-0.5">
+                      以下から選択してください
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* Phase I-3: 候補ヘッダー + 候補カード + 操作ボタン */}
               {(() => {
