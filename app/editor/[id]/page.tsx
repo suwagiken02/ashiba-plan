@@ -21,6 +21,7 @@ import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import MoveSelectCategoryModal from '@/components/scaffold/MoveSelectCategoryModal';
 import MoveSelectRangePanel from '@/components/scaffold/MoveSelectRangePanel';
 import MoveSelectMovePanel from '@/components/scaffold/MoveSelectMovePanel';
+import ReorderModeBar from '@/components/scaffold/ReorderModeBar';
 import DarkModeToggle from '@/components/DarkModeToggle';
 import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import SettingsPanel from '@/components/toolbar/SettingsPanel';
@@ -570,6 +571,7 @@ export default function EditorPage() {
       <MoveSelectCategoryModal />
       <MoveSelectRangePanel />
       <MoveSelectMovePanel />
+      <ReorderModeBar />
 
       {/* 壁方向入力の確定ボタン */}
       {mode === 'building' && buildingInputMethod === 'direction' && directionPoints.length >= 1 && (

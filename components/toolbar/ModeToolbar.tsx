@@ -4,7 +4,7 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
 
 export default function ModeToolbar() {
-  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData, isMagnetPinMode, setMagnetPinMode } = useCanvasStore();
+  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData, isMagnetPinMode, setMagnetPinMode, isReorderMode, toggleReorderMode } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
   const [showAshibaMenu, setShowAshibaMenu] = useState(false);
   const [dismissedStage, setDismissedStage] = useState<string | null>(null);
@@ -51,6 +51,8 @@ export default function ModeToolbar() {
     if (isMeasuring) toggleMeasuring();
     // ピンモードは「magnet-pin 自身」以外のボタン押下で解除（既存 isMeasuring と同パターン）
     if (id !== 'magnet-pin' && isMagnetPinMode) setMagnetPinMode(false);
+    // Phase K-1: 入れ替えモードはどのメインボタン押下でも解除 (足場メニューから再開可)
+    if (isReorderMode) toggleReorderMode();
     if (id === 'magnet-pin') {
       setMagnetPinMode(!isMagnetPinMode);
       return;
