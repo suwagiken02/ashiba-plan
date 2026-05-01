@@ -17,6 +17,7 @@ import {
   AutoLayoutResult,
   EdgeInfo,
   SequentialLayoutResult,
+  SequentialCandidate,
   EdgeAdjustment,
   DEFAULT_EDGE_ADJUSTMENT,
   Bothmode2FResult,
@@ -24,6 +25,9 @@ import {
   computeBothmode2FLayout,
   computeBothmode1FLayout,
   bothmodeResultsToAutoLayoutResult,
+  findCollinearEdgePairs,
+  splitBuilding1FAtBuilding2FVertices,
+  splitBuilding2FAt1FVertices,
 } from '@/lib/konva/autoLayoutUtils';
 import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
 import VariationChangeButtons from '@/components/scaffold/VariationChangeButtons';
@@ -195,6 +199,35 @@ const FACE_LABEL: Record<string, string> = {
   north: '北', south: '南', east: '東', west: '西',
 };
 
+const FACE_BASE_LABEL: Record<string, string> = {
+  north: 'A', east: 'B', south: 'C', west: 'D',
+};
+
+/**
+ * Phase H-3d-2 重大変更 (B1/B2 概念): face ベースで edge ラベルを振り直す。
+ * 同一 face が複数 (= polygon split された場合) は連番 (B1, B2, B3...)、単独なら base label のみ。
+ *
+ * 例:
+ *  - 4 辺 (A=北, B=東, C=南, D=西): A, B, C, D
+ *  - 5 辺 (B 面が 2 分割): A, B1, B2, C, D
+ *  - 6 辺 (1F polygon の南面分割): A, B, C1, C2, ... など
+ */
+function relabelByFace(edges: EdgeInfo[]): EdgeInfo[] {
+  const totalByFace: Record<string, number> = {};
+  edges.forEach(e => {
+    totalByFace[e.face] = (totalByFace[e.face] ?? 0) + 1;
+  });
+  const counterByFace: Record<string, number> = {};
+  return edges.map(e => {
+    counterByFace[e.face] = (counterByFace[e.face] ?? 0) + 1;
+    const base = FACE_BASE_LABEL[e.face] ?? '?';
+    const label = totalByFace[e.face] > 1
+      ? `${base}${counterByFace[e.face]}`
+      : base;
+    return { ...e, label };
+  });
+}
+
 /** 手摺リストを "1800×3 + 600×1" 形式に整形 */
 function formatRailsSummary(rails: HandrailLengthMm[]): string {
   if (rails.length === 0) return 'なし';
@@ -237,18 +270,61 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return building1F;
   }, [targetFloor, building1F, building2F]);
 
-  // bothモード時、1F のうち 2F で覆われていない辺（= 下屋辺）
-  // 総2階やオーバーハングではゼロ、下屋ありでは 1 本以上
-  const uncoveredEdges1F = useMemo(() => {
-    if (targetFloor !== 'both' || !building1F || !building2F) return [];
-    return getEdgesNotCoveredBy(building1F, building2F);
+  // Phase H-3d-2 修正A: 1Fポリゴンに2F頂点を投影して自動分割
+  // 1F辺が「2F直下部分」と「下屋部分」の複合辺の場合、2F頂点で分割する。
+  // bothmode 以外、または片方の建物がない場合は元の building1F をそのまま返す。
+  const normalizedBuilding1F = useMemo(() => {
+    if (targetFloor !== 'both' || !building1F || !building2F) return building1F;
+    return splitBuilding1FAtBuilding2FVertices(building1F, building2F);
   }, [targetFloor, building1F, building2F]);
 
+  // Phase H-3d-2 重大変更 (B1/B2 概念導入): 2Fポリゴンに 1F 頂点を投影して自動分割
+  // 2F辺が下屋の境で分割されるため、bothmode 計算で各 2F 辺が常に 1 segment として扱える。
+  // bothmode 以外、または片方の建物がない場合は元の building2F をそのまま返す。
+  const normalizedBuilding2F = useMemo(() => {
+    if (targetFloor !== 'both' || !building1F || !building2F) return building2F;
+    return splitBuilding2FAt1FVertices(building1F, building2F);
+  }, [targetFloor, building1F, building2F]);
+
+  // bothモード時、1F のうち 2F で覆われていない辺（= 下屋辺）
+  // 修正A + B1/B2: 両方分割済を基準にする。
+  const uncoveredEdges1F = useMemo(() => {
+    if (targetFloor !== 'both' || !normalizedBuilding1F || !normalizedBuilding2F) return [];
+    return getEdgesNotCoveredBy(normalizedBuilding1F, normalizedBuilding2F);
+  }, [targetFloor, normalizedBuilding1F, normalizedBuilding2F]);
+
   // bothモード時、プレビュー用に 1F 全辺（ラベル A/B/C/D...）
+  // 修正A: 分割済の normalizedBuilding1F を基準にする。
   const edges1FAll = useMemo(() => {
-    if (targetFloor !== 'both' || !building1F) return [];
-    return getBuildingEdgesClockwise(building1F);
-  }, [targetFloor, building1F]);
+    if (targetFloor !== 'both' || !normalizedBuilding1F) return [];
+    return relabelByFace(getBuildingEdgesClockwise(normalizedBuilding1F));
+  }, [targetFloor, normalizedBuilding1F]);
+
+  // bothモード時、2F 全辺（連動表示の参照用）
+  // 修正 (B1/B2): 分割済の normalizedBuilding2F を基準にする (B 面が B1/B2 に分かれる)
+  // ラベルは face 連番付与: 4 辺なら A/B/C/D、B 面が分割されたら A/B1/B2/C/D など。
+  const edges2FAll = useMemo(() => {
+    if (targetFloor !== 'both' || !normalizedBuilding2F) return [];
+    return relabelByFace(getBuildingEdgesClockwise(normalizedBuilding2F));
+  }, [targetFloor, normalizedBuilding2F]);
+
+  // Phase H-3d-2 Stage 5 Part D-2-a: bothmode の 1F⇔2F 連動ペア
+  // 同一直線連動の 1F辺は希望離れ入力を無効化し「= 2F-X面」表示に切り替える。
+  // 修正A + B1/B2: 両方分割済 (normalizedBuilding1F / normalizedBuilding2F) を基準にする。
+  const collinearPairs = useMemo(() => {
+    if (targetFloor !== 'both' || !normalizedBuilding1F || !normalizedBuilding2F) return [];
+    return findCollinearEdgePairs(normalizedBuilding1F, normalizedBuilding2F);
+  }, [targetFloor, normalizedBuilding1F, normalizedBuilding2F]);
+
+  // 1F辺 index → 連動先 2F辺 のマップ (連動なしは undefined)
+  const collinear1FToEdge2F = useMemo(() => {
+    const map = new Map<number, EdgeInfo>();
+    for (const pair of collinearPairs) {
+      const e2 = edges2FAll.find(e => e.index === pair.edge2FIndex);
+      if (e2) map.set(pair.edge1FIndex, e2);
+    }
+    return map;
+  }, [collinearPairs, edges2FAll]);
 
   // 下屋辺の index セット（プレビュー強調 & 下屋入力 UI で利用）
   const uncoveredIdxSet1F = useMemo(
@@ -270,6 +346,24 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     if (!legacy) return undefined;
     return (legacy.floor ?? 1) === effectiveFloor ? legacy : undefined;
   }, [canvasData.scaffoldStart1F, canvasData.scaffoldStart2F, canvasData.scaffoldStart, targetFloor, building1F, building2F]);
+
+  // Phase H-3d-2 重大変更: scaffoldStart.startVertexIndex を normalizedBuilding2F の頂点 index に再マッピング。
+  // 元の building2F.points と normalizedBuilding2F.points は順序が変わる場合がある (CW NW 起点へ正規化)。
+  // 同じ物理座標の頂点を coordinate match で探し、その index を新 startVertexIndex とする。
+  // bothmode 以外、または building2F/normalizedBuilding2F が同一の場合は元の scaffoldStart をそのまま返す。
+  const normalizedScaffoldStart = useMemo(() => {
+    if (!scaffoldStart || targetFloor !== 'both' || !building2F || !normalizedBuilding2F) {
+      return scaffoldStart;
+    }
+    const oldIdx = scaffoldStart.startVertexIndex ?? 0;
+    const oldStart = building2F.points[oldIdx];
+    if (!oldStart) return scaffoldStart;
+    const newIdx = normalizedBuilding2F.points.findIndex(p =>
+      Math.abs(p.x - oldStart.x) < 0.001 && Math.abs(p.y - oldStart.y) < 0.001,
+    );
+    if (newIdx < 0) return scaffoldStart;
+    return { ...scaffoldStart, startVertexIndex: newIdx };
+  }, [scaffoldStart, targetFloor, building2F, normalizedBuilding2F]);
 
   // 辺リストを取得
   const edges = useMemo(
@@ -367,7 +461,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   // Phase I-2: 各辺ごとの「割り変更」「←/→」操作状態
   const [userAdjustments2F, setUserAdjustments2F] = useState<Record<number, EdgeAdjustment>>({});
   const [userAdjustments1F, setUserAdjustments1F] = useState<Record<number, EdgeAdjustment>>({});
-  const [activeEdge, setActiveEdge] = useState<{ floor: 1 | 2; index: number } | null>(null);
+  // Phase H-3d-2 Stage 5 残対応 Step 1 補足: bothmode で同一 edge に複数 segment が
+  // ある場合に segment を識別する必要があるため、optional segmentIndex を追加。
+  // 単一階モードでは undefined のまま (互換)。
+  const [activeEdge, setActiveEdge] = useState<{ floor: 1 | 2; index: number; segmentIndex?: number } | null>(null);
 
   // Phase H-3d-2 Stage 5 Part A: bothmode 専用 state (Part B 以降で使用、現時点では未使用)
   // key 形式は `${edge2FIndex}-${segmentIndex}` の string (Stage 3/4 で定義済み)
@@ -429,15 +526,15 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const handleCalc = () => {
     if (!building) return;
 
-    // Phase H-3d-2 Stage 5 Part B: bothmode は新ロジック (computeBothmode2FLayout/1FLayout)
+    // Phase H-3d-2 Stage 5 Part B + 修正A + B1/B2: bothmode は normalizedBuilding1F/2F を使用
     // 単一階モードは下の既存ロジックで処理 (無変更)。
-    if (targetFloor === 'both' && building1F && building2F && scaffoldStart) {
+    if (targetFloor === 'both' && normalizedBuilding1F && normalizedBuilding2F && scaffoldStart) {
       const result2F = computeBothmode2FLayout(
-        building2F,
-        building1F,
+        normalizedBuilding2F,
+        normalizedBuilding1F,
         distances,
         distances1F,
-        scaffoldStart,
+        normalizedScaffoldStart!,
         enabledSizes,
         priorityConfig,
         bothmodeSelections2F,
@@ -446,8 +543,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       setBothmodeResult2F(result2F);
 
       const result1F = computeBothmode1FLayout(
-        building1F,
-        building2F,
+        normalizedBuilding1F,
+        normalizedBuilding2F,
         result2F,
         distances1F,
         enabledSizes,
@@ -473,11 +570,19 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       // activeEdge: 最初の未解決セグメントへ (2F 優先 → 1F の順)
       const firstUnresolved2F = result2F.edgeSegments.find(s => !s.isLocked && !s.isAutoProgress);
       if (firstUnresolved2F) {
-        setActiveEdge({ floor: 2, index: firstUnresolved2F.edge2FIndex });
+        setActiveEdge({
+          floor: 2,
+          index: firstUnresolved2F.edge2FIndex,
+          segmentIndex: firstUnresolved2F.segmentIndex,
+        });
       } else {
         const firstUnresolved1F = result1F.edgeSegments.find(s => !s.isLocked && !s.isAutoProgress);
         if (firstUnresolved1F) {
-          setActiveEdge({ floor: 1, index: firstUnresolved1F.edge1FIndex });
+          setActiveEdge({
+            floor: 1,
+            index: firstUnresolved1F.edge1FIndex,
+            segmentIndex: firstUnresolved1F.segmentIndex,
+          });
         } else {
           setActiveEdge(null);
         }
@@ -558,8 +663,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   ) => {
     if (!building) return;
 
-    // Phase H-3d-2 Stage 5 Part C: bothmode は新ロジック
-    if (targetFloor === 'both' && building1F && building2F && scaffoldStart) {
+    // Phase H-3d-2 Stage 5 Part C + 修正A + B1/B2: normalizedBuilding1F/2F を使用
+    if (targetFloor === 'both' && normalizedBuilding1F && normalizedBuilding2F && scaffoldStart) {
       const key = `${edgeIndex}-${segmentIndex}`;
 
       if (floor === 2) {
@@ -567,15 +672,15 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         setBothmodeSelections2F(newSelections2F);
 
         const result2F = computeBothmode2FLayout(
-          building2F, building1F, distances, distances1F,
-          scaffoldStart, enabledSizes, priorityConfig,
+          normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+          normalizedScaffoldStart!, enabledSizes, priorityConfig,
           newSelections2F, bothmodeAdjustments2F,
         );
         setBothmodeResult2F(result2F);
 
         // 2F 変更後は 1F も再計算 (cascade)
         const result1F = computeBothmode1FLayout(
-          building1F, building2F, result2F, distances1F,
+          normalizedBuilding1F, normalizedBuilding2F, result2F, distances1F,
           enabledSizes, priorityConfig,
           bothmodeSelections1F, bothmodeAdjustments1F,
         );
@@ -597,13 +702,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           ? segs2F.slice(curIdx + 1).find(s => !s.isLocked && !s.isAutoProgress)
           : undefined;
         if (next2F) {
-          setActiveEdge({ floor: 2, index: next2F.edge2FIndex });
+          setActiveEdge({ floor: 2, index: next2F.edge2FIndex, segmentIndex: next2F.segmentIndex });
           return;
         }
         // 2F 全解決 → 1F 最初の未解決
         const first1F = result1F.edgeSegments.find(s => !s.isLocked && !s.isAutoProgress);
         if (first1F) {
-          setActiveEdge({ floor: 1, index: first1F.edge1FIndex });
+          setActiveEdge({ floor: 1, index: first1F.edge1FIndex, segmentIndex: first1F.segmentIndex });
         } else {
           setActiveEdge(null);
         }
@@ -614,7 +719,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         setBothmodeSelections1F(newSelections1F);
 
         const result1F = computeBothmode1FLayout(
-          building1F, building2F, bothmodeResult2F, distances1F,
+          normalizedBuilding1F, normalizedBuilding2F, bothmodeResult2F, distances1F,
           enabledSizes, priorityConfig,
           newSelections1F, bothmodeAdjustments1F,
         );
@@ -635,7 +740,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           ? segs1F.slice(curIdx + 1).find(s => !s.isLocked && !s.isAutoProgress)
           : undefined;
         if (next1F) {
-          setActiveEdge({ floor: 1, index: next1F.edge1FIndex });
+          setActiveEdge({ floor: 1, index: next1F.edge1FIndex, segmentIndex: next1F.segmentIndex });
         } else {
           setActiveEdge(null);
         }
@@ -682,8 +787,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const handleSequentialBack = () => {
     if (!building || !activeEdge) return;
 
-    // Phase H-3d-2 Stage 5 Part C: bothmode は新ロジック
-    if (targetFloor === 'both' && building1F && building2F && scaffoldStart) {
+    // Phase H-3d-2 Stage 5 Part C + 修正A + B1/B2: normalizedBuilding1F/2F を使用
+    if (targetFloor === 'both' && normalizedBuilding1F && normalizedBuilding2F && scaffoldStart) {
       // 辺の全セグメント key を Record<string, T> から削除するヘルパー
       const stripEdge = <T,>(rec: Record<string, T>, edgeIdx: number): Record<string, T> => {
         const out: Record<string, T> = {};
@@ -708,7 +813,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           setBothmodeAdjustments1F(newAdjustments1F);
 
           const result1F = computeBothmode1FLayout(
-            building1F, building2F, bothmodeResult2F, distances1F,
+            normalizedBuilding1F, normalizedBuilding2F, bothmodeResult2F, distances1F,
             enabledSizes, priorityConfig,
             newSelections1F, newAdjustments1F,
           );
@@ -721,7 +826,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           adapted.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
           setSelections(sel);
 
-          setActiveEdge({ floor: 1, index: prev.edge1FIndex });
+          setActiveEdge({ floor: 1, index: prev.edge1FIndex, segmentIndex: prev.segmentIndex });
           return;
         }
 
@@ -734,14 +839,14 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           setBothmodeAdjustments2F(newAdjustments2F);
 
           const result2F = computeBothmode2FLayout(
-            building2F, building1F, distances, distances1F,
-            scaffoldStart, enabledSizes, priorityConfig,
+            normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+            normalizedScaffoldStart!, enabledSizes, priorityConfig,
             newSelections2F, newAdjustments2F,
           );
           setBothmodeResult2F(result2F);
 
           const result1F = computeBothmode1FLayout(
-            building1F, building2F, result2F, distances1F,
+            normalizedBuilding1F, normalizedBuilding2F, result2F, distances1F,
             enabledSizes, priorityConfig,
             bothmodeSelections1F, bothmodeAdjustments1F,
           );
@@ -754,7 +859,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           adapted.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
           setSelections(sel);
 
-          setActiveEdge({ floor: 2, index: last2F.edge2FIndex });
+          setActiveEdge({ floor: 2, index: last2F.edge2FIndex, segmentIndex: last2F.segmentIndex });
         }
         return;
       }
@@ -774,14 +879,14 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       setBothmodeAdjustments2F(newAdjustments2F);
 
       const result2F = computeBothmode2FLayout(
-        building2F, building1F, distances, distances1F,
-        scaffoldStart, enabledSizes, priorityConfig,
+        normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+        normalizedScaffoldStart!, enabledSizes, priorityConfig,
         newSelections2F, newAdjustments2F,
       );
       setBothmodeResult2F(result2F);
 
       const result1F = computeBothmode1FLayout(
-        building1F, building2F, result2F, distances1F,
+        normalizedBuilding1F, normalizedBuilding2F, result2F, distances1F,
         enabledSizes, priorityConfig,
         bothmodeSelections1F, bothmodeAdjustments1F,
       );
@@ -794,7 +899,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       adapted.edgeLayouts.forEach((el, i) => { sel[i] = el.selectedIndex; });
       setSelections(sel);
 
-      setActiveEdge({ floor: 2, index: prev.edge2FIndex });
+      setActiveEdge({ floor: 2, index: prev.edge2FIndex, segmentIndex: prev.segmentIndex });
       return;
     }
 
@@ -859,8 +964,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   ) => {
     if (!building) return;
 
-    // Phase H-3d-2 Stage 5 Part C: bothmode は新ロジック
-    if (targetFloor === 'both' && building1F && building2F && scaffoldStart) {
+    // Phase H-3d-2 Stage 5 Part C + 修正A + B1/B2: normalizedBuilding1F/2F を使用
+    if (targetFloor === 'both' && normalizedBuilding1F && normalizedBuilding2F && scaffoldStart) {
       const key = `${edgeIndex}-${segmentIndex}`;
       const isF2 = floor === 2;
       const curRec = isF2 ? bothmodeAdjustments2F : bothmodeAdjustments1F;
@@ -872,13 +977,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         const newAdjustments2F = { ...bothmodeAdjustments2F, [key]: next };
         setBothmodeAdjustments2F(newAdjustments2F);
         const result2F = computeBothmode2FLayout(
-          building2F, building1F, distances, distances1F,
-          scaffoldStart, enabledSizes, priorityConfig,
+          normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+          normalizedScaffoldStart!, enabledSizes, priorityConfig,
           bothmodeSelections2F, newAdjustments2F,
         );
         setBothmodeResult2F(result2F);
         const result1F = computeBothmode1FLayout(
-          building1F, building2F, result2F, distances1F,
+          normalizedBuilding1F, normalizedBuilding2F, result2F, distances1F,
           enabledSizes, priorityConfig,
           bothmodeSelections1F, bothmodeAdjustments1F,
         );
@@ -895,7 +1000,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         const newAdjustments1F = { ...bothmodeAdjustments1F, [key]: next };
         setBothmodeAdjustments1F(newAdjustments1F);
         const result1F = computeBothmode1FLayout(
-          building1F, building2F, bothmodeResult2F, distances1F,
+          normalizedBuilding1F, normalizedBuilding2F, bothmodeResult2F, distances1F,
           enabledSizes, priorityConfig,
           bothmodeSelections1F, newAdjustments1F,
         );
@@ -933,6 +1038,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     edgeIndex: number,
     side: 'larger' | 'smaller',
     direction: 'next' | 'prev' = 'next',
+    segmentIndex: number = 0,
   ) => {
     applyAdjustmentsUpdate(floor, edgeIndex, cur => {
       const curVar = cur[side].variationIdx;
@@ -942,7 +1048,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         ...cur,
         [side]: { ...cur[side], variationIdx: newVar },
       };
-    });
+    }, segmentIndex);
   };
 
   const handleOffsetChange = (
@@ -950,6 +1056,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     edgeIndex: number,
     side: 'larger' | 'smaller',
     direction: 'next' | 'prev',
+    segmentIndex: number = 0,
   ) => {
     applyAdjustmentsUpdate(floor, edgeIndex, cur => {
       const curOffset = cur[side].offsetIdx;
@@ -959,7 +1066,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         ...cur,
         [side]: { offsetIdx: newOffset, variationIdx: 0 }, // variationIdx リセット
       };
-    });
+    }, segmentIndex);
   };
 
   const handlePlace = () => {
@@ -976,9 +1083,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       if (!candidate || candidate.rails.length === 0) continue;
 
       const placements = placeHandrailsForEdge(el, candidate.rails);
-      // プライマリの所属階:
-      // 1Fのみ → 1F、2Fのみ → 2F、both → 2F（botheは2F全周が主）
-      const mainFloor: 1 | 2 = targetFloor === 1 ? 1 : 2;
+      // 所属階:
+      // - bothmode: adapter が originFloor を埋めているのでそれを使う (2F 由来 → 2F、1F 由来 → 1F)
+      // - 単一階: 1Fのみ → 1F、2Fのみ → 2F (originFloor は undefined)
+      const placeFloor: 1 | 2 = el.originFloor ?? (targetFloor === 1 ? 1 : 2);
       for (const p of placements) {
         allHandrails.push({
           id: uuidv4(),
@@ -986,7 +1094,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           lengthMm: p.lengthMm,
           direction: p.direction,
           color: getHandrailColor(p.lengthMm),
-          floor: mainFloor,
+          floor: placeFloor,
         });
       }
     }
@@ -1203,54 +1311,69 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           )}
 
           {/* 1F下屋辺の離れ入力（1F+2F同時モード・下屋辺あり時のみ表示） */}
-          {targetFloor === 'both' && uncoveredEdges1F.length > 0 && (
-            <div>
-              <p className="text-sm text-dimension mb-2 flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" />
-                1F 下屋辺の離れ (mm)
-                <span className="text-[10px] text-dimension/70">({uncoveredEdges1F.length} 本)</span>
-              </p>
-              <div className="space-y-1.5">
-                {uncoveredEdges1F.map(edge => (
-                  <div key={`sub-${edge.index}`} className="flex items-center gap-2">
-                    <span className={`w-8 h-6 flex items-center justify-center rounded text-xs font-bold ${
-                      focusedSubEdgeIndex === edge.index ? 'bg-green-500 text-white' : 'bg-dark-bg text-green-400'
-                    }`}>
-                      1{edge.label}
-                    </span>
-                    <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
-                    <NumInput
-                      value={distances1F[edge.index] ?? 900}
-                      onChange={v => {
-                        setDistances1F(prev => ({ ...prev, [edge.index]: Math.max(0, v) }));
-                        setResultSub(null);
-                        // 順次決定 state をリセット（1F の距離変更は 1F のみ影響だが、安全のため両方）
-                        setSequentialResult2F(null);
-                        setSequentialResult1F(null);
-                        setUserSelections2F({});
-                        setUserSelections1F({});
-                        // Phase H-3d-2 Stage 5 Part A: bothmode state もリセット
-                        setBothmodeResult2F(null);
-                        setBothmodeResult1F(null);
-                        setBothmodeSelections2F({});
-                        setBothmodeSelections1F({});
-                        setBothmodeAdjustments2F({});
-                        setBothmodeAdjustments1F({});
-                        setActiveEdge(null);
-                      }}
-                      onFocus={() => setFocusedSubEdgeIndex(edge.index)}
-                      onBlur={() => setFocusedSubEdgeIndex(null)}
-                      min={0} step={1}
-                      className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
-                        focusedSubEdgeIndex === edge.index ? 'border-green-500' : 'border-dark-border'
-                      }`}
-                    />
-                    <span className="text-[10px] text-dimension w-16 text-right shrink-0">{edge.lengthMm}mm</span>
-                  </div>
-                ))}
+          {/* Phase H-3d-2 Stage 5 Part D-2-a: 連動辺は「= 2F-X面」表示にして入力無効化 */}
+          {targetFloor === 'both' && uncoveredEdges1F.length > 0 && (() => {
+            const collinearCount = uncoveredEdges1F.filter(e => collinear1FToEdge2F.has(e.index)).length;
+            return (
+              <div>
+                <p className="text-sm text-dimension mb-2 flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" />
+                  1F 下屋辺の離れ (mm)
+                  <span className="text-[10px] text-dimension/70">
+                    ({uncoveredEdges1F.length} 本{collinearCount > 0 ? ` / うち ${collinearCount} 本は2Fと連動` : ''})
+                  </span>
+                </p>
+                <div className="space-y-1.5">
+                  {uncoveredEdges1F.map(edge => {
+                    const linkedEdge2F = collinear1FToEdge2F.get(edge.index);
+                    return (
+                      <div key={`sub-${edge.index}`} className="flex items-center gap-2">
+                        <span className={`w-8 h-6 flex items-center justify-center rounded text-xs font-bold ${
+                          focusedSubEdgeIndex === edge.index ? 'bg-green-500 text-white' : 'bg-dark-bg text-green-400'
+                        }`}>
+                          1{edge.label}
+                        </span>
+                        <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
+                        {linkedEdge2F ? (
+                          <span className="flex-1 bg-dark-bg/50 border border-dark-border/50 rounded-lg px-2 py-1.5 text-sm font-mono text-dimension/70">
+                            = 2F {linkedEdge2F.label}面と連動
+                          </span>
+                        ) : (
+                          <NumInput
+                            value={distances1F[edge.index] ?? 900}
+                            onChange={v => {
+                              setDistances1F(prev => ({ ...prev, [edge.index]: Math.max(0, v) }));
+                              setResultSub(null);
+                              // 順次決定 state をリセット（1F の距離変更は 1F のみ影響だが、安全のため両方）
+                              setSequentialResult2F(null);
+                              setSequentialResult1F(null);
+                              setUserSelections2F({});
+                              setUserSelections1F({});
+                              // Phase H-3d-2 Stage 5 Part A: bothmode state もリセット
+                              setBothmodeResult2F(null);
+                              setBothmodeResult1F(null);
+                              setBothmodeSelections2F({});
+                              setBothmodeSelections1F({});
+                              setBothmodeAdjustments2F({});
+                              setBothmodeAdjustments1F({});
+                              setActiveEdge(null);
+                            }}
+                            onFocus={() => setFocusedSubEdgeIndex(edge.index)}
+                            onBlur={() => setFocusedSubEdgeIndex(null)}
+                            min={0} step={1}
+                            className={`flex-1 bg-dark-bg border rounded-lg px-2 py-1.5 text-sm font-mono ${
+                              focusedSubEdgeIndex === edge.index ? 'border-green-500' : 'border-dark-border'
+                            }`}
+                          />
+                        )}
+                        <span className="text-[10px] text-dimension w-16 text-right shrink-0">{edge.lengthMm}mm</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* 計算ボタン */}
           <button onClick={handleCalc}
@@ -1481,22 +1604,178 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
       {/* Phase H-3d-1: 順次決定モーダル（2F / 1F 両対応） */}
       {activeEdge !== null && (() => {
-        // activeEdge.floor に応じて対応する SequentialLayoutResult を取り出す
-        const activeSeqResult = activeEdge.floor === 2 ? sequentialResult2F : sequentialResult1F;
-        if (!activeSeqResult) return null;
-        const activeEdgeResult = activeSeqResult.edgeResults.find(er => er.edge.index === activeEdge.index);
-        if (!activeEdgeResult) return null;
+        // Phase H-3d-2 Stage 5 残対応 Step 1: bothmode/単一階両対応の統一形式
+        type ActiveItem = {
+          edge: EdgeInfo;
+          startDistanceMm: number;
+          desiredEndDistanceMm: number;
+          candidates: SequentialCandidate[];
+          selectedIndex: number;
+          prevCornerIsConvex: boolean;
+          nextCornerIsConvex: boolean;
+          isLocked: boolean;
+          isAutoProgress: boolean;
+          segmentIndex: number;  // 単一階は常に 0、bothmode は segment.segmentIndex
+          // Phase H-3d-2 ラベル衝突対応: 次の面のラベル (例 "B2", "1A", "2C") を desiredEndSource/endConstraint から事前計算
+          nextFaceLabel: string;
+        };
 
-        // Phase I-3-fix: 進捗は cascade 順 (起点辺・閉じ辺も含む、autoProgress のみスキップ)
-        const unresolved2F = (cascadeOrdered2F ?? []).filter(er => !er.isAutoProgress);
-        const unresolved1F = (cascadeOrdered1F ?? []).filter(er => !er.isAutoProgress);
-        const totalNum = unresolved2F.length + unresolved1F.length;
-        const currentNum = activeEdge.floor === 2
-          ? unresolved2F.findIndex(er => er.edge.index === activeEdge.index) + 1
-          : unresolved2F.length + unresolved1F.findIndex(er => er.edge.index === activeEdge.index) + 1;
+        let activeItem: ActiveItem | null = null;
+        let totalNum = 0;
+        let currentNum = 0;
+        let prevStartDistMm: number | null = null;
 
-        // プレビュー用: 1F の場合は building1F の points / edges を使用
-        const previewBuilding = activeEdge.floor === 2 ? building : building1F;
+        if (targetFloor === 'both' && (bothmodeResult2F || bothmodeResult1F)) {
+          // bothmode: result2F の全 segments + result1F の全 segments を cascade 順に並べる
+          type SegEntry = {
+            seg: typeof bothmodeResult2F extends null ? never
+              : NonNullable<typeof bothmodeResult2F>['edgeSegments'][number] | NonNullable<typeof bothmodeResult1F>['edgeSegments'][number];
+            floor: 1 | 2;
+            edgeIndex: number;
+          };
+          const allSegments: SegEntry[] = [];
+          if (bothmodeResult2F) {
+            for (const s of bothmodeResult2F.edgeSegments) {
+              allSegments.push({ seg: s, floor: 2, edgeIndex: s.edge2FIndex });
+            }
+          }
+          if (bothmodeResult1F) {
+            for (const s of bothmodeResult1F.edgeSegments) {
+              allSegments.push({ seg: s, floor: 1, edgeIndex: s.edge1FIndex });
+            }
+          }
+          // Phase H-3d-2 Stage 5 残対応 Step 1 補足:
+          // activeEdge.segmentIndex が指定されていれば一致するセグメントを優先、
+          // されていなければ最初の未解決セグメントを使う (互換動作)。
+          const curArrIdx = allSegments.findIndex(
+            x => x.floor === activeEdge.floor
+              && x.edgeIndex === activeEdge.index
+              && (activeEdge.segmentIndex === undefined || x.seg.segmentIndex === activeEdge.segmentIndex)
+              && !x.seg.isAutoProgress && !x.seg.isLocked,
+          );
+          if (curArrIdx < 0) return null;
+          const cur = allSegments[curArrIdx];
+          const seg = cur.seg;
+          // Phase H-3d-2 ラベル衝突対応: 自身のラベルは normalizedBuilding の relabel 済 edges から取得
+          const relabeledSelf = cur.floor === 2
+            ? edges2FAll.find(e => e.index === cur.edgeIndex)
+            : edges1FAll.find(e => e.index === cur.edgeIndex);
+          const synthEdge: EdgeInfo = {
+            index: cur.edgeIndex,
+            label: relabeledSelf?.label ?? String.fromCharCode(65 + cur.edgeIndex),
+            p1: seg.startPoint,
+            p2: seg.endPoint,
+            lengthMm: seg.segmentLengthMm,
+            face: seg.face,
+            handrailDir: seg.handrailDir,
+            nx: seg.nx,
+            ny: seg.ny,
+          };
+          // 次の面のラベル: desiredEndSource (2F seg) / endConstraint (1F seg) を見て決定
+          let nextFaceLabel = '?';
+          if (cur.floor === 2) {
+            const seg2F = seg as NonNullable<typeof bothmodeResult2F>['edgeSegments'][number];
+            const src = seg2F.desiredEndSource;
+            if (src.kind === 'next-2F-face') {
+              const e2 = edges2FAll.find(e => e.index === src.edge2FIndex);
+              nextFaceLabel = `2${e2?.label ?? '?'}`;
+            } else {
+              // 1F-face-pillar
+              const e1 = edges1FAll.find(e => e.index === src.edge1FIndex);
+              nextFaceLabel = `1${e1?.label ?? '?'}`;
+            }
+          } else {
+            const seg1F = seg as NonNullable<typeof bothmodeResult1F>['edgeSegments'][number];
+            const ec = seg1F.endConstraint;
+            if (ec.kind === 'collinear-with-2F') {
+              const e2 = edges2FAll.find(e => e.index === ec.edge2FIndex);
+              nextFaceLabel = `2${e2?.label ?? '?'}`;
+            } else if (ec.kind === 'next-1F-face') {
+              const e1 = edges1FAll.find(e => e.index === ec.edge1FIndex);
+              nextFaceLabel = `1${e1?.label ?? '?'}`;
+            } else {
+              // pillar-to-2F: pillarPoint と startPoint が一致する 2F seg を探す
+              if (bothmodeResult2F) {
+                const pp = ec.pillarPoint;
+                const seg2FAtPillar = bothmodeResult2F.edgeSegments.find(s2 =>
+                  Math.abs(s2.startPoint.x - pp.x) < 0.001 && Math.abs(s2.startPoint.y - pp.y) < 0.001,
+                );
+                if (seg2FAtPillar) {
+                  const e2 = edges2FAll.find(e => e.index === seg2FAtPillar.edge2FIndex);
+                  nextFaceLabel = `2${e2?.label ?? '?'}`;
+                }
+              }
+            }
+          }
+          activeItem = {
+            edge: synthEdge,
+            startDistanceMm: seg.startDistanceMm,
+            desiredEndDistanceMm: seg.desiredEndDistanceMm,
+            candidates: seg.candidates,
+            selectedIndex: seg.selectedIndex,
+            prevCornerIsConvex: seg.prevCornerIsConvex,
+            nextCornerIsConvex: seg.nextCornerIsConvex,
+            isLocked: seg.isLocked,
+            isAutoProgress: seg.isAutoProgress,
+            segmentIndex: seg.segmentIndex,
+            nextFaceLabel,
+          };
+          const unresolvedAll = allSegments.filter(x => !x.seg.isAutoProgress && !x.seg.isLocked);
+          totalNum = unresolvedAll.length;
+          currentNum = unresolvedAll.findIndex(
+            x => x.floor === cur.floor
+              && x.edgeIndex === cur.edgeIndex
+              && x.seg.segmentIndex === seg.segmentIndex,
+          ) + 1;
+          if (curArrIdx > 0) {
+            prevStartDistMm = allSegments[curArrIdx - 1].seg.startDistanceMm;
+          }
+        } else {
+          // 単一階: 既存ロジック (sequentialResult2F / sequentialResult1F から取得)
+          const activeSeqResult = activeEdge.floor === 2 ? sequentialResult2F : sequentialResult1F;
+          if (!activeSeqResult) return null;
+          const er = activeSeqResult.edgeResults.find(er => er.edge.index === activeEdge.index);
+          if (!er) return null;
+          // 単一階用 nextFaceLabel: 物理 next edge の label を使う (旧ロジック踏襲)
+          const previewEdgesForNext = activeEdge.floor === 2 ? edges : edges1FAll;
+          const nPnext = previewEdgesForNext.length;
+          const nextEdgeForLabel = nPnext > 0
+            ? previewEdgesForNext[(er.edge.index + 1) % nPnext]
+            : undefined;
+          activeItem = {
+            edge: er.edge,
+            startDistanceMm: er.startDistanceMm,
+            desiredEndDistanceMm: er.desiredEndDistanceMm,
+            candidates: er.candidates,
+            selectedIndex: er.selectedIndex,
+            prevCornerIsConvex: er.prevCornerIsConvex,
+            nextCornerIsConvex: er.nextCornerIsConvex,
+            isLocked: er.isLocked,
+            isAutoProgress: er.isAutoProgress,
+            segmentIndex: 0,
+            nextFaceLabel: nextEdgeForLabel?.label ?? '?',
+          };
+          // Phase I-3-fix: 進捗は cascade 順 (起点辺・閉じ辺も含む、autoProgress のみスキップ)
+          const unresolved2F = (cascadeOrdered2F ?? []).filter(er => !er.isAutoProgress);
+          const unresolved1F = (cascadeOrdered1F ?? []).filter(er => !er.isAutoProgress);
+          totalNum = unresolved2F.length + unresolved1F.length;
+          currentNum = activeEdge.floor === 2
+            ? unresolved2F.findIndex(er => er.edge.index === activeEdge.index) + 1
+            : unresolved2F.length + unresolved1F.findIndex(er => er.edge.index === activeEdge.index) + 1;
+          // 物理 prev の startDist を取得 (単一階の旧ロジック)
+          const previewEdgesForPrev = activeEdge.floor === 2 ? edges : edges1FAll;
+          const nP = previewEdgesForPrev.length;
+          if (nP > 0) {
+            const prevPhysIdx = (er.edge.index - 1 + nP) % nP;
+            const prevER = activeSeqResult.edgeResults.find(e => e.edge.index === prevPhysIdx);
+            if (prevER) prevStartDistMm = prevER.startDistanceMm;
+          }
+        }
+        if (!activeItem) return null;
+        const activeEdgeResult = activeItem; // 既存コードへの互換エイリアス (以降の参照は activeItem ベース)
+
+        // プレビュー用: 1F の場合は normalizedBuilding1F の points / edges を使用
+        const previewBuilding = activeEdge.floor === 2 ? building : normalizedBuilding1F;
         const previewEdges = activeEdge.floor === 2 ? edges : edges1FAll;
 
         // Phase K-2-fix: floorLabel は targetFloor を見て判定
@@ -1557,16 +1836,15 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               {/* Phase K-2-fix: 警告ボックス常時表示。
                   モーダルが立ち上がる時点で「希望離れが達成不可能」が確定しているため、
                   ロック辺/非ロック辺問わず警告色で表示する。
-                  Phase K-2-fix2: 次の面ラベル ({nextFaceLabel}) を文言に含める。 */}
+                  Phase H-3d-2 ラベル衝突対応: nextFaceLabel は activeItem.nextFaceLabel
+                  (= desiredEndSource/endConstraint から正しく決定された 1F or 2F のラベル) を使用。 */}
               {(() => {
-                const nP = previewEdges.length;
-                const nextFaceLabel = previewEdges[(activeEdgeResult.edge.index + 1) % nP].label;
                 return (
                   <div className="mx-4 mt-2 px-3 py-2 rounded-xl bg-yellow-500/5 border border-yellow-500/50">
                     <div className="text-sm font-bold text-yellow-400 flex items-center gap-1">
                       <span>⚠️</span>
                       <span>
-                        {nextFaceLabel}面を希望の離れ <span className="font-mono">{activeEdgeResult.desiredEndDistanceMm}mm</span> にすることは不可能です
+                        {activeItem.nextFaceLabel}面を希望の離れ <span className="font-mono">{activeEdgeResult.desiredEndDistanceMm}mm</span> にすることは不可能です
                       </span>
                     </div>
                     <div className="text-[11px] text-yellow-300/80 mt-0.5">
@@ -1578,9 +1856,16 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
               {/* Phase I-3: 候補ヘッダー + 候補カード + 操作ボタン */}
               {(() => {
-                // 操作ボタンに必要な context を IIFE 内で組み立て
-                const activeAdjustments = activeEdge.floor === 2 ? userAdjustments2F : userAdjustments1F;
-                const activeAdj = activeAdjustments[activeEdge.index] ?? DEFAULT_EDGE_ADJUSTMENT;
+                // Phase H-3d-2 Stage 5 残対応 Step 1: bothmode 時は bothmodeAdjustments を見る
+                let activeAdj: EdgeAdjustment = DEFAULT_EDGE_ADJUSTMENT;
+                if (targetFloor === 'both' && (bothmodeResult2F || bothmodeResult1F)) {
+                  const adjs = activeEdge.floor === 2 ? bothmodeAdjustments2F : bothmodeAdjustments1F;
+                  const key = `${activeEdge.index}-${activeItem.segmentIndex}`;
+                  activeAdj = adjs[key] ?? DEFAULT_EDGE_ADJUSTMENT;
+                } else {
+                  const activeAdjustments = activeEdge.floor === 2 ? userAdjustments2F : userAdjustments1F;
+                  activeAdj = activeAdjustments[activeEdge.index] ?? DEFAULT_EDGE_ADJUSTMENT;
+                }
                 const nPreview = previewEdges.length;
                 const nextEdge = previewEdges[(activeEdgeResult.edge.index + 1) % nPreview];
                 // Phase I-3-fix: 閉じ辺判定 (2F のみ、scaffoldStart 必須)
@@ -1590,10 +1875,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 const closeIdx = (sIdx - 1 + nPreview) % nPreview;
                 const isCloseCorner = activeEdge.floor === 2 && !!scaffoldStart
                   && activeEdgeResult.edge.index === closeIdx;
-                // 物理 prev の startDist を取得（bothmode 1F filtered の場合は近似値 fallback）
-                const prevPhysIdx = (activeEdgeResult.edge.index - 1 + nPreview) % nPreview;
-                const prevER = activeSeqResult.edgeResults.find(er => er.edge.index === prevPhysIdx);
-                const prevStartForProbe = prevER ? prevER.startDistanceMm : (activeEdgeResult.startDistanceMm ?? 900);
+                // 物理 prev の startDist (bothmode は cascade 配列の前要素、単一階は前 edge)
+                const prevStartForProbe = prevStartDistMm ?? (activeEdgeResult.startDistanceMm ?? 900);
 
                 // 「→」枯れ判定: 該当 side で offsetIdx+1 の候補が存在するか probe
                 const canAdvanceOffset = (side: 'larger' | 'smaller'): boolean => {
@@ -1657,7 +1940,12 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                                 通常時は accent/40 の薄い青、hover で accent (=#378ADD) 100% に。
                                 左右 margin は操作ボタン群の px-3 と揃える */}
                             <button
-                              onClick={() => handleSequentialSelect(activeEdge.floor, activeEdge.index, idx)}
+                              onClick={() => handleSequentialSelect(
+                                activeEdge.floor,
+                                activeEdge.index,
+                                idx,
+                                activeEdge.segmentIndex ?? activeItem.segmentIndex,
+                              )}
                               className="block w-[calc(100%-1.5rem)] mx-3 mt-3 mb-2 p-3 border border-accent/40 hover:border-accent hover:bg-accent/10 rounded-lg transition-colors text-left"
                             >
                               <div className="flex flex-wrap gap-1 mb-2">
@@ -1668,7 +1956,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                                 ))}
                               </div>
                               <div className="text-xs font-mono text-accent">
-                                → {nextEdge.label}面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
+                                → {activeItem.nextFaceLabel}面の離れ: <span className="font-bold">{cand.actualEndDistanceMm}mm</span>
                               </div>
                             </button>
                             {/* Phase I-3-fix2: 操作ボタン
@@ -1679,13 +1967,25 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                               <VariationChangeButtons
                                 variationIdx={cand.variationIdx}
                                 variationCount={cand.variationCount}
-                                onChange={(dir) => handleVariationChange(activeEdge.floor, activeEdge.index, sideForHandler, dir)}
+                                onChange={(dir) => handleVariationChange(
+                                  activeEdge.floor,
+                                  activeEdge.index,
+                                  sideForHandler,
+                                  dir,
+                                  activeEdge.segmentIndex ?? activeItem.segmentIndex,
+                                )}
                               />
                               {/* 離れ変更グループ */}
                               <div className="flex flex-col items-center gap-0.5">
                                 <div className="flex items-center gap-1">
                                   <button
-                                    onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'prev')}
+                                    onClick={() => handleOffsetChange(
+                                      activeEdge.floor,
+                                      activeEdge.index,
+                                      sideForHandler,
+                                      'prev',
+                                      activeEdge.segmentIndex ?? activeItem.segmentIndex,
+                                    )}
                                     disabled={prevDisabled}
                                     className={arrowBtnClass}
                                     title="前の離れに戻る"
@@ -1694,7 +1994,13 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                                   </button>
                                   <span className="text-xs text-dimension/70 px-1 select-none">離れ変更</span>
                                   <button
-                                    onClick={() => handleOffsetChange(activeEdge.floor, activeEdge.index, sideForHandler, 'next')}
+                                    onClick={() => handleOffsetChange(
+                                      activeEdge.floor,
+                                      activeEdge.index,
+                                      sideForHandler,
+                                      'next',
+                                      activeEdge.segmentIndex ?? activeItem.segmentIndex,
+                                    )}
                                     disabled={nextDisabled}
                                     className={arrowBtnClass}
                                     title="次の離れに進む"
