@@ -1,9 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { computeBothmode2FLayout } from '../autoLayoutUtils';
+import {
+  computeBothmode2FLayout,
+  splitBuilding2FAt1FVertices,
+} from '../autoLayoutUtils';
 import type { BuildingShape, ScaffoldStartConfig } from '@/types';
 
-// Phase H-3d-2 Stage 3: bothmode 専用の 2F 計算関数のテスト
-// 2F 面が 1F 下屋と交差する場合のセグメント分割と柱仕込みを検証する。
+// Phase H-3d-2 重大変更 (B1/B2 概念導入): bothmode 専用の 2F 計算関数のテスト
+// 入力 building2F は呼び出し側で splitBuilding2FAt1FVertices 適用済みの想定。
+// 各 2F 辺は常に 1 segment として処理される (segmentIndex=0, segmentCount=1)。
 
 describe('computeBothmode2FLayout', () => {
   // 共通: scaffoldStart (NW=vertex 0、face1=900, face2=900)
@@ -16,7 +20,7 @@ describe('computeBothmode2FLayout', () => {
     face2FirstHandrail: 1800,
   };
 
-  it('下屋なし (1F=2F): 全辺連動 → 各 2F 面は 1 セグメント、柱なし', () => {
+  it('下屋なし (1F=2F): 4 辺、各 1 segment、柱なし', () => {
     const square: BuildingShape = {
       id: 'b', type: 'polygon',
       points: [
@@ -26,19 +30,18 @@ describe('computeBothmode2FLayout', () => {
       fill: '#000', floor: 1,
     };
     const distances = { 0: 900, 1: 900, 2: 900, 3: 900 };
-    const result = computeBothmode2FLayout(square, square, distances, distances, ss);
-    // 4 辺、各 1 セグメント = 計 4 セグメント
+    // 1F=2F なので分割しても変化なし
+    const norm2F = splitBuilding2FAt1FVertices(square, square);
+    const result = computeBothmode2FLayout(norm2F, square, distances, distances, ss);
     expect(result.edgeSegments.length).toBe(4);
-    // 各セグメントは segmentCount=1
     result.edgeSegments.forEach(seg => {
       expect(seg.segmentCount).toBe(1);
       expect(seg.segmentIndex).toBe(0);
-      // 全 next-2F-face (柱仕込みなし)
       expect(seg.desiredEndSource.kind).toBe('next-2F-face');
     });
   });
 
-  it('B 面側下屋 (連動なし): 2F の B 面が 2 セグメント (柱 1 本)', () => {
+  it('B 面側下屋 (連動なし): 分割後 5 辺、B1/B2 が独立した edge に', () => {
     // 2F: 9000x7000 四角
     const building2F: BuildingShape = {
       id: 'b2', type: 'polygon',
@@ -58,26 +61,34 @@ describe('computeBothmode2FLayout', () => {
       ],
       fill: '#000', floor: 1,
     };
-    const distances2F = { 0: 900, 1: 900, 2: 900, 3: 900 };
+    const distances2F = { 0: 900, 1: 900, 2: 900, 3: 900, 4: 900 };
     const distances1F = { 0: 900, 1: 900, 2: 900, 3: 900, 4: 900, 5: 900 };
+    // 2F 分割: (9000, 2000) が 2F 東面に投影され、5 辺になる
+    const norm2F = splitBuilding2FAt1FVertices(building1F, building2F);
+    expect(norm2F.points.length).toBe(5);
+
     const result = computeBothmode2FLayout(
-      building2F, building1F, distances2F, distances1F, ss,
+      norm2F, building1F, distances2F, distances1F, ss,
     );
-
-    // 2F 辺数 4。B 面 (index=1) は 2 セグメント、他は 1 セグメント。
-    // 計 4 + 1 = 5 セグメント
+    // 5 辺、各 1 segment = 計 5 セグメント
     expect(result.edgeSegments.length).toBe(5);
+    result.edgeSegments.forEach(seg => {
+      expect(seg.segmentCount).toBe(1);
+      expect(seg.segmentIndex).toBe(0);
+    });
 
-    const bSegs = result.edgeSegments.filter(s => s.edge2FIndex === 1);
-    expect(bSegs.length).toBe(2);
-    expect(bSegs[0].segmentCount).toBe(2);
-    expect(bSegs[0].segmentIndex).toBe(0);
-    expect(bSegs[0].desiredEndSource.kind).toBe('1F-face-pillar');
-    expect(bSegs[1].segmentIndex).toBe(1);
-    expect(bSegs[1].desiredEndSource.kind).toBe('next-2F-face');
+    // edge index 1 (B1, 上半分): 1F 段差ピラー検出 → 1F-face-pillar
+    const b1 = result.edgeSegments.find(s => s.edge2FIndex === 1);
+    expect(b1).toBeDefined();
+    expect(b1!.desiredEndSource.kind).toBe('1F-face-pillar');
+
+    // edge index 2 (B2, 下半分): 終点が 1F 連動辺の起点 → next-2F-face
+    const b2 = result.edgeSegments.find(s => s.edge2FIndex === 2);
+    expect(b2).toBeDefined();
+    expect(b2!.desiredEndSource.kind).toBe('next-2F-face');
   });
 
-  it('B 面側下屋 + 上下とも連動なし: 2F の B 面が 3 セグメント (柱 2 本)', () => {
+  it('B 面側下屋 + 上下とも連動なし: 分割後 6 辺、ピラー 2 本', () => {
     // 2F: 9000x7000 四角
     const building2F: BuildingShape = {
       id: 'b2', type: 'polygon',
@@ -88,7 +99,6 @@ describe('computeBothmode2FLayout', () => {
       fill: '#000', floor: 2,
     };
     // 1F: 2F + 東に「中央のみ」突き出した下屋 (X=9000-12000, Y=2000-5000)
-    // 下屋の上下端 (Y=2000, Y=5000) で B 面を切る → 2 つの柱 → 3 セグメント
     const building1F: BuildingShape = {
       id: 'b1', type: 'polygon',
       points: [
@@ -99,24 +109,27 @@ describe('computeBothmode2FLayout', () => {
       ],
       fill: '#000', floor: 1,
     };
-    const distances2F = { 0: 900, 1: 900, 2: 900, 3: 900 };
+    const distances2F: Record<number, number> = {};
+    for (let i = 0; i < 6; i++) distances2F[i] = 900;
     const distances1F: Record<number, number> = {};
     for (let i = 0; i < 8; i++) distances1F[i] = 900;
-    const result = computeBothmode2FLayout(
-      building2F, building1F, distances2F, distances1F, ss,
-    );
+    // 2F 分割: (9000, 2000) と (9000, 5000) が 2F 東面に投影 → 6 辺
+    const norm2F = splitBuilding2FAt1FVertices(building1F, building2F);
+    expect(norm2F.points.length).toBe(6);
 
-    const bSegs = result.edgeSegments.filter(s => s.edge2FIndex === 1);
-    expect(bSegs.length).toBe(3);
-    expect(bSegs[0].segmentCount).toBe(3);
-    expect(bSegs[0].desiredEndSource.kind).toBe('1F-face-pillar');
-    expect(bSegs[1].desiredEndSource.kind).toBe('1F-face-pillar');
-    expect(bSegs[2].desiredEndSource.kind).toBe('next-2F-face');
-    // 計 4 (他 3 辺) + 3 = 6 セグメント
+    const result = computeBothmode2FLayout(
+      norm2F, building1F, distances2F, distances1F, ss,
+    );
+    // 6 辺、各 1 segment
     expect(result.edgeSegments.length).toBe(6);
+    // 1F-face-pillar の数 = 2 (= B 面の 2 本の柱)
+    const pillarCount = result.edgeSegments.filter(
+      s => s.desiredEndSource.kind === '1F-face-pillar'
+    ).length;
+    expect(pillarCount).toBe(2);
   });
 
-  it('B 面側に下屋 2 個 (連動なし): 2F の B 面が 5 セグメント (柱 4 本)', () => {
+  it('B 面側に下屋 2 個 (連動なし): 分割後 8 辺、ピラー 4 本', () => {
     const building2F: BuildingShape = {
       id: 'b2', type: 'polygon',
       points: [
@@ -138,24 +151,26 @@ describe('computeBothmode2FLayout', () => {
       ],
       fill: '#000', floor: 1,
     };
-    const distances2F = { 0: 900, 1: 900, 2: 900, 3: 900 };
+    const distances2F: Record<number, number> = {};
+    for (let i = 0; i < 8; i++) distances2F[i] = 900;
     const distances1F: Record<number, number> = {};
     for (let i = 0; i < 12; i++) distances1F[i] = 900;
-    const result = computeBothmode2FLayout(
-      building2F, building1F, distances2F, distances1F, ss,
-    );
+    // 2F 分割: (9000, 1000), (9000, 3000), (9000, 5000), (9000, 7000) が投影 → 8 辺
+    const norm2F = splitBuilding2FAt1FVertices(building1F, building2F);
+    expect(norm2F.points.length).toBe(8);
 
-    const bSegs = result.edgeSegments.filter(s => s.edge2FIndex === 1);
-    expect(bSegs.length).toBe(5);
-    expect(bSegs[0].segmentCount).toBe(5);
-    // 4 つの柱 (1F 由来) → desiredEndSource は最後を除いて全て 1F-face-pillar
-    for (let s = 0; s < 4; s++) {
-      expect(bSegs[s].desiredEndSource.kind).toBe('1F-face-pillar');
-    }
-    expect(bSegs[4].desiredEndSource.kind).toBe('next-2F-face');
+    const result = computeBothmode2FLayout(
+      norm2F, building1F, distances2F, distances1F, ss,
+    );
+    expect(result.edgeSegments.length).toBe(8);
+    // 1F-face-pillar の数 = 4 (= 2 個下屋 × 2 本ずつ)
+    const pillarCount = result.edgeSegments.filter(
+      s => s.desiredEndSource.kind === '1F-face-pillar'
+    ).length;
+    expect(pillarCount).toBe(4);
   });
 
-  it('scaffoldStart 固定: 起点辺の最初のセグメントは isLocked=true', () => {
+  it('scaffoldStart 起点辺は最初のセグメント (locked 概念廃止後は isLocked=false)', () => {
     const square: BuildingShape = {
       id: 'b', type: 'polygon',
       points: [
@@ -170,11 +185,13 @@ describe('computeBothmode2FLayout', () => {
     const first = result.edgeSegments[0];
     expect(first.edge2FIndex).toBe(0);
     expect(first.segmentIndex).toBe(0);
-    expect(first.isLocked).toBe(true);
+    // Phase H-3d-2 仕様簡素化: locked 概念廃止。互換性のためフィールドは残るが常に false。
+    expect(first.isLocked).toBe(false);
+    // 起点辺の startDistanceMm は scaffoldStart.face1DistanceMm (= 900) から取得
+    expect(first.startDistanceMm).toBe(900);
   });
 
-  it('cascade: 前セグメントの actualEnd が次セグメントの startDistanceMm に継承', () => {
-    // 単純な四角で全 exact ケース → 全セグメント startDistanceMm=900 で揃う
+  it('cascade: 各セグメントの startDistanceMm が継承される', () => {
     const square: BuildingShape = {
       id: 'b', type: 'polygon',
       points: [
@@ -185,7 +202,7 @@ describe('computeBothmode2FLayout', () => {
     };
     const distances = { 0: 900, 1: 900, 2: 900, 3: 900 };
     const result = computeBothmode2FLayout(square, square, distances, distances, ss);
-    // 各セグメントの startDistanceMm が 900 (cascade 整合)
+    // 全 exact ケース → 全セグメント startDistanceMm=900
     result.edgeSegments.forEach(seg => {
       expect(seg.startDistanceMm).toBe(900);
     });
