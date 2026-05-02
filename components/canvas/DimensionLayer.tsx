@@ -184,8 +184,6 @@ export default function DimensionLayer() {
       }
     }
 
-    console.log(`[DimLayer] corner=${corner} startIdx=${startIdx} vertex=(${pts[startIdx].x},${pts[startIdx].y}) totalConvex=${totalConvex} halfConvex=${halfConvex} splitStep=${splitStep}`);
-
     // 前ステップの足場ライン座標を記憶（コーナー部の手摺を拾うため）
     let prevScaffoldX: number | null = null; // 前の垂直辺のscaffoldCoord
     let prevScaffoldY: number | null = null; // 前の水平辺のscaffoldCoord
@@ -254,28 +252,6 @@ export default function DimensionLayer() {
         if (!isH && Math.abs(ep.x - scaffoldCoord) < TOL && ep.y >= edgeMinY && ep.y <= edgeMaxY) {
           coords.push(ep.y);
         }
-      }
-
-      // デバッグ: 範囲フィルタ前の候補も出力
-      if (isH) {
-        const nearY = eps.filter(ep => Math.abs(ep.y - scaffoldCoord) < TOL);
-        console.log(`[DimLayer] step=${step} ${edge.label}(${edge.face}) ${isReversed ? 'REV' : 'FWD'} scf=${scaffoldCoord} edgeX=[${edgeMinX},${edgeMaxX}] prevScfX=${prevScaffoldX} nearY=${nearY.length} xs=[${nearY.map(ep => ep.x).join(',')}] → pts=${coords.length}`);
-      } else {
-        // デバッグ: nearX の計算を詳しく追跡
-        const nearX: typeof eps = [];
-        for (const ep of eps) {
-          const diff = Math.abs(ep.x - scaffoldCoord);
-          if (diff < TOL) nearX.push(ep);
-        }
-        // edgeY範囲チェック後の端点
-        const inRange = nearX.filter(ep => ep.y >= edgeMinY && ep.y <= edgeMaxY);
-        // X=scaffoldCoord±50の端点（広域検索）
-        const closeX = eps.filter(ep => Math.abs(ep.x - scaffoldCoord) < 50);
-        console.log(`[DimLayer] step=${step} ${edge.label}(${edge.face}) ${isReversed ? 'REV' : 'FWD'} scf=${scaffoldCoord}(type=${typeof scaffoldCoord}) edgeY=[${edgeMinY},${edgeMaxY}]`);
-        console.log(`[DimLayer]   nearX(TOL=${TOL})=${nearX.length} [${nearX.map(ep => `(${ep.x},${ep.y})`).join(' ')}]`);
-        console.log(`[DimLayer]   inRange=${inRange.length} [${inRange.map(ep => `(${ep.x},${ep.y})`).join(' ')}]`);
-        console.log(`[DimLayer]   closeX(50)=${closeX.length} [${closeX.map(ep => `(${ep.x},${ep.y})d=${(ep.x - scaffoldCoord).toFixed(2)}`).join(' ')}]`);
-        console.log(`[DimLayer]   coords=${coords.length} [${coords.join(',')}]`);
       }
 
       // 今回のscaffoldCoordを記憶（次ステップで使用）
@@ -357,8 +333,6 @@ export default function DimensionLayer() {
       const remainOtherMm = Math.round(gridToMm(remainOtherGrid));
       const colorOther = remainOtherMm >= 0 ? COLOR_OK : COLOR_WARN;
 
-      console.log(`[DimLayer]   lead=${lead} farEnd=(${farEnd.x},${farEnd.y}) remain=${remainMm}mm | otherEnd=(${otherEnd.x},${otherEnd.y}) remainOther=${remainOtherMm}mm`);
-
       // ── ガイド描画: farEnd 側 ──
       if (isH) {
         const x1 = Math.min(lead, guideEnd.x);
@@ -412,7 +386,6 @@ export default function DimensionLayer() {
   }
 
   if (mainLogicRan) {
-    console.log(`[DimLayer] total: ${elements.length} elements`);
     return <Layer listening={false}>{elements}</Layer>;
   }
 

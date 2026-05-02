@@ -108,15 +108,6 @@ export const exportToPdf = async (
   panX: number,
   panY: number,
 ): Promise<void> => {
-  console.log('[exportToPdf]', {
-    paperSize: settings.paperSize,
-    scale: settings.scale,
-    printAreaCenter,
-    zoom,
-    panX,
-    panY,
-  });
-
   const pdfDoc = await PDFDocument.create();
   const paperDim = PAPER_DIMENSIONS[settings.paperSize] || PAPER_DIMENSIONS.A4_landscape;
   const page = pdfDoc.addPage([paperDim.width, paperDim.height]);
