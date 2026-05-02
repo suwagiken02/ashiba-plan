@@ -34,7 +34,7 @@ import VariationChangeButtons from '@/components/scaffold/VariationChangeButtons
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
 /** 建物プレビューSVG（辺ラベル付き、1F+2F同時対応） */
-function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeIndex, subPoints, subEdges, subHighlightIndices, focusedSubIndex, scaffoldStart }: {
+function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeIndex, subPoints, subEdges, subHighlightIndices, focusedSubIndex, scaffoldStart, showFloorPrefix }: {
   points: Point[];
   edges: EdgeInfo[];
   focusedIndex: number | null;
@@ -50,6 +50,8 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
   focusedSubIndex?: number | null;
   /** スタート角マーカー表示用（主建物 points 側） */
   scaffoldStart?: ScaffoldStartConfig;
+  /** Phase H-3d-3: bothmode で主建物ラベルに "2" プレフィックスを付ける (1F の "1A" 表記と対称) */
+  showFloorPrefix?: boolean;
 }) {
   if (points.length < 3) return null;
 
@@ -165,7 +167,7 @@ function PreviewSVG({ points, edges, focusedIndex, conflictHandrails, blinkEdgeI
                 paintOrder={labelPos.isInside ? 'stroke' : undefined}
                 stroke={labelPos.isInside ? '#3d3d3a' : undefined}
                 strokeWidth={labelPos.isInside ? 3 : undefined}
-              >{edge.label}</text>
+              >{showFloorPrefix ? `2${edge.label}` : edge.label}</text>
             </React.Fragment>
           );
         })}
@@ -307,6 +309,15 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     if (targetFloor !== 'both' || !normalizedBuilding2F) return [];
     return relabelByFace(getBuildingEdgesClockwise(normalizedBuilding2F));
   }, [targetFloor, normalizedBuilding2F]);
+
+  // Phase H-3d-3: 下屋 (uncovered 1F) edges 専用の relabel。
+  // edges1FAll は 1F 全周ベースなので、 主建物分の同 face edges まで含めて
+  // suffix が付く (e.g. 下屋上=A2、 主建物上=A1)。
+  // 下屋単独で見れば各面 1 辺ずつなので suffix 不要 → 別 relabel を作る。
+  const subEdgesRelabeled = useMemo(() => {
+    if (targetFloor !== 'both') return [];
+    return relabelByFace(uncoveredEdges1F);
+  }, [targetFloor, uncoveredEdges1F]);
 
   // Phase H-3d-2 Stage 5 Part D-2-a: bothmode の 1F⇔2F 連動ペア
   // 同一直線連動の 1F辺は希望離れ入力を無効化し「= 2F-X面」表示に切り替える。
@@ -1242,16 +1253,18 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           {building && (
             <>
           {/* プレビューSVG（bothモードでは 1F を背景、下屋辺を緑で強調） */}
+          {/* Phase H-3d-3: bothmode では normalize 後の 2F (B1/B2 等の分割辺込み) を表示 */}
           <PreviewSVG
-            points={building.points}
-            edges={edges}
+            points={targetFloor === 'both' && normalizedBuilding2F ? normalizedBuilding2F.points : building.points}
+            edges={targetFloor === 'both' ? edges2FAll : edges}
             focusedIndex={focusedEdgeIndex}
             conflictHandrails={showConflictConfirm ? canvasData.handrails.filter(h => conflictIds.includes(h.id)) : undefined}
-            subPoints={targetFloor === 'both' && building1F ? building1F.points : undefined}
-            subEdges={targetFloor === 'both' ? edges1FAll : undefined}
+            subPoints={targetFloor === 'both' && normalizedBuilding1F ? normalizedBuilding1F.points : undefined}
+            subEdges={targetFloor === 'both' ? subEdgesRelabeled : undefined}
             subHighlightIndices={targetFloor === 'both' ? uncoveredIdxSet1F : undefined}
             focusedSubIndex={focusedSubEdgeIndex}
             scaffoldStart={scaffoldStart}
+            showFloorPrefix={targetFloor === 'both'}
           />
 
           {/* 各辺の離れ入力 */}
@@ -1263,7 +1276,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                   <span className={`w-6 h-6 flex items-center justify-center rounded text-xs font-bold ${
                     focusedEdgeIndex === edge.index ? 'bg-accent text-white' : 'bg-dark-bg text-dimension'
                   }`}>
-                    {edge.label}
+                    {/* Phase H-3d-3: bothmode は 1F 側 (1{label}) と対称に "2" prefix */}
+                    {targetFloor === 'both' ? `2${edge.label}` : edge.label}
                   </span>
                   <span className="text-[10px] text-dimension w-6 shrink-0">{FACE_LABEL[edge.face]}</span>
                   {lockedEdgeIndices.has(edge.index) ? (
@@ -1410,7 +1424,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                   <div key={i} className="bg-dark-bg rounded-xl p-3">
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold">
-                        {el.edge.label} ({FACE_LABEL[el.edge.face]})
+                        {/* Phase H-3d-3: bothmode は 1F 側 (1{label}) と対称に "2" prefix */}
+                        {targetFloor === 'both' ? '2' : ''}{(edges2FAll.find(e => e.index === el.edge.index)?.label ?? el.edge.label)} ({FACE_LABEL[el.edge.face]})
                         {el.locked && <span className="text-[10px] text-dimension ml-1">L字固定</span>}
                       </span>
                       <span className="text-[10px] text-dimension">
@@ -1500,7 +1515,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                       <div key={`sub-${el.edge.index}`} className="bg-dark-bg rounded-xl p-3 border-l-2 border-green-500">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-bold text-green-400">
-                            1{el.edge.label} ({FACE_LABEL[el.edge.face]})
+                            {/* Phase H-3d-3: 1F 下屋辺ラベルは subEdgesRelabeled (= uncovered のみ relabel) から引く */}
+                            1{(subEdgesRelabeled.find(e => e.index === el.edge.index)?.label ?? el.edge.label)} ({FACE_LABEL[el.edge.face]})
                           </span>
                           <span className="text-[10px] text-dimension">
                             辺長 {el.edgeLengthMm}mm / 有効 {el.effectiveMm}mm
@@ -1657,9 +1673,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           const cur = allSegments[curArrIdx];
           const seg = cur.seg;
           // Phase H-3d-2 ラベル衝突対応: 自身のラベルは normalizedBuilding の relabel 済 edges から取得
+          // Phase H-3d-3: 1F は uncovered (下屋) のみ segment 化されるので subEdgesRelabeled から引く
           const relabeledSelf = cur.floor === 2
             ? edges2FAll.find(e => e.index === cur.edgeIndex)
-            : edges1FAll.find(e => e.index === cur.edgeIndex);
+            : subEdgesRelabeled.find(e => e.index === cur.edgeIndex);
           const synthEdge: EdgeInfo = {
             index: cur.edgeIndex,
             label: relabeledSelf?.label ?? String.fromCharCode(65 + cur.edgeIndex),
@@ -1680,8 +1697,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               const e2 = edges2FAll.find(e => e.index === src.edge2FIndex);
               nextFaceLabel = `2${e2?.label ?? '?'}`;
             } else {
-              // 1F-face-pillar
-              const e1 = edges1FAll.find(e => e.index === src.edge1FIndex);
+              // 1F-face-pillar: 下屋 edge を指すので subEdgesRelabeled から引く
+              const e1 = subEdgesRelabeled.find(e => e.index === src.edge1FIndex);
               nextFaceLabel = `1${e1?.label ?? '?'}`;
             }
           } else {
@@ -1691,7 +1708,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               const e2 = edges2FAll.find(e => e.index === ec.edge2FIndex);
               nextFaceLabel = `2${e2?.label ?? '?'}`;
             } else if (ec.kind === 'next-1F-face') {
-              const e1 = edges1FAll.find(e => e.index === ec.edge1FIndex);
+              // 次も独立 (= 下屋 edge) を指すので subEdgesRelabeled から引く
+              const e1 = subEdgesRelabeled.find(e => e.index === ec.edge1FIndex);
               nextFaceLabel = `1${e1?.label ?? '?'}`;
             } else {
               // pillar-to-2F: pillarPoint と startPoint が一致する 2F seg を探す
@@ -1776,7 +1794,23 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
         // プレビュー用: 1F の場合は normalizedBuilding1F の points / edges を使用
         const previewBuilding = activeEdge.floor === 2 ? building : normalizedBuilding1F;
-        const previewEdges = activeEdge.floor === 2 ? edges : edges1FAll;
+        // Phase H-3d-3: 2F も relabel 済 (edges2FAll) を使う
+        const previewEdges = activeEdge.floor === 2 ? edges2FAll : edges1FAll;
+
+        // Phase H-3d-3 修正B: bothmode の modal preview は top-level と同じく
+        // 主=2F / sub=1F 固定で表示 (= 設定画面のプレビューと整合)。
+        // activeEdge.floor で focus 対象を切り替えるが、 主従構成は不変。
+        const useBothmodePreview = targetFloor === 'both' && !!normalizedBuilding2F && !!normalizedBuilding1F;
+        const mainPoints = useBothmodePreview ? normalizedBuilding2F!.points : previewBuilding?.points;
+        const mainEdges = useBothmodePreview ? edges2FAll : previewEdges;
+        const mainFocusedIdx = useBothmodePreview
+          ? (activeEdge.floor === 2 ? activeEdge.index : null)
+          : activeEdge.index;
+        const mainBlinkIdx = useBothmodePreview
+          ? (activeEdge.floor === 2 ? activeEdge.index : undefined)
+          : activeEdge.index;
+        const subFocusedIdx = useBothmodePreview && activeEdge.floor === 1
+          ? activeEdge.index : null;
 
         // Phase K-2-fix: floorLabel は targetFloor を見て判定
         // (activeEdge.floor は内部規約値。主要建物は常に 2 だが、
@@ -1796,14 +1830,20 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               </div>
 
               {/* プレビュー */}
-              {previewBuilding && (
+              {/* Phase H-3d-3 修正B: bothmode は top-level と同じく主=2F + sub=1F (下屋) を表示 */}
+              {mainPoints && (
                 <div className="px-4 pt-3">
                   <PreviewSVG
-                    points={previewBuilding.points}
-                    edges={previewEdges}
-                    focusedIndex={activeEdge.index}
-                    blinkEdgeIndex={activeEdge.index}
+                    points={mainPoints}
+                    edges={mainEdges}
+                    focusedIndex={mainFocusedIdx}
+                    blinkEdgeIndex={mainBlinkIdx}
+                    subPoints={useBothmodePreview ? normalizedBuilding1F!.points : undefined}
+                    subEdges={useBothmodePreview ? subEdgesRelabeled : undefined}
+                    subHighlightIndices={useBothmodePreview ? uncoveredIdxSet1F : undefined}
+                    focusedSubIndex={subFocusedIdx}
                     scaffoldStart={activeEdge.floor === 2 ? scaffoldStart : undefined}
+                    showFloorPrefix={useBothmodePreview}
                   />
                 </div>
               )}
