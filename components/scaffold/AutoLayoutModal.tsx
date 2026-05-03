@@ -202,35 +202,6 @@ const FACE_LABEL: Record<string, string> = {
   north: '北', south: '南', east: '東', west: '西',
 };
 
-const FACE_BASE_LABEL: Record<string, string> = {
-  north: 'A', east: 'B', south: 'C', west: 'D',
-};
-
-/**
- * Phase H-3d-2 重大変更 (B1/B2 概念): face ベースで edge ラベルを振り直す。
- * 同一 face が複数 (= polygon split された場合) は連番 (B1, B2, B3...)、単独なら base label のみ。
- *
- * 例:
- *  - 4 辺 (A=北, B=東, C=南, D=西): A, B, C, D
- *  - 5 辺 (B 面が 2 分割): A, B1, B2, C, D
- *  - 6 辺 (1F polygon の南面分割): A, B, C1, C2, ... など
- */
-function relabelByFace(edges: EdgeInfo[]): EdgeInfo[] {
-  const totalByFace: Record<string, number> = {};
-  edges.forEach(e => {
-    totalByFace[e.face] = (totalByFace[e.face] ?? 0) + 1;
-  });
-  const counterByFace: Record<string, number> = {};
-  return edges.map(e => {
-    counterByFace[e.face] = (counterByFace[e.face] ?? 0) + 1;
-    const base = FACE_BASE_LABEL[e.face] ?? '?';
-    const label = totalByFace[e.face] > 1
-      ? `${base}${counterByFace[e.face]}`
-      : base;
-    return { ...e, label };
-  });
-}
-
 /** 手摺リストを "1800×3 + 600×1" 形式に整形 */
 function formatRailsSummary(rails: HandrailLengthMm[]): string {
   if (rails.length === 0) return 'なし';
