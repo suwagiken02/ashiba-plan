@@ -2199,7 +2199,10 @@ function bothmodeSegmentToEdgeLayout(seg: {
 
   const edge: EdgeInfo = {
     index: edgeIndex,
-    label: String.fromCharCode(65 + edgeIndex),
+    // Phase H-3d-4: 中間層では label を生成しない (= 表示時に edges2FAll/subEdgesRelabeled から
+    // edge.index 経由で lookup する H-3d-3 方針)。 EdgeInfo.label は必須型のため空文字で型を満たす。
+    // 1F-origin entry を 2F セクションに混在させて誤 collision していた問題も修正 #1 で解消済み。
+    label: '',
     p1: seg.startPoint,
     p2: seg.endPoint,
     lengthMm: seg.segmentLengthMm,

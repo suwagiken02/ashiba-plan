@@ -295,13 +295,6 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return getEdgesNotCoveredBy(normalizedBuilding1F, normalizedBuilding2F);
   }, [targetFloor, normalizedBuilding1F, normalizedBuilding2F]);
 
-  // bothモード時、プレビュー用に 1F 全辺（ラベル A/B/C/D...）
-  // 修正A: 分割済の normalizedBuilding1F を基準にする。
-  const edges1FAll = useMemo(() => {
-    if (targetFloor !== 'both' || !normalizedBuilding1F) return [];
-    return relabelByFace(getBuildingEdgesClockwise(normalizedBuilding1F));
-  }, [targetFloor, normalizedBuilding1F]);
-
   // bothモード時、2F 全辺（連動表示の参照用）
   // 修正 (B1/B2): 分割済の normalizedBuilding2F を基準にする (B 面が B1/B2 に分かれる)
   // ラベルは face 連番付与: 4 辺なら A/B/C/D、B 面が分割されたら A/B1/B2/C/D など。
@@ -1326,19 +1319,22 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
           {/* 1F下屋辺の離れ入力（1F+2F同時モード・下屋辺あり時のみ表示） */}
           {/* Phase H-3d-2 Stage 5 Part D-2-a: 連動辺は「= 2F-X面」表示にして入力無効化 */}
-          {targetFloor === 'both' && uncoveredEdges1F.length > 0 && (() => {
-            const collinearCount = uncoveredEdges1F.filter(e => collinear1FToEdge2F.has(e.index)).length;
+          {targetFloor === 'both' && subEdgesRelabeled.length > 0 && (() => {
+            const collinearCount = subEdgesRelabeled.filter(e => collinear1FToEdge2F.has(e.index)).length;
             return (
               <div>
                 <p className="text-sm text-dimension mb-2 flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-sm bg-green-500 inline-block" />
                   1F 下屋辺の離れ (mm)
                   <span className="text-[10px] text-dimension/70">
-                    ({uncoveredEdges1F.length} 本{collinearCount > 0 ? ` / うち ${collinearCount} 本は2Fと連動` : ''})
+                    ({subEdgesRelabeled.length} 本{collinearCount > 0 ? ` / うち ${collinearCount} 本は2Fと連動` : ''})
                   </span>
                 </p>
                 <div className="space-y-1.5">
-                  {uncoveredEdges1F.map(edge => {
+                  {/* Phase H-3d-4 fix: 下屋単独 normalized ラベル (1A/1B/1C) を使うため
+                      subEdgesRelabeled をループ元にする。 uncoveredEdges1F.label は
+                      1F 全周連番のため "1C/1D/1E" 等になってしまう。 */}
+                  {subEdgesRelabeled.map(edge => {
                     const linkedEdge2F = collinear1FToEdge2F.get(edge.index);
                     return (
                       <div key={`sub-${edge.index}`} className="flex items-center gap-2">
@@ -1404,6 +1400,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               </p>
 
               {result.edgeLayouts.map((el, i) => {
+                // Phase H-3d-4: bothmode の 1F-origin entry は専用 1F セクションで描画 (下方)、
+                // ここは 2F-origin / 単一階 (originFloor undefined) のみ。
+                if (el.originFloor === 1) return null;
                 const selIdx = selections[i] ?? 0;
                 const candidate = el.candidates[selIdx];
                 if (!candidate) return null;
@@ -1496,23 +1495,37 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               })}
 
               {/* 1F 下屋辺の結果（bothモード + 下屋あり時のみ） */}
-              {targetFloor === 'both' && resultSub && resultSub.edgeLayouts.length > 0 && (
+              {/* Phase H-3d-4: bothmode は result.edgeLayouts.filter(originFloor===1) を使用、
+                  単一階モード (現状到達なし) は従来 resultSub 経由 */}
+              {(() => {
+                type SubEntry = { el: typeof result.edgeLayouts[number]; mergedIdx: number; useBothmodeState: boolean };
+                const subEntries: SubEntry[] = targetFloor === 'both'
+                  ? result.edgeLayouts
+                      .map((el, mergedIdx) => ({ el, mergedIdx, useBothmodeState: true }))
+                      .filter(({ el }) => el.originFloor === 1)
+                  : (resultSub?.edgeLayouts.map((el, idx) => ({ el, mergedIdx: idx, useBothmodeState: false })) ?? []);
+                if (subEntries.length === 0) return null;
+                return (
                 <div className="pt-3 mt-3 border-t border-dark-border space-y-2">
                   <p className="text-sm font-bold text-green-400">
                     割付結果 (1F 下屋辺)
                   </p>
-                  {resultSub.edgeLayouts.map((el) => {
-                    const selIdx = selectionsSub[el.edge.index] ?? 0;
+                  {subEntries.map(({ el, mergedIdx, useBothmodeState }) => {
+                    const selIdx = useBothmodeState
+                      ? (selections[mergedIdx] ?? 0)
+                      : (selectionsSub[el.edge.index] ?? 0);
                     const candidate = el.candidates[selIdx];
                     if (!candidate) return null;
-                    // Phase I-5: 1F 下屋辺の部材変更用 seq 候補
-                    const seqEdgeSub = sequentialResult1F?.edgeResults.find(er => er.edge.index === el.edge.index);
+                    // Phase I-5: 1F 下屋辺の部材変更用 seq 候補 (単一階のみ。bothmode は modal 経由のため非表示)
+                    const seqEdgeSub = !useBothmodeState
+                      ? sequentialResult1F?.edgeResults.find(er => er.edge.index === el.edge.index)
+                      : undefined;
                     const seqCandSub = seqEdgeSub?.candidates[seqEdgeSub.selectedIndex];
                     const sideForVariationSub: 'larger' | 'smaller' | null = seqCandSub
                       ? (seqCandSub.side === 'exact' ? 'smaller' : seqCandSub.side)
                       : null;
                     return (
-                      <div key={`sub-${el.edge.index}`} className="bg-dark-bg rounded-xl p-3 border-l-2 border-green-500">
+                      <div key={`sub-${el.edge.index}-${mergedIdx}`} className="bg-dark-bg rounded-xl p-3 border-l-2 border-green-500">
                         <div className="flex items-center justify-between mb-1">
                           <span className="text-sm font-bold text-green-400">
                             {/* Phase H-3d-3: 1F 下屋辺ラベルは subEdgesRelabeled (= uncovered のみ relabel) から引く */}
@@ -1548,7 +1561,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                           </span>
                           <span className="text-[10px] text-dimension">{candidate.count}本</span>
                         </div>
-                        {/* Phase I-5: 1F 下屋辺の部材変更ボタン */}
+                        {/* Phase I-5: 1F 下屋辺の部材変更ボタン (単一階モードのみ) */}
                         {seqCandSub && sideForVariationSub && (
                           <div className="mt-2 pt-2 border-t border-dark-border flex justify-center">
                             <VariationChangeButtons
@@ -1564,7 +1577,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                             <div className="flex flex-wrap gap-1">
                               {el.candidates.map((c, ci) => (
                                 <button key={ci}
-                                  onClick={() => setSelectionsSub(prev => ({ ...prev, [el.edge.index]: ci }))}
+                                  onClick={() => useBothmodeState
+                                    ? setSelections(prev => ({ ...prev, [mergedIdx]: ci }))
+                                    : setSelectionsSub(prev => ({ ...prev, [el.edge.index]: ci }))
+                                  }
                                   className={`px-2 py-1 rounded text-[10px] font-mono border transition-colors ${
                                     selIdx === ci
                                       ? 'border-green-500 bg-green-500/15 text-green-400'
@@ -1581,7 +1597,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                     );
                   })}
                 </div>
-              )}
+                );
+              })()}
 
               <button onClick={handlePlace}
                 className="w-full py-3 bg-accent text-white font-bold rounded-xl text-lg"
@@ -1755,7 +1772,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           const er = activeSeqResult.edgeResults.find(er => er.edge.index === activeEdge.index);
           if (!er) return null;
           // 単一階用 nextFaceLabel: 物理 next edge の label を使う (旧ロジック踏襲)
-          const previewEdgesForNext = activeEdge.floor === 2 ? edges : edges1FAll;
+          // Phase H-3d-4: 単一階モードでは edges がそのフロア (1F or 2F) のものなので
+          // ternary 不要。 edges1FAll は bothmode 専用の dead path だったため副次バグ
+          // (単一階 1F で nextFaceLabel='?' 表示) も併せて解消。
+          const previewEdgesForNext = edges;
           const nPnext = previewEdgesForNext.length;
           const nextEdgeForLabel = nPnext > 0
             ? previewEdgesForNext[(er.edge.index + 1) % nPnext]
@@ -1781,7 +1801,8 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             ? unresolved2F.findIndex(er => er.edge.index === activeEdge.index) + 1
             : unresolved2F.length + unresolved1F.findIndex(er => er.edge.index === activeEdge.index) + 1;
           // 物理 prev の startDist を取得 (単一階の旧ロジック)
-          const previewEdgesForPrev = activeEdge.floor === 2 ? edges : edges1FAll;
+          // Phase H-3d-4: 単一階モードでは edges がそのフロアのもの。 ternary 不要。
+          const previewEdgesForPrev = edges;
           const nP = previewEdgesForPrev.length;
           if (nP > 0) {
             const prevPhysIdx = (er.edge.index - 1 + nP) % nP;
@@ -1794,13 +1815,21 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
 
         // プレビュー用: 1F の場合は normalizedBuilding1F の points / edges を使用
         const previewBuilding = activeEdge.floor === 2 ? building : normalizedBuilding1F;
-        // Phase H-3d-3: 2F も relabel 済 (edges2FAll) を使う
-        const previewEdges = activeEdge.floor === 2 ? edges2FAll : edges1FAll;
 
         // Phase H-3d-3 修正B: bothmode の modal preview は top-level と同じく
         // 主=2F / sub=1F 固定で表示 (= 設定画面のプレビューと整合)。
         // activeEdge.floor で focus 対象を切り替えるが、 主従構成は不変。
         const useBothmodePreview = targetFloor === 'both' && !!normalizedBuilding2F && !!normalizedBuilding1F;
+
+        // Phase H-3d-4: 案 β。 単一階モードでも modal preview にラベル表示するため
+        // edges に統一。 bothmode + activeEdge.floor === 2 のときのみ edges2FAll
+        // (= split された 5 edges) を使う。
+        // bothmode + activeEdge.floor === 1 のときは下流で mainEdges = edges2FAll に
+        // 上書きされるため、 ここでの値は無関係。
+        const previewEdges = useBothmodePreview && activeEdge.floor === 2
+          ? edges2FAll
+          : edges;
+
         const mainPoints = useBothmodePreview ? normalizedBuilding2F!.points : previewBuilding?.points;
         const mainEdges = useBothmodePreview ? edges2FAll : previewEdges;
         const mainFocusedIdx = useBothmodePreview
