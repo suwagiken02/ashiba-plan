@@ -30,6 +30,7 @@ import {
   splitBuilding2FAt1FVertices,
 } from '@/lib/konva/autoLayoutUtils';
 import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
+import { relabelByFace2F, relabelByFace1F } from '@/lib/konva/labelUtils';
 import VariationChangeButtons from '@/components/scaffold/VariationChangeButtons';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
@@ -295,46 +296,10 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return getEdgesNotCoveredBy(normalizedBuilding1F, normalizedBuilding2F);
   }, [targetFloor, normalizedBuilding1F, normalizedBuilding2F]);
 
-  // bothモード時、2F 全辺（連動表示の参照用）
-  // 修正 (B1/B2): 分割済の normalizedBuilding2F を基準にする (B 面が B1/B2 に分かれる)
-  // ラベルは face 連番付与: 4 辺なら A/B/C/D、B 面が分割されたら A/B1/B2/C/D など。
-  const edges2FAll = useMemo(() => {
-    if (targetFloor !== 'both' || !normalizedBuilding2F) return [];
-    return relabelByFace(getBuildingEdgesClockwise(normalizedBuilding2F));
-  }, [targetFloor, normalizedBuilding2F]);
-
-  // Phase H-3d-3: 下屋 (uncovered 1F) edges 専用の relabel。
-  // edges1FAll は 1F 全周ベースなので、 主建物分の同 face edges まで含めて
-  // suffix が付く (e.g. 下屋上=A2、 主建物上=A1)。
-  // 下屋単独で見れば各面 1 辺ずつなので suffix 不要 → 別 relabel を作る。
-  const subEdgesRelabeled = useMemo(() => {
-    if (targetFloor !== 'both') return [];
-    return relabelByFace(uncoveredEdges1F);
-  }, [targetFloor, uncoveredEdges1F]);
-
-  // Phase H-3d-2 Stage 5 Part D-2-a: bothmode の 1F⇔2F 連動ペア
-  // 同一直線連動の 1F辺は希望離れ入力を無効化し「= 2F-X面」表示に切り替える。
-  // 修正A + B1/B2: 両方分割済 (normalizedBuilding1F / normalizedBuilding2F) を基準にする。
-  const collinearPairs = useMemo(() => {
-    if (targetFloor !== 'both' || !normalizedBuilding1F || !normalizedBuilding2F) return [];
-    return findCollinearEdgePairs(normalizedBuilding1F, normalizedBuilding2F);
-  }, [targetFloor, normalizedBuilding1F, normalizedBuilding2F]);
-
-  // 1F辺 index → 連動先 2F辺 のマップ (連動なしは undefined)
-  const collinear1FToEdge2F = useMemo(() => {
-    const map = new Map<number, EdgeInfo>();
-    for (const pair of collinearPairs) {
-      const e2 = edges2FAll.find(e => e.index === pair.edge2FIndex);
-      if (e2) map.set(pair.edge1FIndex, e2);
-    }
-    return map;
-  }, [collinearPairs, edges2FAll]);
-
-  // 下屋辺の index セット（プレビュー強調 & 下屋入力 UI で利用）
-  const uncoveredIdxSet1F = useMemo(
-    () => new Set(uncoveredEdges1F.map(e => e.index)),
-    [uncoveredEdges1F],
-  );
+  // Phase H-3d-6: scaffoldStart / normalizedScaffoldStart をラベル系 useMemo
+  // (edges2FAll / subEdgesRelabeled) の前に定義する必要がある (= 宣言順依存)。
+  // 元は collinear* の後に定義されていたが、 H-3d-6 で edges2FAll が
+  // normalizedScaffoldStart に依存するようになったため上に移動。
 
   // scaffoldStart は対象階のものだけ有効扱い（別階のを引き継がない）
   // both モードは 2F 主表示なので 2F の scaffoldStart を使用
@@ -369,11 +334,80 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return { ...scaffoldStart, startVertexIndex: newIdx };
   }, [scaffoldStart, targetFloor, building2F, normalizedBuilding2F]);
 
-  // 辺リストを取得
-  const edges = useMemo(
-    () => building ? getBuildingEdgesClockwise(building) : [],
-    [building]
+  // bothモード時、2F 全辺（連動表示の参照用）
+  // 修正 (B1/B2): 分割済の normalizedBuilding2F を基準にする (B 面が B1/B2 に分かれる)
+  // Phase H-3d-6: ラベル付けは ⭐ 起点 CW 順 (relabelByFace2F、 同面分割は suffix 付与)。
+  const edges2FAll = useMemo(() => {
+    if (targetFloor !== 'both' || !normalizedBuilding2F) return [];
+    const startIdx = (normalizedScaffoldStart?.startVertexIndex ?? 0)
+      % normalizedBuilding2F.points.length;
+    return relabelByFace2F(getBuildingEdgesClockwise(normalizedBuilding2F), startIdx);
+  }, [targetFloor, normalizedBuilding2F, normalizedScaffoldStart]);
+
+  // Phase H-3d-6: 共通起点 ⭐ の絶対座標。 1F 下屋 label の起点判定 (最近接) に使用。
+  // 優先順: scaffoldStart2F (= normalizedScaffoldStart 経由) → scaffoldStart1F → null
+  const commonStartPoint = useMemo<Point | null>(() => {
+    // 2F の ⭐ あり: normalizedBuilding2F.points[startVertexIndex] を採用
+    if (normalizedScaffoldStart && normalizedBuilding2F) {
+      const idx = (normalizedScaffoldStart.startVertexIndex ?? 0)
+        % normalizedBuilding2F.points.length;
+      return normalizedBuilding2F.points[idx] ?? null;
+    }
+    // 2F の ⭐ なし、 1F の ⭐ あり: building1F.points[startVertexIndex] を採用
+    // (1F は normalize 不要、 raw building1F の頂点座標をそのまま使う)
+    const ss1F = canvasData.scaffoldStart1F;
+    if (ss1F && building1F) {
+      const idx = (ss1F.startVertexIndex ?? 0) % building1F.points.length;
+      return building1F.points[idx] ?? null;
+    }
+    return null;
+  }, [normalizedScaffoldStart, normalizedBuilding2F, canvasData.scaffoldStart1F, building1F]);
+
+  // Phase H-3d-3: 下屋 (uncovered 1F) edges 専用の relabel。
+  // Phase H-3d-6: relabelByFace1F (= ⭐ → 最近接 1F 頂点 → CW 巡回で最初に出会う
+  // 下屋辺を 1A、 以降順次 1B, 1C, ...)。 旧 midpoint 距離方式から書き直し。
+  const subEdgesRelabeled = useMemo(() => {
+    if (targetFloor !== 'both' || !normalizedBuilding1F) return [];
+    const allEdges1F = getBuildingEdgesClockwise(normalizedBuilding1F);
+    const uncoveredIdxSet = new Set(uncoveredEdges1F.map(e => e.index));
+    return relabelByFace1F(allEdges1F, uncoveredIdxSet, commonStartPoint);
+  }, [targetFloor, normalizedBuilding1F, uncoveredEdges1F, commonStartPoint]);
+
+  // Phase H-3d-2 Stage 5 Part D-2-a: bothmode の 1F⇔2F 連動ペア
+  // 同一直線連動の 1F辺は希望離れ入力を無効化し「= 2F-X面」表示に切り替える。
+  // 修正A + B1/B2: 両方分割済 (normalizedBuilding1F / normalizedBuilding2F) を基準にする。
+  const collinearPairs = useMemo(() => {
+    if (targetFloor !== 'both' || !normalizedBuilding1F || !normalizedBuilding2F) return [];
+    return findCollinearEdgePairs(normalizedBuilding1F, normalizedBuilding2F);
+  }, [targetFloor, normalizedBuilding1F, normalizedBuilding2F]);
+
+  // 1F辺 index → 連動先 2F辺 のマップ (連動なしは undefined)
+  const collinear1FToEdge2F = useMemo(() => {
+    const map = new Map<number, EdgeInfo>();
+    for (const pair of collinearPairs) {
+      const e2 = edges2FAll.find(e => e.index === pair.edge2FIndex);
+      if (e2) map.set(pair.edge1FIndex, e2);
+    }
+    return map;
+  }, [collinearPairs, edges2FAll]);
+
+  // 下屋辺の index セット（プレビュー強調 & 下屋入力 UI で利用）
+  const uncoveredIdxSet1F = useMemo(
+    () => new Set(uncoveredEdges1F.map(e => e.index)),
+    [uncoveredEdges1F],
   );
+
+  // 辺リストを取得
+  // Phase H-3d-6: 単一階モードも ⭐ 起点 CW 順 + 同面分割 suffix で relabel する
+  // (= bothmode の edges2FAll と同一規則)。 bothmode は別経路 (edges2FAll) で
+  // 表示するため、 ここでは raw のまま返す。
+  const edges = useMemo(() => {
+    if (!building) return [];
+    const rawEdges = getBuildingEdgesClockwise(building);
+    if (targetFloor === 'both') return rawEdges;
+    const startIdx = (scaffoldStart?.startVertexIndex ?? 0) % (building.points.length || 1);
+    return relabelByFace2F(rawEdges, startIdx);
+  }, [building, targetFloor, scaffoldStart]);
 
   // スタート角に隣接する2辺（固定辺）
   const lockedEdgeIndices = useMemo(() => {
@@ -1424,7 +1458,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                     <div className="flex items-center justify-between mb-1">
                       <span className="text-sm font-bold">
                         {/* Phase H-3d-3: bothmode は 1F 側 (1{label}) と対称に "2" prefix */}
-                        {targetFloor === 'both' ? '2' : ''}{(edges2FAll.find(e => e.index === el.edge.index)?.label ?? el.edge.label)} ({FACE_LABEL[el.edge.face]})
+                        {targetFloor === 'both' ? '2' : ''}{((targetFloor === 'both' ? edges2FAll : edges).find(e => e.index === el.edge.index)?.label ?? el.edge.label)} ({FACE_LABEL[el.edge.face]})
                         {el.locked && <span className="text-[10px] text-dimension ml-1">L字固定</span>}
                       </span>
                       <span className="text-[10px] text-dimension">
@@ -1780,8 +1814,11 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           const nextEdgeForLabel = nPnext > 0
             ? previewEdgesForNext[(er.edge.index + 1) % nPnext]
             : undefined;
+          // Phase H-3d-6: er.edge は計算層由来で生 label のため、 表示用に relabel 済 label を埋める。
+          // bothmode の synthEdge と対称な処理。
+          const relabeledSelf = edges.find(e => e.index === er.edge.index);
           activeItem = {
-            edge: er.edge,
+            edge: relabeledSelf ? { ...er.edge, label: relabeledSelf.label } : er.edge,
             startDistanceMm: er.startDistanceMm,
             desiredEndDistanceMm: er.desiredEndDistanceMm,
             candidates: er.candidates,
