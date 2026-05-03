@@ -15,7 +15,6 @@ export default function ModeToolbar() {
   const mainButtons = [
     { id: 'select' as const, label: '選択', icon: '↖', color: '#378ADD' },
     { id: 'kutai' as const, label: '躯体', icon: '⌂', color: '#4ECDC4' },
-    { id: 'scaffold' as const, label: '足場開始', icon: '⚑', color: '#FF6B6B' },
     { id: 'ashiba' as const, label: '足場', icon: '▦', color: '#FFD700' },
     { id: 'buzai' as const, label: '部材', icon: '━', color: '#FFA500' },
     { id: 'memo' as const, label: 'メモ', icon: 'T', color: '#DDA0DD' },
@@ -31,7 +30,9 @@ export default function ModeToolbar() {
 
   const getCurrentStage = (): string | null => {
     if (!hasBuildings) return 'kutai';
-    if (!hasScaffoldStart) return 'scaffold';
+    // 足場構成整理 ステップ1: 'scaffold' ボタン廃止に伴い、 stage 名を 'ashiba' に変更。
+    // 足場開始未設定時は足場ボタンを点滅させ、 サブメニュー先頭の「開始位置」 へ誘導する。
+    if (!hasScaffoldStart) return 'ashiba';
     return 'buzai';
   };
 
@@ -46,7 +47,7 @@ export default function ModeToolbar() {
   const handleMainButton = (id: string) => {
     const stage = getCurrentStage();
     if (stage === 'kutai') setDismissedStage('kutai');
-    if (stage === 'scaffold') setDismissedStage('scaffold');
+    if (stage === 'ashiba') setDismissedStage('ashiba');
     if (stage === 'buzai' && (id === 'buzai' || id === 'ashiba')) setDismissedStage('buzai');
     if (isMeasuring) toggleMeasuring();
     // ピンモードは「magnet-pin 自身」以外のボタン押下で解除（既存 isMeasuring と同パターン）
@@ -65,13 +66,6 @@ export default function ModeToolbar() {
       setShowKutaiMenu(true);
     } else if (id === 'buzai') {
       useCanvasStore.getState().togglePartSelector();
-    } else if (id === 'scaffold') {
-      const s = useCanvasStore.getState();
-      if (s.canvasData.buildings.length === 0) {
-        s.setAlertMessage('建物がありません。先に躯体メニューから建物を作成してください');
-        return;
-      }
-      s.setShowScaffoldStart(true);
     } else if (id === 'ashiba') {
       setShowAshibaMenu(true);
     } else if (id === 'settings') {
@@ -139,6 +133,23 @@ export default function ModeToolbar() {
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowAshibaMenu(false)} />
           <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3 flex-wrap justify-center max-w-[calc(100vw-32px)]">
+            {/* 開始位置（足場構成整理 ステップ1: 旧フッター「足場開始」 を統合） */}
+            <button
+              onClick={() => {
+                const s = useCanvasStore.getState();
+                if (s.canvasData.buildings.length === 0) {
+                  s.setAlertMessage('建物がありません。先に躯体メニューから建物を作成してください');
+                  setShowAshibaMenu(false);
+                  return;
+                }
+                s.setShowScaffoldStart(true);
+                setShowAshibaMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">⚑</span>
+              <span className="text-xs font-bold">開始位置</span>
+            </button>
             {/* 移動（選択移動モードに入る: カテゴリ別＋選択範囲のみ移動） */}
             <button
               onClick={() => {
