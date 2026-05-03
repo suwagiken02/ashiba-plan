@@ -1256,7 +1256,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
             subEdges={targetFloor === 'both' ? subEdgesRelabeled : undefined}
             subHighlightIndices={targetFloor === 'both' ? uncoveredIdxSet1F : undefined}
             focusedSubIndex={focusedSubEdgeIndex}
-            scaffoldStart={scaffoldStart}
+            scaffoldStart={normalizedScaffoldStart}
             showFloorPrefix={targetFloor === 'both'}
           />
 
@@ -1871,7 +1871,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                     subEdges={useBothmodePreview ? subEdgesRelabeled : undefined}
                     subHighlightIndices={useBothmodePreview ? uncoveredIdxSet1F : undefined}
                     focusedSubIndex={subFocusedIdx}
-                    scaffoldStart={activeEdge.floor === 2 ? scaffoldStart : undefined}
+                    scaffoldStart={activeEdge.floor === 2 ? normalizedScaffoldStart : undefined}
                     showFloorPrefix={useBothmodePreview}
                   />
                 </div>
