@@ -30,7 +30,7 @@ import {
   splitBuilding2FAt1FVertices,
 } from '@/lib/konva/autoLayoutUtils';
 import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
-import { relabelByFace2F, relabelByFace1F, getBothmodeEdgesWithRelativeLabels } from '@/lib/konva/labelUtils';
+import { relabelByFace2F, relabelByFace1F, getBothmodeEdgesWithRelativeLabels, getNormalizedDistances } from '@/lib/konva/labelUtils';
 import VariationChangeButtons from '@/components/scaffold/VariationChangeButtons';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
@@ -416,6 +416,19 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
     return d;
   });
 
+  // Phase H-3e (共通根 2、 案 2C'): distances state は raw building の edge.index でキー
+  // 保存されているが、 computeBothmode2FLayout は normalized building 上の edge.index で
+  // 読み出すため、 helper 関数経由で re-keying する。
+  // Phase H-3d-5 の normalizedScaffoldStart (= 上記) と対称的なパターン。
+  // 1F 側 distances1F は既に normalized 経由に統一済 (= Phase H-3d-3 / H-3d-6) のため、
+  // ここで対応するのは 2F の distances のみ。
+  const normalizedDistances = useMemo(() => {
+    if (targetFloor !== 'both' || !building2F || !normalizedBuilding2F) {
+      return distances;
+    }
+    return getNormalizedDistances(building2F, normalizedBuilding2F, distances);
+  }, [distances, targetFloor, building2F, normalizedBuilding2F]);
+
   // 下屋辺の変化時に distances1F を初期化（デフォルト 900mm）。
   // 既に入力があれば保持。
   useEffect(() => {
@@ -545,7 +558,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       const result2F = computeBothmode2FLayout(
         normalizedBuilding2F,
         normalizedBuilding1F,
-        distances,
+        normalizedDistances,
         distances1F,
         normalizedScaffoldStart!,
         enabledSizes,
@@ -685,7 +698,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         setBothmodeSelections2F(newSelections2F);
 
         const result2F = computeBothmode2FLayout(
-          normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+          normalizedBuilding2F, normalizedBuilding1F, normalizedDistances, distances1F,
           normalizedScaffoldStart!, enabledSizes, priorityConfig,
           newSelections2F, bothmodeAdjustments2F,
         );
@@ -852,7 +865,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
           setBothmodeAdjustments2F(newAdjustments2F);
 
           const result2F = computeBothmode2FLayout(
-            normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+            normalizedBuilding2F, normalizedBuilding1F, normalizedDistances, distances1F,
             normalizedScaffoldStart!, enabledSizes, priorityConfig,
             newSelections2F, newAdjustments2F,
           );
@@ -892,7 +905,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
       setBothmodeAdjustments2F(newAdjustments2F);
 
       const result2F = computeBothmode2FLayout(
-        normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+        normalizedBuilding2F, normalizedBuilding1F, normalizedDistances, distances1F,
         normalizedScaffoldStart!, enabledSizes, priorityConfig,
         newSelections2F, newAdjustments2F,
       );
@@ -990,7 +1003,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
         const newAdjustments2F = { ...bothmodeAdjustments2F, [key]: next };
         setBothmodeAdjustments2F(newAdjustments2F);
         const result2F = computeBothmode2FLayout(
-          normalizedBuilding2F, normalizedBuilding1F, distances, distances1F,
+          normalizedBuilding2F, normalizedBuilding1F, normalizedDistances, distances1F,
           normalizedScaffoldStart!, enabledSizes, priorityConfig,
           bothmodeSelections2F, newAdjustments2F,
         );

@@ -183,3 +183,68 @@ export function getBothmodeEdgesWithRelativeLabels(
     return match ? { ...re, label: match.label } : re;
   });
 }
+
+/**
+ * Phase H-3e (共通根 2、 案 2C'): bothmode で raw building の入力欄に保存された
+ * distances state を、 cascade が読み出す normalized building の edge.index に
+ * re-keying するための helper 関数。
+ *
+ * 設計の歴史的経緯 (= handoff-h-3e-fix-spec.md 4-X 章):
+ *   1F 側 (distances1F) は既に normalized 経由に統一済 (= Phase H-3d-3 / H-3d-6 の経緯)。
+ *   2F 側 (distances) のみ raw 経由のまま取り残されていた (= 観測点 C の真因)。
+ *   本関数は 1F 側と対称な構造を 2F 側にも適用するもの (= 既存パターンへの追従)。
+ *
+ * Phase H-3d-5 の `normalizedScaffoldStart` 再マッピング (`AutoLayoutModal.tsx:294-306`)
+ * とも対称的なパターン (= raw 値を normalized index に対応付け)。
+ *
+ * 入力:
+ *   rawBuilding: 入力欄が見ている raw building (= distances state の key 元)
+ *   normalizedBuilding: split 適用後 (= cascade が edges の index で読む)
+ *   rawDistances: state にある raw key 基準の distances
+ *
+ * 出力: normalized edge.index でキー化された distances。
+ *
+ * 設計判断:
+ *   仕様書 v2 第 4 章の example (= raw edge.p1 と normalized edge.p1 の coord match) は
+ *   split された middle/last edges (= p1 が split insert vertex) に値が継承されない
+ *   問題があるため、 「同じ wall (face + handrailDir + 固定軸座標一致 + sub-segment
+ *   範囲内) 上にあるかで判定」 に修正。 これにより split された全 normalized edges に
+ *   同じ raw 値が継承される (= 仕様書 v2 第 4 章の意図 「同じ wall の離れは同値で自然」
+ *   を実現)。
+ */
+export function getNormalizedDistances(
+  rawBuilding: BuildingShape,
+  normalizedBuilding: BuildingShape,
+  rawDistances: Record<number, number>,
+): Record<number, number> {
+  const rawEdges = getBuildingEdgesClockwise(rawBuilding);
+  const normalizedEdges = getBuildingEdgesClockwise(normalizedBuilding);
+  const result: Record<number, number> = {};
+  for (const ne of normalizedEdges) {
+    for (const re of rawEdges) {
+      if (ne.face !== re.face) continue;
+      if (ne.handrailDir !== re.handrailDir) continue;
+      if (ne.handrailDir === 'horizontal') {
+        if (Math.abs(ne.p1.y - re.p1.y) > 0.001) continue;
+      } else {
+        if (Math.abs(ne.p1.x - re.p1.x) > 0.001) continue;
+      }
+      const neMid = ne.handrailDir === 'horizontal'
+        ? (ne.p1.x + ne.p2.x) / 2
+        : (ne.p1.y + ne.p2.y) / 2;
+      const reMin = ne.handrailDir === 'horizontal'
+        ? Math.min(re.p1.x, re.p2.x)
+        : Math.min(re.p1.y, re.p2.y);
+      const reMax = ne.handrailDir === 'horizontal'
+        ? Math.max(re.p1.x, re.p2.x)
+        : Math.max(re.p1.y, re.p2.y);
+      if (neMid >= reMin - 0.001 && neMid <= reMax + 0.001) {
+        if (rawDistances[re.index] !== undefined) {
+          result[ne.index] = rawDistances[re.index];
+        }
+        break;
+      }
+    }
+  }
+  return result;
+}
