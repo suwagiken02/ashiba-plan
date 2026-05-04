@@ -7,11 +7,14 @@ import { useAuthStore } from '@/stores/authStore';
 export default function AuthPage() {
   const router = useRouter();
   const { signIn, signUp, signInWithGoogle, signUpWithId, signInWithId } = useAuthStore();
+  // Step 2c: ログイン / サインアップ モード切替 (= isSignUp と setIsSignUp は派生で温存)
+  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const isSignUp = mode === 'signup';
+  const setIsSignUp = (val: boolean) => setMode(val ? 'signup' : 'login');
   const [activeTab, setActiveTab] = useState<'email' | 'id'>('email');
-  const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState('');
+  const [confirmEmail, setConfirmEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [companyName, setCompanyName] = useState('');
   // ID/PW 認証用 state (= ID タブで使用)
   const [username, setUsername] = useState('');
   const [lastName, setLastName] = useState('');
@@ -24,6 +27,7 @@ export default function AuthPage() {
   const [birthDay, setBirthDay] = useState(1);
   const [pin, setPin] = useState('');
   // 確認入力 (= サインアップ時のタイポ防止、 サーバーには送らない)
+  // confirmPassword は メアド/PW タブと ID タブで共有 (= タブ切替時の値残存は許容)
   const [confirmUsername, setConfirmUsername] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [confirmPin, setConfirmPin] = useState('');
@@ -34,11 +38,22 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    if (isSignUp) {
+      // 確認入力チェック (= メアド/PW サインアップ時のみ、 不一致なら error + return)
+      if (email !== confirmEmail) {
+        setError('メールアドレスが一致しません');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('パスワードが一致しません');
+        return;
+      }
+    }
     setLoading(true);
 
     let err: string | null;
     if (isSignUp) {
-      err = await signUp(email, password, companyName);
+      err = await signUp(email, password);
     } else {
       err = await signIn(email, password);
     }
@@ -138,11 +153,11 @@ export default function AuthPage() {
     <div className="flex items-center justify-center min-h-screen p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-accent mb-2">キャドパスポート</h1>
-          <p className="text-dimension text-sm">足場平面図アプリ</p>
+          <h1 className="text-3xl font-bold text-accent mb-2">CAD パスポート</h1>
+          <p className="text-dimension text-sm">{isSignUp ? 'アカウント作成' : '足場平面図アプリ'}</p>
         </div>
 
-        {/* タブバー */}
+        {/* タブバー (= mode 共通、 ラベルはシンプル化) */}
         <div className="flex gap-1 mb-5 bg-dark-surface border border-dark-border rounded-lg p-1">
           <button
             type="button"
@@ -151,7 +166,7 @@ export default function AuthPage() {
               activeTab === 'email' ? 'bg-accent text-white' : 'text-dimension'
             }`}
           >
-            メアドでログイン
+            メールアドレス
           </button>
           <button
             type="button"
@@ -160,7 +175,7 @@ export default function AuthPage() {
               activeTab === 'id' ? 'bg-accent text-white' : 'text-dimension'
             }`}
           >
-            ID でログイン
+            ID
           </button>
         </div>
 
@@ -200,20 +215,6 @@ export default function AuthPage() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {isSignUp && (
-                <div>
-                  <label className="block text-sm text-dimension mb-1">会社名</label>
-                  <input
-                    type="text"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                    placeholder="株式会社○○足場"
-                    required={isSignUp}
-                  />
-                </div>
-              )}
-
               <div>
                 <label className="block text-sm text-dimension mb-1">メールアドレス</label>
                 <input
@@ -225,6 +226,23 @@ export default function AuthPage() {
                   required
                 />
               </div>
+
+              {isSignUp && (
+                <div>
+                  <label className="block text-sm text-dimension mb-1">メールアドレス (確認)</label>
+                  <input
+                    type="email"
+                    value={confirmEmail}
+                    onChange={(e) => setConfirmEmail(e.target.value)}
+                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    placeholder="もう一度入力"
+                    required={isSignUp}
+                  />
+                  {confirmEmail && email !== confirmEmail && (
+                    <p className="mt-1 text-[10px] text-red-400">⚠ メールアドレスが一致しません</p>
+                  )}
+                </div>
+              )}
 
               <div>
                 <label className="block text-sm text-dimension mb-1">パスワード</label>
@@ -238,6 +256,24 @@ export default function AuthPage() {
                   required
                 />
               </div>
+
+              {isSignUp && (
+                <div>
+                  <label className="block text-sm text-dimension mb-1">パスワード (確認)</label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    placeholder="もう一度入力"
+                    minLength={6}
+                    required={isSignUp}
+                  />
+                  {confirmPassword && password !== confirmPassword && (
+                    <p className="mt-1 text-[10px] text-red-400">⚠ パスワードが一致しません</p>
+                  )}
+                </div>
+              )}
 
               {error && (
                 <p className="text-red-400 text-sm">{error}</p>

@@ -61,7 +61,7 @@ type AuthStore = {
   setCurrentCompanyId: (id: string | null) => void;
   setLoading: (loading: boolean) => void;
   signIn: (email: string, password: string) => Promise<string | null>;
-  signUp: (email: string, password: string, companyName: string) => Promise<string | null>;
+  signUp: (email: string, password: string) => Promise<string | null>;
   signInWithGoogle: () => Promise<string | null>;
   signUpWithId: (params: {
     username: string;
@@ -98,14 +98,11 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       return e instanceof Error ? e.message : 'ログインに失敗しました';
     }
   },
-  signUp: async (email, password, companyName) => {
+  signUp: async (email, password) => {
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) return localizeAuthError(error.message);
       await get().loadSession();
-      if (companyName) {
-        await get().updateProfile(companyName);
-      }
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : 'アカウント作成に失敗しました';
