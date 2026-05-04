@@ -5,7 +5,7 @@ import ShowDimensionsInit from '@/components/ShowDimensionsInit';
 import { DevToolsExposer } from '@/components/DevToolsExposer';
 
 export const metadata: Metadata = {
-  title: 'Ashiba Plan - 足場平面図アプリ',
+  title: 'スマートコンパス - 足場平面図アプリ',
   description: 'くさび式足場の平面図をスマホで直感的に作成',
 };
 

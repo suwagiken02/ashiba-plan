@@ -157,7 +157,7 @@ export default function ProjectsPage() {
       <header className="sticky top-0 z-10 bg-dark-surface border-b border-dark-border px-4 py-3">
         <div className="flex items-center justify-between max-w-4xl mx-auto">
           <div>
-            <h1 className="text-lg font-bold text-accent">Ashiba Plan</h1>
+            <h1 className="text-lg font-bold text-accent">スマートコンパス</h1>
             {profile?.company_name && (
               <p className="text-xs text-dimension">{profile.company_name}</p>
             )}
