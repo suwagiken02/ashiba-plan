@@ -3,6 +3,39 @@
 import { create } from 'zustand';
 import { supabase } from '@/lib/supabase/client';
 
+/**
+ * Supabase Auth が返す英語エラーメッセージを日本語化する。
+ * 該当しないエラーは元のメッセージをそのまま返す (= フォールバック)。
+ * module スコープの private 関数 (= 現時点では authStore.ts 内のみ参照)。
+ */
+function localizeAuthError(message: string): string {
+  if (message.includes('Invalid login credentials')) {
+    return 'メールアドレスまたはパスワードが正しくありません';
+  }
+  if (message.includes('Email not confirmed')) {
+    return 'メールアドレスの確認が完了していません。確認メールをご確認ください';
+  }
+  if (message.includes('User already registered')) {
+    return 'このメールアドレスは既に登録されています';
+  }
+  if (message.includes('Password should be at least')) {
+    return 'パスワードは 6 文字以上で入力してください';
+  }
+  if (message.includes('Unable to validate email address')) {
+    return 'メールアドレスの形式が正しくありません';
+  }
+  if (message.includes('Email rate limit exceeded')) {
+    return '確認メールの送信回数が上限を超えました。しばらくしてから再度お試しください';
+  }
+  if (message.includes('signup is disabled') || message.includes('Signups not allowed')) {
+    return 'アカウント作成は現在無効になっています';
+  }
+  if (message.includes('OAuth') || message.includes('oauth')) {
+    return 'OAuth プロバイダーへの接続に失敗しました';
+  }
+  return message;
+}
+
 /** Phase 0a で作成した固定 Default Company の UUID。
  *  Phase 0d で本格的な認証 + 会社割当が入るまでフォールバックとして使用。 */
 export const DEFAULT_COMPANY_ID = '00000000-0000-0000-0000-000000000001';
@@ -29,6 +62,7 @@ type AuthStore = {
   setLoading: (loading: boolean) => void;
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string, companyName: string) => Promise<string | null>;
+  signInWithGoogle: () => Promise<string | null>;
   signOut: () => Promise<void>;
   loadSession: () => Promise<void>;
   updateProfile: (companyName: string, logoUrl?: string) => Promise<void>;
@@ -44,10 +78,44 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
   setCurrentCompanyId: (id) => set({ currentCompanyId: id }),
   setLoading: (loading) => set({ loading }),
 
-  signIn: async () => null,
-  signUp: async () => null,
+  signIn: async (email, password) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return localizeAuthError(error.message);
+      await get().loadSession();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'ログインに失敗しました';
+    }
+  },
+  signUp: async (email, password, companyName) => {
+    try {
+      const { error } = await supabase.auth.signUp({ email, password });
+      if (error) return localizeAuthError(error.message);
+      await get().loadSession();
+      if (companyName) {
+        await get().updateProfile(companyName);
+      }
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'アカウント作成に失敗しました';
+    }
+  },
+  signInWithGoogle: async () => {
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: { redirectTo: `${window.location.origin}/auth/callback` },
+      });
+      if (error) return localizeAuthError(error.message);
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'Google ログインに失敗しました';
+    }
+  },
   signOut: async () => {
-    // no-op: 認証スキップ中
+    await supabase.auth.signOut();
+    set({ user: ANON_USER, profile: ANON_PROFILE, currentCompanyId: null });
   },
 
   loadSession: async () => {
