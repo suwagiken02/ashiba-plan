@@ -14,9 +14,19 @@ export default function AuthPage() {
   const [companyName, setCompanyName] = useState('');
   // ID/PW 認証用 state (= ID タブで使用)
   const [username, setUsername] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [birthDate, setBirthDate] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  // 生年月日 3 dropdown (= 簡易 31 日固定、 submit 時に isValidDate で正規化)
+  // SSR hydration 対策: 初期値計算を useState 初期化関数で client 側に閉じる
+  const [currentYear] = useState(() => new Date().getFullYear());
+  const [birthYear, setBirthYear] = useState(() => new Date().getFullYear() - 30);
+  const [birthMonth, setBirthMonth] = useState(1);
+  const [birthDay, setBirthDay] = useState(1);
   const [pin, setPin] = useState('');
+  // 確認入力 (= サインアップ時のタイポ防止、 サーバーには送らない)
+  const [confirmUsername, setConfirmUsername] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [confirmPin, setConfirmPin] = useState('');
   const [showPinWarning, setShowPinWarning] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -48,12 +58,23 @@ export default function AuthPage() {
     return pinValue === `${m}${d}` || pinValue === `${d}${m}` || pinValue === y;
   };
 
+  /** 月の日数を考慮した正規日付チェック (= 2 月 30 日 等を弾く) */
+  const isValidDate = (y: number, m: number, d: number): boolean => {
+    const dt = new Date(y, m - 1, d);
+    return dt.getFullYear() === y && dt.getMonth() === m - 1 && dt.getDate() === d;
+  };
+
+  /** 生年月日 state を 'YYYY-MM-DD' に整形 */
+  const buildBirthDateStr = (y: number, m: number, d: number): string =>
+    `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+
   /** ID/PW サインアップの実 submit (= 警告 Modal の「このまま登録」 でも呼ぶ) */
   const submitIdSignUp = async (acknowledgeWarning: boolean) => {
+    const birthDateStr = buildBirthDateStr(birthYear, birthMonth, birthDay);
     setError('');
     setLoading(true);
     const err = await signUpWithId({
-      username, password, displayName, birthDate, pin,
+      username, password, lastName, firstName, birthDate: birthDateStr, pin,
       acknowledgePinWarning: acknowledgeWarning,
     });
     if (err === 'pin-matches-birthdate') {
@@ -73,15 +94,34 @@ export default function AuthPage() {
   const handleIdSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSignUp) {
+      // 確認入力チェック (= 不一致なら error + submit ブロック、 ボタン無効化はしない)
+      if (username !== confirmUsername) {
+        setError('ID が一致しません');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('パスワードが一致しません');
+        return;
+      }
+      if (pin !== confirmPin) {
+        setError('PIN が一致しません');
+        return;
+      }
+      // 生年月日 妥当性チェック (= 2 月 30 日 等を弾く)
+      if (!isValidDate(birthYear, birthMonth, birthDay)) {
+        setError('生年月日が正しくありません (= 月の日数を確認してください)');
+        return;
+      }
       // クライアント側 早期警告判定 (= サーバーラウンドトリップ削減)
-      if (isPinMatchingBirthDate(pin, birthDate)) {
+      const birthDateStr = buildBirthDateStr(birthYear, birthMonth, birthDay);
+      if (isPinMatchingBirthDate(pin, birthDateStr)) {
         setError('');
         setShowPinWarning(true);
         return;
       }
       await submitIdSignUp(false);
     } else {
-      // ログイン
+      // ログイン (= 確認入力なし)
       setError('');
       setLoading(true);
       const err = await signInWithId(username, password);
@@ -233,28 +273,78 @@ export default function AuthPage() {
             {isSignUp && (
               <>
                 <div>
-                  <label className="block text-sm text-dimension mb-1">名前</label>
+                  <label className="block text-sm text-dimension mb-1">ID (確認)</label>
                   <input
                     type="text"
-                    value={displayName}
-                    onChange={(e) => setDisplayName(e.target.value)}
+                    value={confirmUsername}
+                    onChange={(e) => setConfirmUsername(e.target.value)}
                     className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                    placeholder="山田太郎"
-                    maxLength={64}
+                    placeholder="もう一度入力"
                     required={isSignUp}
                   />
+                  {confirmUsername && username !== confirmUsername && (
+                    <p className="mt-1 text-[10px] text-red-400">⚠ ID が一致しません</p>
+                  )}
+                </div>
+
+                <div className="flex gap-2">
+                  <div className="flex-1">
+                    <label className="block text-sm text-dimension mb-1">姓</label>
+                    <input
+                      type="text"
+                      value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                      placeholder="山田"
+                      maxLength={32}
+                      required={isSignUp}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm text-dimension mb-1">名</label>
+                    <input
+                      type="text"
+                      value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                      placeholder="太郎"
+                      maxLength={32}
+                      required={isSignUp}
+                    />
+                  </div>
                 </div>
 
                 <div>
                   <label className="block text-sm text-dimension mb-1">生年月日</label>
-                  <input
-                    type="date"
-                    value={birthDate}
-                    onChange={(e) => setBirthDate(e.target.value)}
-                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                    min="1900-01-01"
-                    required={isSignUp}
-                  />
+                  <div className="flex gap-2">
+                    <select
+                      value={birthYear}
+                      onChange={(e) => setBirthYear(Number(e.target.value))}
+                      className="flex-1 px-2 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    >
+                      {Array.from({ length: currentYear - 1900 + 1 }, (_, i) => currentYear - i).map((y) => (
+                        <option key={y} value={y}>{y} 年</option>
+                      ))}
+                    </select>
+                    <select
+                      value={birthMonth}
+                      onChange={(e) => setBirthMonth(Number(e.target.value))}
+                      className="flex-1 px-2 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((m) => (
+                        <option key={m} value={m}>{m} 月</option>
+                      ))}
+                    </select>
+                    <select
+                      value={birthDay}
+                      onChange={(e) => setBirthDay(Number(e.target.value))}
+                      className="flex-1 px-2 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    >
+                      {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
+                        <option key={d} value={d}>{d} 日</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </>
             )}
@@ -274,23 +364,61 @@ export default function AuthPage() {
 
             {isSignUp && (
               <div>
-                <label className="block text-sm text-dimension mb-1">4 桁 PIN (= 復旧用)</label>
+                <label className="block text-sm text-dimension mb-1">パスワード (確認)</label>
                 <input
-                  type="tel"
-                  inputMode="numeric"
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                  placeholder="0000"
-                  pattern="\d{4}"
-                  maxLength={4}
-                  title="4 桁の数字"
+                  placeholder="もう一度入力"
+                  minLength={6}
                   required={isSignUp}
                 />
-                <p className="mt-1 text-[10px] text-dimension">
-                  パスワードを忘れたとき、 ID + 名前 + 生年月日 + PIN で復旧できます
-                </p>
+                {confirmPassword && password !== confirmPassword && (
+                  <p className="mt-1 text-[10px] text-red-400">⚠ パスワードが一致しません</p>
+                )}
               </div>
+            )}
+
+            {isSignUp && (
+              <>
+                <div>
+                  <label className="block text-sm text-dimension mb-1">4 桁 PIN (= 復旧用)</label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    placeholder="0000"
+                    pattern="\d{4}"
+                    maxLength={4}
+                    title="4 桁の数字"
+                    required={isSignUp}
+                  />
+                  <p className="mt-1 text-[10px] text-dimension">
+                    パスワードを忘れたとき、 ID + 姓 + 名 + 生年月日 + PIN で復旧できます
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-dimension mb-1">4 桁 PIN (確認)</label>
+                  <input
+                    type="tel"
+                    inputMode="numeric"
+                    value={confirmPin}
+                    onChange={(e) => setConfirmPin(e.target.value)}
+                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    placeholder="もう一度入力"
+                    pattern="\d{4}"
+                    maxLength={4}
+                    required={isSignUp}
+                  />
+                  {confirmPin && pin !== confirmPin && (
+                    <p className="mt-1 text-[10px] text-red-400">⚠ PIN が一致しません</p>
+                  )}
+                </div>
+              </>
             )}
 
             {error && (

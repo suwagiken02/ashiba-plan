@@ -14,7 +14,8 @@ const MIN_BIRTH_DATE = new Date('1900-01-01T00:00:00Z');
 type SignupBody = {
   username?: unknown;
   password?: unknown;
-  displayName?: unknown;
+  lastName?: unknown;
+  firstName?: unknown;
   birthDate?: unknown;
   pin?: unknown;
   acknowledgePinWarning?: unknown;
@@ -22,7 +23,7 @@ type SignupBody = {
 
 /**
  * POST /api/auth/signup-id
- * ID/PW + 4 桁 PIN サインアップ (= Day 4-5 Step 2)。
+ * ID/PW + 4 桁 PIN サインアップ (= Day 4-5 Step 2、 Step 2b で姓 + 名 分離)。
  *
  * フロー (= 8 ステップ):
  *   1. JSON ボディ受信 + 型チェック
@@ -45,7 +46,8 @@ export async function POST(request: Request) {
 
   const username = typeof body.username === 'string' ? body.username : null;
   const password = typeof body.password === 'string' ? body.password : null;
-  const displayName = typeof body.displayName === 'string' ? body.displayName : null;
+  const lastName = typeof body.lastName === 'string' ? body.lastName : null;
+  const firstName = typeof body.firstName === 'string' ? body.firstName : null;
   const birthDate = typeof body.birthDate === 'string' ? body.birthDate : null;
   const pin = typeof body.pin === 'string' ? body.pin : null;
   const acknowledgePinWarning = body.acknowledgePinWarning === true;
@@ -63,9 +65,15 @@ export async function POST(request: Request) {
       { status: 400 },
     );
   }
-  if (!displayName || displayName.length === 0 || displayName.length > 64) {
+  if (!lastName || lastName.length === 0 || lastName.length > 32) {
     return NextResponse.json(
-      { error: '名前は 1〜64 文字で入力してください' },
+      { error: '姓は 1〜32 文字で入力してください' },
+      { status: 400 },
+    );
+  }
+  if (!firstName || firstName.length === 0 || firstName.length > 32) {
+    return NextResponse.json(
+      { error: '名は 1〜32 文字で入力してください' },
       { status: 400 },
     );
   }
@@ -142,7 +150,8 @@ export async function POST(request: Request) {
     .from('profiles')
     .update({
       username,
-      display_name: displayName,
+      last_name: lastName,
+      first_name: firstName,
       birth_date: birthDate,
       recovery_pin_hash: pinHash,
       company_id: DEFAULT_COMPANY_ID,

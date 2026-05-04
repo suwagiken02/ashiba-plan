@@ -66,7 +66,8 @@ type AuthStore = {
   signUpWithId: (params: {
     username: string;
     password: string;
-    displayName: string;
+    lastName: string;
+    firstName: string;
     birthDate: string;
     pin: string;
     acknowledgePinWarning?: boolean;
@@ -122,13 +123,13 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       return e instanceof Error ? e.message : 'Google ログインに失敗しました';
     }
   },
-  signUpWithId: async ({ username, password, displayName, birthDate, pin, acknowledgePinWarning }) => {
+  signUpWithId: async ({ username, password, lastName, firstName, birthDate, pin, acknowledgePinWarning }) => {
     try {
       const res = await fetch('/api/auth/signup-id', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          username, password, displayName, birthDate, pin,
+          username, password, lastName, firstName, birthDate, pin,
           acknowledgePinWarning: acknowledgePinWarning === true,
         }),
       });
