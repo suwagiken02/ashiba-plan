@@ -172,7 +172,7 @@ export default function ProjectsPage() {
               設定
             </button>
             <button
-              onClick={signOut}
+              onClick={async () => { await signOut(); router.push('/auth'); }}
               className="px-3 py-2 text-sm text-dimension hover:text-canvas rounded-lg"
             >
               ログアウト
