@@ -63,6 +63,15 @@ type AuthStore = {
   signIn: (email: string, password: string) => Promise<string | null>;
   signUp: (email: string, password: string, companyName: string) => Promise<string | null>;
   signInWithGoogle: () => Promise<string | null>;
+  signUpWithId: (params: {
+    username: string;
+    password: string;
+    displayName: string;
+    birthDate: string;
+    pin: string;
+    acknowledgePinWarning?: boolean;
+  }) => Promise<string | null>;
+  signInWithId: (username: string, password: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   loadSession: () => Promise<void>;
   updateProfile: (companyName: string, logoUrl?: string) => Promise<void>;
@@ -111,6 +120,41 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : 'Google ログインに失敗しました';
+    }
+  },
+  signUpWithId: async ({ username, password, displayName, birthDate, pin, acknowledgePinWarning }) => {
+    try {
+      const res = await fetch('/api/auth/signup-id', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          username, password, displayName, birthDate, pin,
+          acknowledgePinWarning: acknowledgePinWarning === true,
+        }),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) {
+        // 警告コード (= PIN-生年月日 一致) はそのまま返して UI 側で Modal 判定
+        if (data?.warning === 'pin-matches-birthdate') {
+          return 'pin-matches-birthdate';
+        }
+        return typeof data?.error === 'string' ? data.error : 'アカウント作成に失敗しました';
+      }
+      // 成功 → 擬似メアド + パスワードで自動ログインしてセッション確立
+      return await get().signInWithId(username, password);
+    } catch (e) {
+      return e instanceof Error ? e.message : 'アカウント作成に失敗しました';
+    }
+  },
+  signInWithId: async (username, password) => {
+    try {
+      const email = `${username}@cadpassport.local`;
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) return localizeAuthError(error.message);
+      await get().loadSession();
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : 'ログインに失敗しました';
     }
   },
   signOut: async () => {
