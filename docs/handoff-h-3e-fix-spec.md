@@ -1,18 +1,64 @@
-# Phase H-3e 修正仕様書
+# Phase H-3e 修正仕様書 (改訂版 v2)
 
-> **⚠️ ステータス**: 修正未着手、 仕様書フェーズ
+> **⚠️ ステータス**: 改訂版 v2、 修正未着手
 >
-> 引継ぎノート (`docs/handoff-h-3e.md`) 第 6 章 「仕様書先行ルート」 に従って作成。 本書 commit 後、 別 commit で実装着手する。
+> 改訂理由 / 改訂内容は **第 0 章 「改訂履歴 / 設計判断ミスの記録」** を参照。 引継ぎノート (`docs/handoff-h-3e.md`) 第 6 章 「仕様書先行ルート」 を踏襲。
 >
 > **調査根拠**: `docs/bothmode-multi-bug-investigation.md` (= 詳細調査)、 `docs/h-3d-7-investigation-archived.md` (= 関連 archive)、 失敗テスト 6 件 (`lib/konva/__tests__/bothmode-multi-bug.test.ts`)。
 
 ---
 
+## 0. 改訂履歴 / 設計判断ミスの記録
+
+### 改訂履歴
+
+- **2026-05-04**: 初版 (commit `83957c7`、 案 1A + 案 2C)
+- **2026-05-05**: **改訂版 v2** (= 本書、 案 1A' + 案 2C'、 helper 関数化アプローチ)
+
+### 設計判断ミスの記録 (= 改訂理由)
+
+**当初予測 「失敗テスト 6 件が修正で pass に転じる」 は誤りだった**。
+
+#### 原因
+失敗テスト 6 件の assert 構造が **修正経路を通らない**:
+- Test A・B (3 件): `getBuildingEdgesClockwise(rawBuilding).map(e => e.label)` を直接 assert。 `AutoLayoutModal.tsx:375-381` の `edges` useMemo を経由しない
+- Test C (3 件): `computeBothmode2FLayout(... raw distances ...)` を直接呼ぶ。 案 2C で導入予定の `normalizedDistances` useMemo を経由しない
+
+#### 経緯
+1. 案 1A 適用 (= AutoLayoutModal の `edges` useMemo を coord match 形式に変更、 ローカル修正のみ commit せず)
+2. テスト実行 → 6 件すべて failing のまま (= 修正効果が test に反映されない)
+3. rollback (= `git restore`) で AutoLayoutModal.tsx を origin/main 状態に戻す
+4. 再設計 → 案 1A → 案 1A' (helper 関数化)、 案 2C → 案 2C' (helper 関数化) に拡張
+
+#### 教訓
+
+失敗テストを設計するときは **「修正後 pass に転じる構造」 を verify することが必須**。 「症状の機械的観察」 だけでは不十分。
+
+##### 具体的な verify 方法
+
+1. **失敗テストが呼ぶ関数 / API を明示する**
+   - 例: `getBuildingEdgesClockwise` なのか、 `AutoLayoutModal` の useMemo なのか、 helper 関数なのか
+   - テストファイルの import / 関数呼出を実装と照らし合わせて確認
+2. **修正対象のロジックが、 テストから直接呼べる構造になっているか確認する**
+   - 修正対象が React Hook (= `useMemo` / `useState` / `useEffect` 等) の場合、 通常は test から直接呼べない
+   - 計算層の関数 (e.g., `getBuildingEdgesClockwise`) の場合は test から直接呼べる
+3. **もし呼べない構造なら、 修正前にロジックを helper 関数として export し、 テストはその helper 関数を呼ぶ形にする**
+   - 例: `useMemo(() => getBothmodeEdgesWithRelativeLabels(...), [...])` のように helper 関数を別ファイルに切り出して export
+4. **「同じロジックをテスト内で再現する」 (= シミュレーション形式) は不可**
+   - 修正前後で結果が変わらず失敗テストとして機能しない (= 案 R1 として検討して却下、 本書 改訂時の議論で確認済み)
+   - シミュレーション関数が「修正後ロジック」 を持つと修正前から pass、 「修正前ロジック」 を持つと修正後も fail のまま、 という矛盾が発生する
+
+##### 適用範囲
+
+このパターンを **次セッション以降の失敗テスト設計時にも適用すること**。 引継ぎノート (`handoff-h-3e.md`) や同等の文書にも参照を残す。
+
+---
+
 ## 1. 修正の目標
 
-- **失敗テスト 6 件 (= bothmode-multi-bug.test.ts) を全 pass にする**
+- **失敗テスト 6 件 (= helper 関数経由化後の `bothmode-multi-bug.test.ts`) を全 pass にする**
 - **既存 114 件は全 pass を維持** (= 修正で副作用が出ていないことを確認)
-- **共通根 1 と 共通根 2 を別 commit で分割修正** (= 各 commit で対応する failing test subset の遷移を確認)
+- **共通根 1 (= 案 1A')、 共通根 2 (= 案 2C') を別 commit で分割修正** (= 各 commit で対応する failing test subset の遷移を確認)
 
 最終状態: 既存 114 + 失敗解消 6 = 120 件全 pass。
 
@@ -20,7 +66,7 @@
 
 ## 2. 着手順序の決定
 
-### 推奨: **共通根 1 → 共通根 2** の順
+### 推奨: **共通根 1 → 共通根 2** の順 (= 旧版から不変)
 
 ### 各順序の長所・短所
 
@@ -31,8 +77,8 @@
 
 ### 依存関係 (= コード読解の事実)
 
-- 共通根 1 修正範囲: `AutoLayoutModal.tsx:375-381` (= edges useMemo の bothmode 分岐内、 label 文字列のみ)
-- 共通根 2 修正範囲: `AutoLayoutModal.tsx` 周辺で `normalizedDistances` 等の追加 (= データ層 key 解釈)
+- 共通根 1 修正範囲: `AutoLayoutModal.tsx:375-381` (= edges useMemo の bothmode 分岐内、 label 文字列のみ) + helper 関数 export 1 つ追加
+- 共通根 2 修正範囲: `AutoLayoutModal.tsx` 周辺で `normalizedDistances` 等の追加 + helper 関数 export 1 つ追加
 - **両者は修正範囲が重ならない**。 計算ロジックは共通根 2 が、 表示は共通根 1 が、 それぞれ独立に対象化
 - どちらから着手しても、 もう片方の修正に支障はない
 
@@ -40,7 +86,7 @@
 
 #### 共通根 1 修正 commit
 - tsc / lint / test 全 pass
-- 失敗テスト 6 件のうち 3 件 (= 観測 A、 B-1、 B-2) が pass に転じることを確認
+- 失敗テスト 6 件 (helper 関数経由化後) のうち 3 件 (= 観測 A、 B-1、 B-2) が pass に転じることを確認
 - 残り 3 件 (= 観測 C) は failing のまま (= 共通根 2 で解消予定)
 - 既存 114 件は全 pass 維持
 - 実機確認: 入力欄 / 「固定」 マーク label が ⭐-relative になっていること (各 ⭐ 位置で)
@@ -55,119 +101,118 @@
 
 ## 3. 共通根 1 の修正方向最終決定
 
-### 推奨: **案 1A** (= relabelByFace2F + coord match)
+### 推奨: **案 1A'** (= helper 関数 + relabelByFace2F + coord match)
 
-### 案 1A vs 案 1B 比較
+### 案 1A' の内容 (= 旧 案 1A からの拡張)
 
-| 観点 | 案 1A | 案 1B |
+旧 案 1A は useMemo 内に coord match logic を inline 記述。 改訂後は **useMemo 内ロジックを helper 関数として export**:
+
+```ts
+// lib/konva/labelUtils.ts (= 新規 export 追加)
+export function getBothmodeEdgesWithRelativeLabels(
+  rawBuilding: BuildingShape,
+  normalizedBuilding2F: BuildingShape,
+  normalizedScaffoldStart: ScaffoldStartConfig,
+): EdgeInfo[] {
+  const rawEdges = getBuildingEdgesClockwise(rawBuilding);
+  const normalizedEdges = getBuildingEdgesClockwise(normalizedBuilding2F);
+  const startIdx = (normalizedScaffoldStart.startVertexIndex ?? 0) % (normalizedEdges.length || 1);
+  const labeled = relabelByFace2F(normalizedEdges, startIdx);
+  return rawEdges.map(re => {
+    const match = labeled.find(le =>
+      Math.abs(le.p1.x - re.p1.x) < 0.001 && Math.abs(le.p1.y - re.p1.y) < 0.001,
+    );
+    return match ? { ...re, label: match.label } : re;
+  });
+}
+```
+
+```tsx
+// components/scaffold/AutoLayoutModal.tsx の edges useMemo
+const edges = useMemo(() => {
+  if (!building) return [];
+  if (targetFloor === 'both' && normalizedBuilding2F && normalizedScaffoldStart) {
+    return getBothmodeEdgesWithRelativeLabels(
+      building, normalizedBuilding2F, normalizedScaffoldStart,
+    );
+  }
+  // 単一階モード: 既存どおり
+  const rawEdges = getBuildingEdgesClockwise(building);
+  const startIdx = (scaffoldStart?.startVertexIndex ?? 0) % (building.points.length || 1);
+  return relabelByFace2F(rawEdges, startIdx);
+}, [building, targetFloor, scaffoldStart, normalizedBuilding2F, normalizedScaffoldStart]);
+```
+
+### helper 関数化の意義
+
+- **テストから直接呼べる**: failing test を `getBothmodeEdgesWithRelativeLabels(...)` 経由に書き換えれば、 修正効果を直接 verify 可能
+- 修正前 (= 関数未 export): test の import で fail → ファイル全体 fail
+- 修正後 (= 関数 export 後): test が関数を呼ぶ → 関数が ⭐-relative を返す → assert で pass
+
+### 案 1A' vs 案 1A 比較 (= 改訂前後)
+
+| 観点 | 旧 案 1A | 新 案 1A' |
 |---|---|---|
-| 修正規模 | 小 (1 ファイル / 数行) | 大 (UI 構造変更) |
-| 入力欄数 | 不変 (= raw building 基準) | 増加 (= 凸型 1F + 矩形 2F で 4→6 入力欄) |
-| UX 副作用 | label 表示が ⭐-relative に変化のみ | 「同じ wall を 3 分割した複数入力欄」 が出現 → UX 悪化 |
-| 既存パターン整合 | 単一階モードの単純 relabel と同質 | 大改造、 新パターン |
-| リスク | coord match logic で「raw 1 edge → normalized 複数 edges split」 の label 選択が必要 (= 設計判断ポイント) | 大規模変更で複数副作用の可能性 |
-| 推奨 | ★ **推奨** | ✗ 非推奨 |
-
-### 推奨理由
-
-- 案 1A は最小修正で観測点 A・B が解消可能
-- 案 1B の「入力欄数の増加」 は現場 UX で受け入れ難い (= 同じ壁を分割した複数入力欄)
-- 計算ロジック (cascade) は label を読まないため、 表示層のみで完結
+| 修正規模 | 小 (1 ファイル / 数行) | 小 + helper 関数 export 1 つ追加 (= +30 行程度) |
+| テスト連動 | ✗ (= 修正効果検出不可) | ✓ (= helper 関数経由 test で検出可能) |
+| その他 | 同左 | 同左 |
 
 ### 修正対象ファイル / 行番号
 
 | 修正対象 | 内容 |
 |---|---|
-| `components/scaffold/AutoLayoutModal.tsx:375-381` (`edges` useMemo) | bothmode 分岐に「normalized 基準で `relabelByFace2F` を適用 + coord match で raw → normalized label 貼り直し」 を追加 |
-
-### 修正案 (= 概念 diff、 実装で変動の可能性あり)
-
-```diff
- const edges = useMemo(() => {
-   if (!building) return [];
-   const rawEdges = getBuildingEdgesClockwise(building);
--  if (targetFloor === 'both') return rawEdges;
-+  if (targetFloor === 'both' && normalizedBuilding2F && normalizedScaffoldStart) {
-+    const normalizedEdges = getBuildingEdgesClockwise(normalizedBuilding2F);
-+    const startIdx = (normalizedScaffoldStart.startVertexIndex ?? 0) % normalizedEdges.length;
-+    const labeled = relabelByFace2F(normalizedEdges, startIdx);
-+    // raw edges の各 e に対し、 同座標 (e.p1) を normalized から探して label を貼り直す
-+    return rawEdges.map(re => {
-+      const match = labeled.find(le =>
-+        Math.abs(le.p1.x - re.p1.x) < 0.001 && Math.abs(le.p1.y - re.p1.y) < 0.001,
-+      );
-+      return match ? { ...re, label: match.label } : re;
-+    });
-+  }
-   const startIdx = (scaffoldStart?.startVertexIndex ?? 0) % (building.points.length || 1);
-   return relabelByFace2F(rawEdges, startIdx);
- }, [building, targetFloor, scaffoldStart, normalizedBuilding2F, normalizedScaffoldStart]);
-```
+| `lib/konva/labelUtils.ts` (新規 export 追加) | `getBothmodeEdgesWithRelativeLabels` 関数を export |
+| `components/scaffold/AutoLayoutModal.tsx:375-381` (`edges` useMemo) | bothmode 分岐に helper 関数呼出を追加、 依存配列拡張 |
+| `lib/konva/__tests__/bothmode-multi-bug.test.ts` の Test A・B (3 件) | helper 関数経由に書き換え (in-place、 第 5-2 章 採用案 (i) 参照) |
 
 ### 影響する既存テスト予測
 
 | カテゴリ | 影響 | 根拠 |
 |---|---|---|
-| `labelUtils.test.ts` (16 件) | **影響なし** | `relabelByFace2F` 自体は変更しない、 呼び出し箇所追加のみ |
+| `labelUtils.test.ts` (16 件) | **影響なし** | `relabelByFace2F` 自体は変更しない、 export 追加のみ |
 | `computeBothmode*Layout.test.ts` 等 (計算系) | **影響なし** | 計算層に label は伝搬しない (= edge.index で駆動、 grep で確認済) |
-| 失敗テスト pass に転じる | A (1) + B-1 (1) + B-2 (1) = **3 件** | 観測 A・B の真因が共通根 1 |
+| 失敗テスト pass に転じる | A (1) + B-1 (1) + B-2 (1) = **3 件** | 観測 A・B の真因が共通根 1、 helper 関数経由 test で verify |
 
 ---
 
 ## 4. 共通根 2 の修正方向最終決定
 
-### 推奨: **案 2C** (= `normalizedDistances` re-keyed useMemo)
+### 推奨: **案 2C'** (= helper 関数 + normalizedDistances re-keying)
 
-### 案 2A vs 案 2B vs 案 2C 比較
+### 案 2C' の内容 (= 旧 案 2C からの拡張)
 
-| 観点 | 案 2A (state を normalized キー化) | 案 2B (計算層入口で変換) | 案 2C (re-keyed useMemo) |
-|---|---|---|---|
-| 修正規模 | 大 (UI 連動必要) | 中 (計算層シグネチャ変更) | 小 (1 useMemo 追加) |
-| UI 側変更 | 入力欄数増加 (= 案 1B と一体) | なし | なし |
-| 計算層変更 | あり | あり (raw building 引数追加) | **なし** |
-| 既存パターン整合 | なし | やや不純 (計算層が raw を意識) | **H-3d-5 の `normalizedScaffoldStart` パターンと完全対称** |
-| 既存テスト影響 | UI / state テスト書き換え必要 | 計算層テストの引数変更 | 計算層テスト無変更 |
-| 推奨 | ✗ | △ | ★ **推奨** |
+旧 案 2C は useMemo 内に re-keying logic を inline 記述。 改訂後は **useMemo 内ロジックを helper 関数として export**:
 
-### 推奨理由
+```ts
+// lib/konva/labelUtils.ts (もしくは bothmodeUtils.ts、 第 8 章 (5) 参照)
+export function getNormalizedDistances(
+  rawBuilding: BuildingShape,
+  normalizedBuilding: BuildingShape,
+  rawDistances: Record<number, number>,
+): Record<number, number> {
+  const rawEdges = getBuildingEdgesClockwise(rawBuilding);
+  const normalizedEdges = getBuildingEdgesClockwise(normalizedBuilding);
+  const result: Record<number, number> = {};
+  for (const ne of normalizedEdges) {
+    const match = rawEdges.find(re =>
+      Math.abs(re.p1.x - ne.p1.x) < 0.001 && Math.abs(re.p1.y - ne.p1.y) < 0.001,
+    );
+    if (match !== undefined && rawDistances[match.index] !== undefined) {
+      result[ne.index] = rawDistances[match.index];
+    }
+  }
+  return result;
+}
+```
 
-- 案 2C は **H-3d-5 で導入された `normalizedScaffoldStart` パターンと完全対称**:
-  - H-3d-5: `scaffoldStart` (raw key) → `normalizedScaffoldStart` (normalized key) を AutoLayoutModal で生成、 計算層に渡す
-  - 案 2C: `distances` (raw key) → `normalizedDistances` (normalized key) を AutoLayoutModal で生成、 計算層に渡す
-- 計算層は無変更で、 既存計算層テスト 約 5-7 件 (= computeBothmode2FLayout 系) への影響なし
-- AutoLayoutModal で完結する最小修正
-
-### 修正対象ファイル / 行番号
-
-| 修正対象 | 内容 |
-|---|---|
-| `components/scaffold/AutoLayoutModal.tsx` (場所未確定、 `normalizedScaffoldStart` 付近 = `:323-336` の直後を想定) | `normalizedDistances` useMemo を新規追加 (= raw distances → normalized index にマッピング) |
-| `AutoLayoutModal.tsx` 内の `computeBothmode2FLayout` / `computeBothmode1FLayout` 呼び出し箇所 (複数) | `distances` の代わりに `normalizedDistances` を渡す |
-
-### 修正案 (= 概念 diff、 実装で変動の可能性あり)
-
-```diff
-+  // Phase H-3e: distances state は raw building の edge.index でキー保存されているが、
-+  // computeBothmode2FLayout は normalized building 上の edge.index で読み出すため、
-+  // re-keying が必要。 H-3d-5 の normalizedScaffoldStart と対称的なパターン。
-+  const normalizedDistances = useMemo(() => {
-+    if (targetFloor !== 'both' || !building2F || !normalizedBuilding2F) {
-+      return distances;
-+    }
-+    const rawEdges = getBuildingEdgesClockwise(building2F);
-+    const normalizedEdges = getBuildingEdgesClockwise(normalizedBuilding2F);
-+    const result: Record<number, number> = {};
-+    for (const ne of normalizedEdges) {
-+      // normalized edge の p1 と一致する raw edge を探し、 その distances 値を引き継ぐ
-+      const match = rawEdges.find(re =>
-+        Math.abs(re.p1.x - ne.p1.x) < 0.001 && Math.abs(re.p1.y - ne.p1.y) < 0.001,
-+      );
-+      if (match !== undefined && distances[match.index] !== undefined) {
-+        result[ne.index] = distances[match.index];
-+      }
-+    }
-+    return result;
-+  }, [distances, targetFloor, building2F, normalizedBuilding2F]);
+```tsx
+// AutoLayoutModal.tsx
+const normalizedDistances = useMemo(() => {
+  if (targetFloor !== 'both' || !building2F || !normalizedBuilding2F) {
+    return distances;
+  }
+  return getNormalizedDistances(building2F, normalizedBuilding2F, distances);
+}, [distances, targetFloor, building2F, normalizedBuilding2F]);
 ```
 
 呼び出し変更 (例):
@@ -182,24 +227,41 @@
 +  );
 ```
 
+### 案 2C' vs 案 2C 比較 (= 改訂前後)
+
+| 観点 | 旧 案 2C | 新 案 2C' |
+|---|---|---|
+| 修正規模 | 小 (1 useMemo 追加) | 小 + helper 関数 export 1 つ追加 |
+| テスト連動 | ✗ (= 修正効果検出不可) | ✓ (= helper 関数経由 test で `getNormalizedDistances` を呼んで normalized distances を生成、 計算層に渡す) |
+| 計算層への影響 | なし | なし |
+| H-3d-5 パターンとの対称 | ◎ | ◎ |
+
+### 修正対象ファイル / 行番号
+
+| 修正対象 | 内容 |
+|---|---|
+| `lib/konva/labelUtils.ts` (もしくは bothmodeUtils.ts) | `getNormalizedDistances` 関数を export |
+| `components/scaffold/AutoLayoutModal.tsx` | `normalizedDistances` useMemo 新規追加 + 計算層呼出 (複数箇所) を `distances` から `normalizedDistances` に変更 |
+| `lib/konva/__tests__/bothmode-multi-bug.test.ts` の Test C (3 件) | helper 関数経由に書き換え (in-place) |
+
 ### 影響する既存テスト予測
 
 | カテゴリ | 影響 | 根拠 |
 |---|---|---|
 | `computeBothmode2FLayout.test.ts` 等 (計算系) | **影響なし** | 計算層シグネチャ無変更、 既存テストは計算関数を直接呼び (UI を経由しない)、 distances は既に key 整合済の値を渡している前提 |
 | `relabelByFace*` 系 | **影響なし** | label とは別レイヤ |
-| 失敗テスト pass に転じる | C-1 (1) + C-2 (1) + C-3 (1) = **3 件** | 観測 C の真因が共通根 2 |
+| 失敗テスト pass に転じる | C-1 (1) + C-2 (1) + C-3 (1) = **3 件** | 観測 C の真因が共通根 2、 helper 関数経由 test で verify |
 
 ---
 
 ### 4-X. 1F 側との対比 (= 設計の歴史的経緯)
 
-過去の修正経緯を踏まえると、 **共通根 2 の修正は「新規導入」ではなく「既存パターンへの追従」** と位置付けられる:
+過去の修正経緯を踏まえると、 **共通根 2 の修正は「新規導入」 ではなく「既存パターンへの追従」** と位置付けられる:
 
 - **distances1F (1F 側)**: H-3d-3 / H-3d-6 の修正経緯で normalized 経由に統一済み (= 入力 UI / state / cascade すべて normalizedBuilding1F の edge.index で整合)
 - **distances (2F 側)**: raw 経由のまま取り残されていた (= 観測点 C の真因)
 
-→ 共通根 2 の案 2C (`normalizedDistances` re-keyed useMemo) は、 **1F 側の既存設計と対称な構造を 2F 側にも適用することで、 データ層の整合を揃える修正**である。 新しいパターンを導入するのではなく、 既存パターンへの追従。
+→ 共通根 2 の案 2C' (`getNormalizedDistances` helper 関数 + `normalizedDistances` re-keyed useMemo) は、 **1F 側の既存設計と対称な構造を 2F 側にも適用することで、 データ層の整合を揃える修正**である。 新しいパターンを導入するのではなく、 既存パターンへの追従。
 
 #### 調査根拠 (= コード読解の事実)
 
@@ -217,23 +279,59 @@
 
 ## 5. 既存テスト影響の予測
 
-### 既存 114 件のうち、 修正で値が変わる可能性のあるテスト
+### 5-1. 既存 114 件のうち、 修正で値が変わる可能性のあるテスト
 
 調査の結果、 **共通根 1・2 とも既存 114 件への影響なし** と判定:
 
 | 修正 | 影響可能性のあるテスト | 影響根拠 |
 |---|---|---|
-| 共通根 1 (案 1A) | **なし** | label は表示層のみ、 計算層に伝搬しない (= grep で `edge.label` 参照箇所が計算層 0 件を確認) |
-| 共通根 2 (案 2C) | **なし** | 計算層は無変更、 既存計算層テストは distances を直接渡している (= UI を経由しない、 既に key 整合済の値) |
+| 共通根 1 (案 1A') | **なし** | label は表示層のみ、 計算層に伝搬しない (= grep で `edge.label` 参照箇所が計算層 0 件を確認) |
+| 共通根 2 (案 2C') | **なし** | 計算層は無変更、 既存計算層テストは distances を直接渡している (= UI を経由しない、 既に key 整合済の値) |
 
-### 失敗テスト 6 件のうち、 各修正で pass に転じるもの
+### 5-2. 失敗テスト 6 件の扱い (新規追加)
 
-| 修正 | pass に転じる件数 | 内訳 |
+#### 既存テスト 6 件 (commit `c77208c`) の評価
+
+「バグ症状の機械的観察」 として価値があった (= バグ存在の証拠) が、 **修正効果を検出できない構造** (= 第 0 章 「設計判断ミスの記録」 参照)。 R5 採用後は helper 関数経由に書き換える必要がある。
+
+#### 採用案: **(i) in-place 書き換え** (= 同ファイル / 同件数で helper 関数経由に変更)
+
+| 案 | 内容 | 評価 |
 |---|---|---|
-| 共通根 1 修正後 | 3 件 | 観測 A (1) + B-1 (1) + B-2 (1) |
-| 共通根 2 修正後 (累積) | 6 件 (= 全件) | 上記 3 + 観測 C-1 (1) + C-2 (1) + C-3 (1) |
+| **(i) in-place 書き換え** ★ **採用** | 同ファイル / 同件数で helper 関数経由に変更 | ファイル / 件数不変、 引継ぎノート整合、 git history で症状観察履歴保全 |
+| (ii) 残して新規 6 件追加 | 既存維持 + 別 describe で helper 関数経由 6 件追加 | 既存 6 件は永久 fail で 「全 pass」 ゴールから逸脱 |
+| (iii) 削除 + 新規 6 件で置換 | 削除して別形式で書き直し | (i) とほぼ同等、 「置換」 のニュアンスが strong すぎる |
 
-### 「pass に転じるべきだが転じない」 場合の対処方針
+#### 採用理由
+
+1. ファイル名 / 件数が変わらず、 引継ぎノートとの整合保全
+2. 「症状観察」 の価値は git log で追跡可能 (= `git show c77208c -- lib/konva/__tests__/bothmode-multi-bug.test.ts` で旧版を参照可)
+3. 修正範囲最小
+
+#### 書き換えの構造
+
+修正前 (= 現状):
+```ts
+// Test A
+const rawEdges = getBuildingEdgesClockwise(buildingRect2F);
+const inputFieldLabels = rawEdges.map(e => e.label);
+expect(inputFieldLabels).toEqual(['B', 'C', 'D', 'A']);
+```
+
+修正後 (= 案 1A' 適用後):
+```ts
+// Test A
+import { getBothmodeEdgesWithRelativeLabels } from '../labelUtils';
+...
+const edges = getBothmodeEdgesWithRelativeLabels(
+  buildingRect2F, buildingRect2F /* normalized = raw for rect-only */, scaffoldStart
+);
+expect(edges.map(e => e.label)).toEqual(['B', 'C', 'D', 'A']);
+```
+
+Test C も同様、 `getNormalizedDistances` 経由で書き換える。
+
+### 5-3. 「pass に転じるべきだが転じない」 場合の対処方針
 
 1. **diff を再確認**: 想定どおりの修正になっているか
 2. **失敗テストの actual / expected を見て**、 修正前後で actual がどう変わったかを確認
@@ -288,7 +386,7 @@
 
 1. **tsc**: `npx tsc --noEmit` → exit 0
 2. **lint**: スキップ (= ESLint 未設定、 既存パターン)
-3. **test**: `npm test` → 既存 114 件 + 失敗テスト の遷移を確認
+3. **test**: `npm test` → 既存 114 件 + 失敗テスト の遷移を確認 (= **helper 関数経由 test で修正効果が verify されるはず**)
    - 共通根 1 修正後: 117 pass / 3 fail (= 観測 C 残り)
    - 共通根 2 修正後: 120 pass / 0 fail (= 全 pass)
 4. **diff 確認**: `git diff --stat` で変更ファイル数 / 行数を確認、 想定範囲内か
@@ -317,7 +415,7 @@
 
 ## 8. 不確実性 / 設計判断 (= 実装中に再確認すべき点)
 
-### 共通根 1 (案 1A) 関連
+### 共通根 1 (案 1A') 関連
 
 #### (1) raw 1 edge → normalized 複数 edges split のときの label 貼り直し設計
 
@@ -333,7 +431,7 @@
 - 北辺は ⭐-relative で同 face 連続 → suffix 付き (= "B1"/"B2"/"B3" 等)。 入力欄には "B1" が表示される想定
 - これが UX 的に妥当か実機で確認
 
-### 共通根 2 (案 2C) 関連
+### 共通根 2 (案 2C') 関連
 
 #### (2) `normalizedDistances` キー解釈の整合性確認
 
@@ -355,12 +453,23 @@ raw → normalized re-keying で、 raw 1 edge が normalized 複数 edges に s
 
 - 修正中断、 `git stash` で状態保全
 - 新規バグを `docs/` に調査 md として記録
-- 失敗テストを追加 (= 同じパターンを踏襲)
+- 失敗テストを追加 (= 同じパターンを踏襲、 ただし第 0 章 「verify 方法」 に従い helper 関数経由型で設計)
 - 師匠と相談して修正範囲再評価
 
 #### (4) 1F 側 distances1F は修正不要 (= 確定事項)
 
 第 4-X 章で確認済。 1F 側は normalized 経由に既に統一済。 修正中に「1F も直すべきか?」 と迷った場合、 本書第 4-X 章を参照して判断 (= 不要)。
+
+#### (5) helper 関数の配置先 (= 新規追加)
+
+helper 関数 `getBothmodeEdgesWithRelativeLabels` と `getNormalizedDistances` の配置先候補:
+
+| 候補 | 長所 | 短所 |
+|---|---|---|
+| (a) `lib/konva/labelUtils.ts` 追記 | 既存 `relabelByFace2F` 等と同居、 import 簡素 | distances 関連は label と別概念で混在感 |
+| (b) 新規ファイル `lib/konva/bothmodeUtils.ts` (or 同等名) | 関心分離、 ファイル名から目的が明確 | ファイル数増加 |
+
+**推奨 (= 推測)**: 当面 (a) を採用、 ただし関数が将来増えれば (b) に切り出すことを検討。 `getBothmodeEdgesWithRelativeLabels` は label 関連、 `getNormalizedDistances` は distances 関連だが、 両方とも normalize / coord match パターンを共有するため (a) 同居でも違和感少ない。 実装時に再判断。
 
 ---
 
@@ -373,21 +482,23 @@ raw → normalized re-keying で、 raw 1 edge が normalized 複数 edges に s
 - **過去ハンドオフ**: `docs/handoff-h-3d-6.md`, `docs/handoff-h-3d-5.md`
 
 ### 関連 commit
+- `83957c7 docs: add fix spec for Phase H-3e (bothmode multi-bug)` (= **本書の旧版 v1**、 案 1A + 案 2C)
+- (改訂後 commit、 本書) `docs: revise H-3e fix spec (R5 helper-function approach)` (= 本書 v2、 案 1A' + 案 2C')
 - `7e9afa6 docs: add handoff note for Phase H-3e (bothmode multi-bug)` (= 引継ぎノート)
-- `c77208c docs+test: investigate bothmode multi-bug (label/lock-mark/12mm shift)` (= 本件調査スナップショット)
+- `c77208c docs+test: investigate bothmode multi-bug (label/lock-mark/12mm shift)` (= 本件調査スナップショット、 失敗テスト 6 件初版)
 - `2afcbf5 docs: archive H-3d-7 investigation (bug not reproducible)` (= 関連 archive)
 - `3ad0156 feat(autoLayout): replace face-based labeling with ⭐ origin CW labeling` (= 共通根 1 の発生源 = bothmode 適用漏れ)
-- `4c57667 fix(autoLayout): map scaffoldStart to normalized vertex index in preview` (= 案 2C のパターン参照、 `normalizedScaffoldStart` 導入)
+- `4c57667 fix(autoLayout): map scaffoldStart to normalized vertex index in preview` (= 案 2C' のパターン参照、 `normalizedScaffoldStart` 導入)
 
 ### コード経路
 - **edges useMemo (共通根 1 修正対象)**: `components/scaffold/AutoLayoutModal.tsx:375-381`
 - **入力欄レンダリング**: `components/scaffold/AutoLayoutModal.tsx:1295-1302`
 - **lockedEdgeIndices**: `components/scaffold/AutoLayoutModal.tsx:384-392`
 - **distances state**: `components/scaffold/AutoLayoutModal.tsx:396-413` (init), `:514-516` (setDistance)
-- **normalizedScaffoldStart (案 2C パターン参照)**: `components/scaffold/AutoLayoutModal.tsx:323-336`
+- **normalizedScaffoldStart (案 2C' パターン参照)**: `components/scaffold/AutoLayoutModal.tsx:323-336`
 - **cascade prev/next lookup**: `lib/konva/autoLayoutUtils.ts:1562-1564` (next desired), `:1605-1607` (prev start)
 - **split 関数**: `lib/konva/autoLayoutUtils.ts:1168-1252` (`splitBuildingAtVertices`)
 - **relabelByFace2F**: `lib/konva/labelUtils.ts:43-`
 
 ### 失敗テスト
-- `lib/konva/__tests__/bothmode-multi-bug.test.ts` (203 行、 6 件)
+- `lib/konva/__tests__/bothmode-multi-bug.test.ts` (203 行、 6 件、 helper 関数経由化で書き換え予定)
