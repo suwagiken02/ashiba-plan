@@ -38,7 +38,7 @@ export default function AuthPage() {
     <div className="flex items-center justify-center min-h-screen p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-accent mb-2">スマートコンパス</h1>
+          <h1 className="text-3xl font-bold text-accent mb-2">キャドパスポート</h1>
           <p className="text-dimension text-sm">足場平面図アプリ</p>
         </div>
 
