@@ -5,6 +5,7 @@ import {
   splitBuilding1FAtBuilding2FVertices,
   computeBothmode2FLayout,
 } from '../autoLayoutUtils';
+import { getBothmodeEdgesWithRelativeLabels } from '../labelUtils';
 import type { BuildingShape, ScaffoldStartConfig } from '@/types';
 
 // bothmode 複合バグ調査用 失敗テスト。
@@ -33,63 +34,90 @@ const buildingRect2F: BuildingShape = {
 // =====================================================================
 // 観測点 A: bothmode 入力欄ラベル方角誤り
 // =====================================================================
-describe('observation A: bothmode 入力欄ラベル (raw face-based) と ⭐-relative 期待値の乖離', () => {
-  it('⭐ at SW: 入力欄ラベルは ⭐-relative ["B","C","D","A"] であるべきだが raw ["A","B","C","D"] のまま', () => {
-    // 入力欄が表示する label は AutoLayoutModal.tsx L1295-1302 の `edges.map(edge => ...)` から来る。
-    // bothmode では `edges = getBuildingEdgesClockwise(building)` (= raw、 L375-381 で relabel 未適用)。
-    const rawEdges = getBuildingEdgesClockwise(buildingRect2F);
-    const inputFieldLabels = rawEdges.map(e => e.label);
-
+describe('observation A (Phase H-3e 共通根 1): bothmode 入力欄ラベルが ⭐-relative になる', () => {
+  it('⭐ at SW: helper 関数経由で 入力欄ラベルが ⭐-relative ["B","C","D","A"] になる', () => {
+    // Phase H-3e (案 1A'): AutoLayoutModal の edges useMemo は bothmode で
+    // getBothmodeEdgesWithRelativeLabels(rawBuilding, normalizedBuilding2F, normalizedScaffoldStart)
+    // を呼ぶ。 矩形 + 矩形 (split なし) では normalized = raw 同形。
+    const scaffoldStart: ScaffoldStartConfig = {
+      corner: 'sw',
+      startVertexIndex: 3,  // SW = vertex 3
+      face1DistanceMm: 900,
+      face2DistanceMm: 900,
+      face1FirstHandrail: 1800,
+      face2FirstHandrail: 1800,
+      floor: 2,
+    };
+    const edges = getBothmodeEdgesWithRelativeLabels(
+      buildingRect2F, buildingRect2F /* normalized = raw */, scaffoldStart,
+    );
     // 期待: ⭐ at SW (vertex 3) 起点 CW 巡回で ⭐-relative ラベル付け
     //   k=0 edges[3]=west="A", k=1 edges[0]=north="B",
     //   k=2 edges[1]=east="C",  k=3 edges[2]=south="D"
     // → 物理 index 順では ["B","C","D","A"]
-    expect(inputFieldLabels).toEqual(['B', 'C', 'D', 'A']);
-    // 現コード: ["A","B","C","D"] (= raw face-based) → FAILS
+    expect(edges.map(e => e.label)).toEqual(['B', 'C', 'D', 'A']);
   });
 });
 
 // =====================================================================
 // 観測点 B: 固定マーク label 不整合 (= 観測点 A と同根)
 // =====================================================================
-describe('observation B: locked edge labels (face-based) が ⭐-relative 期待値と乖離 (= 観測点 A と同根)', () => {
-  it('⭐ at SE: locked labels は ⭐-relative ["A","D"] であるべきだが face-based ["B","C"]', () => {
-    // 固定マーク対象は AutoLayoutModal.tsx L384-392 の lockedEdgeIndices で決まり、
-    // 物理対象 (= ⭐ adjacent の物理 edge) は正しい。 表示ラベルが入力欄の label を流用するため
-    // raw face-based のまま表示される (= 観測点 A の波及)。
-    const rawEdges = getBuildingEdgesClockwise(buildingRect2F);
-    const startIdx = 2;  // SE = vertex 2 in raw [NW, NE, SE, SW]
-    const n = rawEdges.length;
+describe('observation B (Phase H-3e 共通根 1): locked edge labels が ⭐-relative になる', () => {
+  it('⭐ at SE: helper 関数経由で locked labels が ⭐-relative ["A","D"] になる', () => {
+    // 物理 lock 対象は AutoLayoutModal.tsx L384-392 の lockedEdgeIndices で正しく特定済 (= ⭐ adjacent)。
+    // 表示ラベルが helper 関数経由で ⭐-relative になるため、 lock マーク label も連動して正しくなる。
+    const scaffoldStart: ScaffoldStartConfig = {
+      corner: 'se',
+      startVertexIndex: 2,  // SE = vertex 2 in raw [NW, NE, SE, SW]
+      face1DistanceMm: 900,
+      face2DistanceMm: 900,
+      face1FirstHandrail: 1800,
+      face2FirstHandrail: 1800,
+      floor: 2,
+    };
+    const edges = getBothmodeEdgesWithRelativeLabels(
+      buildingRect2F, buildingRect2F, scaffoldStart,
+    );
+    // AutoLayoutModal.tsx の lockedEdgeIndices と同じロジックで物理 lock idx を計算
+    const startIdx = scaffoldStart.startVertexIndex!;
+    const n = edges.length;
     const lockedIdxs = new Set([
-      rawEdges[startIdx].index,
-      rawEdges[(startIdx - 1 + n) % n].index,
+      edges[startIdx].index,
+      edges[(startIdx - 1 + n) % n].index,
     ]);
-    const inputLabels = rawEdges
+    const lockedLabels = edges
       .filter(e => lockedIdxs.has(e.index))
       .map(e => e.label)
       .sort();
-
-    // 期待: ⭐ at SE での ⭐-relative。 locked physical = south + east = 出辺(2A) + 閉じ辺(2D)
-    expect(inputLabels).toEqual(['A', 'D']);
-    // 現コード: ["B","C"] (= edge[1]=east="B" + edge[2]=south="C", face-based) → FAILS
+    // 期待: ⭐ at SE で locked physical = south + east = 出辺(2A) + 閉じ辺(2D)
+    expect(lockedLabels).toEqual(['A', 'D']);
   });
 
-  it('⭐ at SW: locked labels は ⭐-relative ["A","D"] であるべきだが face-based ["C","D"]', () => {
-    const rawEdges = getBuildingEdgesClockwise(buildingRect2F);
-    const startIdx = 3;  // SW = vertex 3
-    const n = rawEdges.length;
+  it('⭐ at SW: helper 関数経由で locked labels が ⭐-relative ["A","D"] になる', () => {
+    const scaffoldStart: ScaffoldStartConfig = {
+      corner: 'sw',
+      startVertexIndex: 3,  // SW = vertex 3
+      face1DistanceMm: 900,
+      face2DistanceMm: 900,
+      face1FirstHandrail: 1800,
+      face2FirstHandrail: 1800,
+      floor: 2,
+    };
+    const edges = getBothmodeEdgesWithRelativeLabels(
+      buildingRect2F, buildingRect2F, scaffoldStart,
+    );
+    const startIdx = scaffoldStart.startVertexIndex!;
+    const n = edges.length;
     const lockedIdxs = new Set([
-      rawEdges[startIdx].index,
-      rawEdges[(startIdx - 1 + n) % n].index,
+      edges[startIdx].index,
+      edges[(startIdx - 1 + n) % n].index,
     ]);
-    const inputLabels = rawEdges
+    const lockedLabels = edges
       .filter(e => lockedIdxs.has(e.index))
       .map(e => e.label)
       .sort();
-
-    // 期待: ⭐ at SW での ⭐-relative。 locked physical = west + south = 出辺(2A) + 閉じ辺(2D)
-    expect(inputLabels).toEqual(['A', 'D']);
-    // 現コード: ["C","D"] (= edge[2]=south="C" + edge[3]=west="D", face-based) → FAILS
+    // 期待: ⭐ at SW で locked physical = west + south = 出辺(2A) + 閉じ辺(2D)
+    expect(lockedLabels).toEqual(['A', 'D']);
   });
 });
 

@@ -30,7 +30,7 @@ import {
   splitBuilding2FAt1FVertices,
 } from '@/lib/konva/autoLayoutUtils';
 import { computeEdgeLabelPosition } from '@/lib/konva/buildingLabelUtils';
-import { relabelByFace2F, relabelByFace1F } from '@/lib/konva/labelUtils';
+import { relabelByFace2F, relabelByFace1F, getBothmodeEdgesWithRelativeLabels } from '@/lib/konva/labelUtils';
 import VariationChangeButtons from '@/components/scaffold/VariationChangeButtons';
 type Props = { onClose: () => void; onOpenScaffoldStart: () => void };
 
@@ -369,16 +369,20 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   );
 
   // 辺リストを取得
-  // Phase H-3d-6: 単一階モードも ⭐ 起点 CW 順 + 同面分割 suffix で relabel する
-  // (= bothmode の edges2FAll と同一規則)。 bothmode は別経路 (edges2FAll) で
-  // 表示するため、 ここでは raw のまま返す。
+  // Phase H-3d-6: 単一階モードは ⭐ 起点 CW 順 + 同面分割 suffix で relabel。
+  // Phase H-3e (共通根 1、 案 1A'): bothmode は helper 関数 getBothmodeEdgesWithRelativeLabels
+  // 経由で raw 入力欄数を維持しつつ ⭐-relative ラベル表示を実現する。
   const edges = useMemo(() => {
     if (!building) return [];
+    if (targetFloor === 'both' && normalizedBuilding2F && normalizedScaffoldStart) {
+      return getBothmodeEdgesWithRelativeLabels(
+        building, normalizedBuilding2F, normalizedScaffoldStart,
+      );
+    }
     const rawEdges = getBuildingEdgesClockwise(building);
-    if (targetFloor === 'both') return rawEdges;
     const startIdx = (scaffoldStart?.startVertexIndex ?? 0) % (building.points.length || 1);
     return relabelByFace2F(rawEdges, startIdx);
-  }, [building, targetFloor, scaffoldStart]);
+  }, [building, targetFloor, scaffoldStart, normalizedBuilding2F, normalizedScaffoldStart]);
 
   // スタート角に隣接する2辺（固定辺）
   const lockedEdgeIndices = useMemo(() => {

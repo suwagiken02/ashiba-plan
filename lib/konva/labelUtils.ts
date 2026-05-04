@@ -1,5 +1,6 @@
 import { Point } from '@/types';
-import { EdgeInfo } from './autoLayoutUtils';
+import type { BuildingShape, ScaffoldStartConfig } from '@/types';
+import { EdgeInfo, getBuildingEdgesClockwise } from './autoLayoutUtils';
 
 // ============================================================
 // Phase H-3d-6: ラベル付けロジック
@@ -144,4 +145,41 @@ export function relabelByFace1F(
   }
 
   return result;
+}
+
+/**
+ * Phase H-3e (共通根 1、 案 1A'): bothmode で raw building の入力欄に ⭐-relative
+ * ラベルを表示するための helper 関数。
+ *
+ * raw building (= 入力欄数と一致) の各 edge に対し、 normalized building 上で
+ * relabelByFace2F を適用した結果の label を coord match で貼り直す。
+ *
+ * 入力:
+ *   rawBuilding: 入力欄が見ている raw building (= 4 vertex 等)
+ *   normalizedBuilding2F: split 適用後 (= 6+ vertex の可能性)
+ *   normalizedScaffoldStart: ⭐ 位置 (= normalized building 基準の startVertexIndex)
+ *
+ * 出力: rawBuilding の edges (= 件数不変)、 ただし label は ⭐-relative。
+ *
+ * 設計判断:
+ *   raw 1 edge が normalized で複数 edges に split される場合、 raw edge.p1 と一致する
+ *   normalized edge (= split 後の最初の edge) の label を採用する (e.g., 北辺が 3 split
+ *   されたら raw 北辺は "B1" を採用、 中央 "B2" / 右 "B3" は raw に対応する入力欄なし)。
+ */
+export function getBothmodeEdgesWithRelativeLabels(
+  rawBuilding: BuildingShape,
+  normalizedBuilding2F: BuildingShape,
+  normalizedScaffoldStart: ScaffoldStartConfig,
+): EdgeInfo[] {
+  const rawEdges = getBuildingEdgesClockwise(rawBuilding);
+  const normalizedEdges = getBuildingEdgesClockwise(normalizedBuilding2F);
+  const startIdx = (normalizedScaffoldStart.startVertexIndex ?? 0)
+    % (normalizedEdges.length || 1);
+  const labeled = relabelByFace2F(normalizedEdges, startIdx);
+  return rawEdges.map(re => {
+    const match = labeled.find(le =>
+      Math.abs(le.p1.x - re.p1.x) < 0.001 && Math.abs(le.p1.y - re.p1.y) < 0.001,
+    );
+    return match ? { ...re, label: match.label } : re;
+  });
 }
