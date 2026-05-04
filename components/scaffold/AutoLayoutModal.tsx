@@ -475,6 +475,9 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
   const [focusedEdgeIndex, setFocusedEdgeIndex] = useState<number | null>(null);
   const [showConflictConfirm, setShowConflictConfirm] = useState(false);
   const [showLockedAlert, setShowLockedAlert] = useState(false);
+  // リリース戦略: 1F+2F モードは近日実装予定のためブロック表示
+  // (= bothmode 関連実装は Phase H-3e (commit 0ed4ac5) で完成済、 「保留資産」 として温存)
+  const [showComingSoonModal, setShowComingSoonModal] = useState(false);
   const [pendingHandrails, setPendingHandrails] = useState<Handrail[]>([]);
   const [conflictIds, setConflictIds] = useState<string[]>([]);
   // Phase H-3b-2-1 / H-3d-1: 順次決定の状態管理を 2F / 1F の 2 本立てに拡張
@@ -1235,7 +1238,7 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
               ))}
               <button
                 type="button"
-                onClick={() => setTargetFloor('both')}
+                onClick={() => setShowComingSoonModal(true)}
                 className={`flex-1 py-2 rounded-lg text-xs font-bold border transition-colors ${
                   targetFloor === 'both'
                     ? 'border-accent bg-accent/15 text-accent'
@@ -2160,6 +2163,25 @@ export default function AutoLayoutModal({ onClose, onOpenScaffoldStart }: Props)
                 再設定する
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {showComingSoonModal && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center px-6">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowComingSoonModal(false)} />
+          <div className="relative bg-dark-surface border border-dark-border rounded-2xl p-5 w-full max-w-sm shadow-2xl">
+            <p className="font-bold text-sm mb-2">近日実装予定</p>
+            <p className="text-xs text-dimension leading-relaxed mb-4">
+              1F+2F モードは近日実装予定です。<br />
+              現在は 1Fのみ または 2Fのみ モードをご利用ください。
+            </p>
+            <button
+              onClick={() => setShowComingSoonModal(false)}
+              className="w-full py-2.5 bg-accent text-white font-bold rounded-xl text-sm"
+            >
+              OK
+            </button>
           </div>
         </div>
       )}
