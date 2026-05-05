@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
+import PasswordInput from '@/components/ui/PasswordInput';
 
 export default function AuthPage() {
   const router = useRouter();
@@ -246,11 +247,9 @@ export default function AuthPage() {
 
               <div>
                 <label className="block text-sm text-dimension mb-1">パスワード</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                  onChange={setPassword}
                   placeholder="6文字以上"
                   minLength={6}
                   required
@@ -260,11 +259,9 @@ export default function AuthPage() {
               {isSignUp && (
                 <div>
                   <label className="block text-sm text-dimension mb-1">パスワード (確認)</label>
-                  <input
-                    type="password"
+                  <PasswordInput
                     value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                    onChange={setConfirmPassword}
                     placeholder="もう一度入力"
                     minLength={6}
                     required={isSignUp}
@@ -387,11 +384,9 @@ export default function AuthPage() {
 
             <div>
               <label className="block text-sm text-dimension mb-1">パスワード</label>
-              <input
-                type="password"
+              <PasswordInput
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                onChange={setPassword}
                 placeholder="6文字以上"
                 minLength={6}
                 required
@@ -401,11 +396,9 @@ export default function AuthPage() {
             {isSignUp && (
               <div>
                 <label className="block text-sm text-dimension mb-1">パスワード (確認)</label>
-                <input
-                  type="password"
+                <PasswordInput
                   value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                  onChange={setConfirmPassword}
                   placeholder="もう一度入力"
                   minLength={6}
                   required={isSignUp}
