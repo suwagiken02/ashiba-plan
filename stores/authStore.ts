@@ -175,33 +175,23 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
           if (data) {
             set({
               profile: data,
-              currentCompanyId: data.company_id ?? DEFAULT_COMPANY_ID,
+              currentCompanyId: data.company_id ?? null,
             });
           } else {
-            set({ currentCompanyId: DEFAULT_COMPANY_ID });
+            set({ currentCompanyId: null });
           }
         } catch {
-          // profile取得失敗しても続行、currentCompanyId はフォールバック
-          set({ currentCompanyId: DEFAULT_COMPANY_ID });
+          // profile 取得失敗しても続行 (= currentCompanyId は null のまま)
+          set({ currentCompanyId: null });
         }
       } else {
-        // セッションなし → Supabase匿名サインインを試行（RLS回避）
-        try {
-          const { data: anonData } = await supabase.auth.signInAnonymously();
-          if (anonData?.user) {
-            set({
-              user: { id: anonData.user.id, email: '' },
-              currentCompanyId: DEFAULT_COMPANY_ID,
-            });
-          } else {
-            set({ user: ANON_USER, profile: ANON_PROFILE, currentCompanyId: DEFAULT_COMPANY_ID });
-          }
-        } catch {
-          set({ user: ANON_USER, profile: ANON_PROFILE, currentCompanyId: DEFAULT_COMPANY_ID });
-        }
+        // Day 7 commit A: セッションなし → ANON 状態に戻す。
+        // middleware が認証必須パスで /auth へリダイレクトするため、 ここでの匿名サインイン
+        // (= 旧 signInAnonymously) は不要 (= 削除済)。
+        set({ user: ANON_USER, profile: ANON_PROFILE, currentCompanyId: null });
       }
     } catch {
-      set({ user: ANON_USER, profile: ANON_PROFILE, currentCompanyId: DEFAULT_COMPANY_ID });
+      set({ user: ANON_USER, profile: ANON_PROFILE, currentCompanyId: null });
     }
     set({ loading: false });
   },
