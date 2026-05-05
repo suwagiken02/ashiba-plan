@@ -468,6 +468,17 @@ export default function AuthPage() {
             >
               {loading ? '処理中...' : isSignUp ? 'アカウント作成' : 'ログイン'}
             </button>
+
+            {/* ID/PW を忘れたとき → /auth/recover (= Day 4-5 Step 3) */}
+            {!isSignUp && (
+              <button
+                type="button"
+                onClick={() => router.push('/auth/recover')}
+                className="w-full py-2 text-accent text-xs hover:underline"
+              >
+                ID / PW を忘れた
+              </button>
+            )}
           </form>
         )}
 
