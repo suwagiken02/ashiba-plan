@@ -222,7 +222,7 @@ export default function AuthPage() {
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                  placeholder="email@example.com"
+                  placeholder="suwaniki@mail.com"
                   required
                 />
               </div>
@@ -299,7 +299,7 @@ export default function AuthPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                placeholder="yamada123"
+                placeholder="suwaniki01"
                 pattern="[a-zA-Z0-9_-]{3,32}"
                 title="半角英数字 + アンダースコア + ハイフンの 3〜32 文字"
                 required
@@ -331,7 +331,7 @@ export default function AuthPage() {
                       value={lastName}
                       onChange={(e) => setLastName(e.target.value)}
                       className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                      placeholder="山田"
+                      placeholder="スワ"
                       maxLength={32}
                       required={isSignUp}
                     />
@@ -343,7 +343,7 @@ export default function AuthPage() {
                       value={firstName}
                       onChange={(e) => setFirstName(e.target.value)}
                       className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
-                      placeholder="太郎"
+                      placeholder="ニキ"
                       maxLength={32}
                       required={isSignUp}
                     />
@@ -476,7 +476,7 @@ export default function AuthPage() {
                 onClick={() => router.push('/auth/recover')}
                 className="w-full py-2 text-accent text-xs hover:underline"
               >
-                ID / PW を忘れた
+                ID / パスワードを忘れた
               </button>
             )}
           </form>
