@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import PasswordInput from '@/components/ui/PasswordInput';
 
 export default function AuthPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // 改善 11: サインアップ後のリダイレクト先 /auth?signup=success で完了 banner 表示
+  const showSignupSuccess = searchParams.get('signup') === 'success';
   const { signIn, signUp, signInWithGoogle, signUpWithId, signInWithId } = useAuthStore();
   // Step 2c: ログイン / サインアップ モード切替 (= isSignUp と setIsSignUp は派生で温存)
   const [mode, setMode] = useState<'login' | 'signup'>('login');
@@ -63,7 +66,8 @@ export default function AuthPage() {
       setError(err);
       setLoading(false);
     } else {
-      router.replace('/projects');
+      // 改善 11: サインアップ時は /auth?signup=success へ (= 完了 banner 表示)、 ログイン時は /projects へ
+      router.replace(isSignUp ? '/auth?signup=success' : '/projects');
     }
   };
 
@@ -103,7 +107,8 @@ export default function AuthPage() {
       setError(err);
       setLoading(false);
     } else {
-      router.replace('/projects');
+      // 改善 11: ID/PW サインアップ後も /auth?signup=success へ (= 完了 banner 表示)
+      router.replace('/auth?signup=success');
     }
   };
 
@@ -157,6 +162,14 @@ export default function AuthPage() {
           <h1 className="text-3xl font-bold text-accent mb-2">CAD パスポート</h1>
           <p className="text-dimension text-sm">{isSignUp ? 'アカウント作成' : '足場平面図アプリ'}</p>
         </div>
+
+        {/* 改善 11: サインアップ完了 banner (= /auth?signup=success アクセス時のみ) */}
+        {showSignupSuccess && (
+          <div className="mb-5 bg-success/15 border border-success/40 rounded-lg p-3 text-center">
+            <p className="text-sm font-bold text-success mb-1">✅ アカウント作成完了</p>
+            <p className="text-xs text-dimension">続けてログインしてください</p>
+          </div>
+        )}
 
         {/* タブバー (= mode 共通、 ラベルはシンプル化) */}
         <div className="flex gap-1 mb-5 bg-dark-surface border border-dark-border rounded-lg p-1">

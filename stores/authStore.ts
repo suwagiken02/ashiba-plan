@@ -102,7 +102,9 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
     try {
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) return localizeAuthError(error.message);
-      await get().loadSession();
+      // 改善 11: サインアップ後は自動ログインせず、 サインアウトしてユーザーに手動ログインさせる。
+      // UI 側で /auth?signup=success にリダイレクトして完了 banner を表示する流れ。
+      await supabase.auth.signOut();
       return null;
     } catch (e) {
       return e instanceof Error ? e.message : 'アカウント作成に失敗しました';
@@ -138,8 +140,10 @@ export const useAuthStore = create<AuthStore>((set, get) => ({
         }
         return typeof data?.error === 'string' ? data.error : 'アカウント作成に失敗しました';
       }
-      // 成功 → 擬似メアド + パスワードで自動ログインしてセッション確立
-      return await get().signInWithId(username, password);
+      // 改善 11: 自動ログインせず、 UI 側で /auth?signup=success へリダイレクト。
+      // ID/PW では API Route が createUser のみ実行 (= server-side、 session 作成なし) なので
+      // signInWithId 呼び出しを削除すれば session は作成されない (= signOut 不要)。
+      return null;
     } catch (e) {
       return e instanceof Error ? e.message : 'アカウント作成に失敗しました';
     }
