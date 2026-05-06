@@ -69,6 +69,25 @@ export default function AuthPage() {
       // 改善 14: 同一ページ内 URL 変更 (= /auth → /auth?signup=success) では
       // コンポーネントがアンマウントされず state が残存するため、 明示的に loading リセット。
       setLoading(false);
+      // 改善 15: サインアップ成功時はフォーム state を完全リセット + ログインモードに切替
+      // (= 同一ページ内遷移ではフォーム値が残るため、 明示的にクリア)。
+      // activeTab は据え置き (= ユーザーが選んだ認証方式を覚えておく UX)。
+      if (isSignUp) {
+        setMode('login');
+        setEmail('');
+        setConfirmEmail('');
+        setPassword('');
+        setConfirmPassword('');
+        setUsername('');
+        setConfirmUsername('');
+        setLastName('');
+        setFirstName('');
+        setBirthYear(currentYear - 30);
+        setBirthMonth(1);
+        setBirthDay(1);
+        setPin('');
+        setConfirmPin('');
+      }
       // 改善 11: サインアップ時は /auth?signup=success へ (= 完了 banner 表示)、 ログイン時は /projects へ
       router.replace(isSignUp ? '/auth?signup=success' : '/projects');
     }
@@ -112,6 +131,21 @@ export default function AuthPage() {
     } else {
       // 改善 14: 同一ページ内 URL 変更で state 残存 → 明示的に loading リセット。
       setLoading(false);
+      // 改善 15: フォーム state 完全リセット + ログインモードに切替 (= activeTab は据え置き)
+      setMode('login');
+      setEmail('');
+      setConfirmEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setUsername('');
+      setConfirmUsername('');
+      setLastName('');
+      setFirstName('');
+      setBirthYear(currentYear - 30);
+      setBirthMonth(1);
+      setBirthDay(1);
+      setPin('');
+      setConfirmPin('');
       // 改善 11: ID/PW サインアップ後も /auth?signup=success へ (= 完了 banner 表示)
       router.replace('/auth?signup=success');
     }
