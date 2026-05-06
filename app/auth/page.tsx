@@ -66,6 +66,9 @@ export default function AuthPage() {
       setError(err);
       setLoading(false);
     } else {
+      // 改善 14: 同一ページ内 URL 変更 (= /auth → /auth?signup=success) では
+      // コンポーネントがアンマウントされず state が残存するため、 明示的に loading リセット。
+      setLoading(false);
       // 改善 11: サインアップ時は /auth?signup=success へ (= 完了 banner 表示)、 ログイン時は /projects へ
       router.replace(isSignUp ? '/auth?signup=success' : '/projects');
     }
@@ -107,6 +110,8 @@ export default function AuthPage() {
       setError(err);
       setLoading(false);
     } else {
+      // 改善 14: 同一ページ内 URL 変更で state 残存 → 明示的に loading リセット。
+      setLoading(false);
       // 改善 11: ID/PW サインアップ後も /auth?signup=success へ (= 完了 banner 表示)
       router.replace('/auth?signup=success');
     }
@@ -150,6 +155,10 @@ export default function AuthPage() {
         setError(err);
         setLoading(false);
       } else {
+        // 改善 14: 一貫性のため明示的に loading リセット
+        // (= ログイン時は /projects 別ページ遷移でアンマウントされるが、
+        //  将来 /projects が React で再マウントしない設計に変わった時の保険)
+        setLoading(false);
         router.replace('/projects');
       }
     }
