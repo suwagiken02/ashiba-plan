@@ -145,6 +145,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'アカウント作成に失敗しました' }, { status: 500 });
   }
 
+  // Step 5.5: Day 7 commit B: 個別 company を新規作成 (= ユーザーごとにデータ分離)。
+  // 失敗時は auth.users をロールバック (= 部分失敗整合性)。
+  // company 名は「姓 名」 自動生成、 後で settings 画面から変更可能。
+  const companyName = `${lastName} ${firstName}`;
+  const { data: companyData, error: companyError } = await supabaseAdmin
+    .from('companies')
+    .insert({ name: companyName })
+    .select('id')
+    .single();
+  if (companyError || !companyData) {
+    await supabaseAdmin.auth.admin.deleteUser(userId).catch(() => undefined);
+    return NextResponse.json(
+      { error: '会社情報の登録に失敗しました' },
+      { status: 500 },
+    );
+  }
+  const newCompanyId = companyData.id;
+
   // Step 6: profiles update (= trigger で auto insert 済の行を埋める)
   const { error: updateError } = await supabaseAdmin
     .from('profiles')
@@ -154,7 +172,7 @@ export async function POST(request: Request) {
       first_name: firstName,
       birth_date: birthDate,
       recovery_pin_hash: pinHash,
-      company_id: DEFAULT_COMPANY_ID,
+      company_id: newCompanyId,
     })
     .eq('id', userId);
 

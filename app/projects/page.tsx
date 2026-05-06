@@ -20,13 +20,11 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false);
 
   const loadProjects = useCallback(async () => {
-    // Phase 0b: company_id でフィルタ。currentCompanyId が未ロードなら DEFAULT_COMPANY_ID にフォールバック
-    // shared-test-patch 適用中のため、テスター全員が Default Company に紐付き、共有が維持される
-    const companyId = useAuthStore.getState().currentCompanyId ?? DEFAULT_COMPANY_ID;
+    // Day 7 commit B: company_id フィルタは削除。 RLS (= auth.uid() = owner_id) で
+    // 自動的に自分の projects のみ取得される。
     const { data } = await supabase
       .from('projects')
       .select('*')
-      .eq('company_id', companyId)
       .order('updated_at', { ascending: false });
     if (data) setProjects(data);
   }, []);
@@ -44,15 +42,12 @@ export default function ProjectsPage() {
 
     try {
       // セッション確認（Safari対策: 匿名セッションが切れている場合に再取得）
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        await supabase.auth.signInAnonymously();
-      }
-
       const currentUser = useAuthStore.getState().user;
       const ownerId = currentUser ? currentUser.id : null;
-      // Phase 0b: 新規 project に company_id を付与
-      const companyId = useAuthStore.getState().currentCompanyId ?? DEFAULT_COMPANY_ID;
+      // Day 7 commit B: currentCompanyId をそのまま使う (= ID 認証なら個別 company の id、
+      // メアド/Google なら NULL)。 RLS で owner_id ベースのフィルタが効くため、
+      // company_id は単に保存するだけで参照系は不要。
+      const companyId = useAuthStore.getState().currentCompanyId;
 
       const { data, error } = await supabase
         .from('projects')
