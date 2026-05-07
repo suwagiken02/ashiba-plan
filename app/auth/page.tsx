@@ -10,6 +10,8 @@ function AuthPageInner() {
   const searchParams = useSearchParams();
   // 改善 11: サインアップ後のリダイレクト先 /auth?signup=success で完了 banner 表示
   const showSignupSuccess = searchParams.get('signup') === 'success';
+  // PW リセット 改善: PW 更新後のリダイレクト先 /auth?reset=success で完了 banner 表示
+  const showResetSuccess = searchParams.get('reset') === 'success';
   const { signIn, signUp, signInWithGoogle, signUpWithId, signInWithId } = useAuthStore();
   // 改善 15b-2: mode 5 値拡張 (= ログイン + サインアップ方式選択 + 各方式画面)。
   // 'signup-method' = メールアドレス使う/使わないの方式選択画面、
@@ -232,6 +234,14 @@ function AuthPageInner() {
           <div className="mb-5 bg-success/15 border border-success/40 rounded-lg p-3 text-center">
             <p className="text-sm font-bold text-success mb-1">✅ アカウント作成完了</p>
             <p className="text-xs text-dimension">続けてログインしてください</p>
+          </div>
+        )}
+
+        {/* PW リセット 改善: PW 更新完了 banner (= /auth?reset=success アクセス時のみ) */}
+        {showResetSuccess && (
+          <div className="mb-5 bg-success/15 border border-success/40 rounded-lg p-3 text-center">
+            <p className="text-sm font-bold text-success mb-1">✅ パスワードを変更しました</p>
+            <p className="text-xs text-dimension">新しいパスワードでログインしてください</p>
           </div>
         )}
 

@@ -150,6 +150,22 @@ export default function RecoverPage() {
           </div>
         ) : (
           <>
+            {/* PW リセット 改善: メールアドレスで復旧 (= /auth/reset-password へ遷移、
+                メアド/PW ユーザー用)。 ID/PW + PIN ユーザーは下のタブで復旧。 */}
+            <button
+              type="button"
+              onClick={() => router.push('/auth/reset-password')}
+              className="w-full mb-4 py-3 bg-dark-surface border border-dark-border text-canvas font-bold rounded-lg hover:bg-dark-border transition-colors"
+            >
+              メールアドレスで復旧する
+            </button>
+
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-dark-border"></div>
+              <span className="text-xs text-dimension">または ID で復旧</span>
+              <div className="flex-1 h-px bg-dark-border"></div>
+            </div>
+
             {/* タブバー (= /auth と同じスタイル) */}
             <div className="flex gap-1 mb-5 bg-dark-surface border border-dark-border rounded-lg p-1">
               <button
