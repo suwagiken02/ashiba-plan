@@ -11,11 +11,18 @@ export default function AuthPage() {
   // 改善 11: サインアップ後のリダイレクト先 /auth?signup=success で完了 banner 表示
   const showSignupSuccess = searchParams.get('signup') === 'success';
   const { signIn, signUp, signInWithGoogle, signUpWithId, signInWithId } = useAuthStore();
-  // Step 2c: ログイン / サインアップ モード切替 (= isSignUp と setIsSignUp は派生で温存)
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
-  const isSignUp = mode === 'signup';
-  const setIsSignUp = (val: boolean) => setMode(val ? 'signup' : 'login');
-  const [activeTab, setActiveTab] = useState<'email' | 'id'>('email');
+  // 改善 15b-2: mode 5 値拡張 (= ログイン + サインアップ方式選択 + 各方式画面)。
+  // 'signup-method' = メールアドレス使う/使わないの方式選択画面、
+  // 'signup-email' = メールアドレスサインアップ詳細フォーム、
+  // 'signup-id-intro' = ID 説明画面、 'signup-id-form' = ID サインアップ詳細フォーム。
+  const [mode, setMode] = useState<
+    'login' | 'signup-method' | 'signup-email' | 'signup-id-intro' | 'signup-id-form'
+  >('login');
+  // 既存 JSX の isSignUp 参照 (= 確認入力 JSX 等) を互換性維持。
+  // signup-method / signup-id-intro 状態では確認入力 JSX 不要なので false。
+  const isSignUp = mode === 'signup-email' || mode === 'signup-id-form';
+  // setIsSignUp(true) → サインアップ方式選択画面へ。 setIsSignUp(false) → ログインへ。
+  const setIsSignUp = (val: boolean) => setMode(val ? 'signup-method' : 'login');
   const [email, setEmail] = useState('');
   const [confirmEmail, setConfirmEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -95,23 +102,19 @@ export default function AuthPage() {
     }
     setLoading(true);
 
-    let err: string | null;
-    if (isSignUp) {
-      err = await signUp(email, password);
-    } else {
-      err = await signIn(email, password);
-    }
+    // 改善 15b-2: ログイン分岐 (= else { signIn(...) }) は handleUnifiedLogin が
+    // 担当するため削除。 本 handler はメアド/PW サインアップ専用 (= isSignUp 常に true)。
+    const err = await signUp(email, password);
 
     if (err) {
       setError(err);
       setLoading(false);
     } else {
-      // 改善 14: 同一ページ内 URL 変更 (= /auth → /auth?signup=success) では
-      // コンポーネントがアンマウントされず state が残存するため、 明示的に loading リセット。
+      // 改善 14: 同一ページ内 URL 変更で state 残存 → 明示的に loading リセット。
       setLoading(false);
-      // 改善 15: サインアップ成功時はフォーム state を完全リセット + ログインモードに切替
-      // (= 同一ページ内遷移ではフォーム値が残るため、 明示的にクリア)。
-      // activeTab は据え置き (= ユーザーが選んだ認証方式を覚えておく UX)。
+      // 改善 15: サインアップ成功時はフォーム state を完全リセット + ログインモードに切替。
+      // 注: 既存の if (isSignUp) ラップ (= サインアップ専用化により常に true) は
+      // commit 15b-3 のリファクタで削除予定。
       if (isSignUp) {
         setMode('login');
         setEmail('');
@@ -128,8 +131,8 @@ export default function AuthPage() {
         setPin('');
         setConfirmPin('');
       }
-      // 改善 11: サインアップ時は /auth?signup=success へ (= 完了 banner 表示)、 ログイン時は /projects へ
-      router.replace(isSignUp ? '/auth?signup=success' : '/projects');
+      // 改善 11: サインアップ完了 → /auth?signup=success (= 完了 banner 表示)
+      router.replace('/auth?signup=success');
     }
   };
 
@@ -171,7 +174,7 @@ export default function AuthPage() {
     } else {
       // 改善 14: 同一ページ内 URL 変更で state 残存 → 明示的に loading リセット。
       setLoading(false);
-      // 改善 15: フォーム state 完全リセット + ログインモードに切替 (= activeTab は据え置き)
+      // 改善 15: フォーム state 完全リセット + ログインモードに切替
       setMode('login');
       setEmail('');
       setConfirmEmail('');
@@ -337,67 +340,79 @@ export default function AuthPage() {
           </>
         )}
 
-        {/* 改善 15b-1: サインアップ時のみ既存のタブ + 個別フォーム表示 (= ラッパー開始)。
-            commit 15b-2 でサインアップ方式選択 + ID 説明画面に置き換え予定。 */}
-        {mode === 'signup' && (
+        {/* 改善 15b-2: signup-method 画面 (= サインアップ方式選択) */}
+        {mode === 'signup-method' && (
           <>
-        {/* タブバー (= mode 共通、 ラベルはシンプル化) */}
-        <div className="flex gap-1 mb-5 bg-dark-surface border border-dark-border rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => { setActiveTab('email'); setError(''); }}
-            className={`flex-1 py-2 rounded-md text-xs font-bold transition-colors ${
-              activeTab === 'email' ? 'bg-accent text-white' : 'text-dimension'
-            }`}
-          >
-            メールアドレス
-          </button>
-          <button
-            type="button"
-            onClick={() => { setActiveTab('id'); setError(''); }}
-            className={`flex-1 py-2 rounded-md text-xs font-bold transition-colors ${
-              activeTab === 'id' ? 'bg-accent text-white' : 'text-dimension'
-            }`}
-          >
-            ID
-          </button>
-        </div>
-
-        {activeTab === 'email' && (
-          <>
-            {/* Google OAuth ログイン */}
+            <div className="text-center mb-6 text-sm text-dimension">
+              アカウント作成方法を選択してください
+            </div>
             <button
               type="button"
-              onClick={async () => {
-                setError('');
-                setLoading(true);
-                const err = await signInWithGoogle();
-                if (err) {
-                  setError(err);
-                  setLoading(false);
-                }
-                // 成功時は Supabase が OAuth プロバイダーへリダイレクトするため
-                // ここから先は実行されない (= /auth/callback に戻ってきて続きを処理)
-              }}
-              disabled={loading}
-              className="w-full py-3 mb-4 bg-white text-gray-700 font-bold rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+              onClick={() => { setMode('signup-email'); setError(''); }}
+              className="w-full mb-3 py-3 bg-accent text-white font-bold rounded-lg hover:bg-blue-600 transition-colors"
             >
-              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
-                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
-                <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
-                <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
-                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
-              </svg>
-              Google でログイン
+              メールアドレスでアカウントを作る
             </button>
+            <button
+              type="button"
+              onClick={() => { setMode('signup-id-intro'); setError(''); }}
+              className="w-full mb-3 py-3 bg-dark-surface border border-dark-border text-canvas font-bold rounded-lg hover:bg-dark-border transition-colors"
+            >
+              メールアドレスを使わずにアカウントを作る
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('login'); setError(''); }}
+              className="w-full mt-2 py-2 text-accent text-xs hover:underline"
+            >
+              ← ログインに戻る
+            </button>
+          </>
+        )}
 
-            {/* 区切り線 */}
-            <div className="flex items-center gap-3 mb-4">
-              <div className="flex-1 h-px bg-dark-border"></div>
-              <span className="text-xs text-dimension">または</span>
-              <div className="flex-1 h-px bg-dark-border"></div>
+        {/* 改善 15b-2: signup-id-intro 画面 (= ID 説明文言、 確定済) */}
+        {mode === 'signup-id-intro' && (
+          <>
+            <h2 className="text-lg font-bold mb-3">ID とは</h2>
+            <div className="mb-5 text-sm text-dimension leading-relaxed space-y-2">
+              <p>ご自身で決めるログイン用の名前です (= メールアドレスの代わり)。</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>半角の英字、 数字、 「_」 「-」 が使えます</li>
+                <li>3〜32 文字</li>
+                <li>例: yamada01、 suwagiken02</li>
+              </ul>
+              <p className="text-xs">
+                ※ パスワードを忘れたときは、 ID + 姓 + 名 + 生年月日 + 4 桁 PIN で
+                復旧できます。 メールアドレスの登録は不要です。
+              </p>
             </div>
+            <button
+              type="button"
+              onClick={() => { setMode('signup-id-form'); setError(''); }}
+              className="w-full mb-3 py-3 bg-accent text-white font-bold rounded-lg hover:bg-blue-600 transition-colors"
+            >
+              次へ
+            </button>
+            <button
+              type="button"
+              onClick={() => { setMode('signup-method'); setError(''); }}
+              className="w-full mt-2 py-2 text-accent text-xs hover:underline"
+            >
+              ← 戻る
+            </button>
+          </>
+        )}
 
+        {/* 改善 15b-2: メアド/PW or ID/PW のサインアップ詳細フォーム表示。
+            commit 15b-3 のリファクタで 個別 mode ラップに整理予定 (= ラッパー削除可能)。 */}
+        {(mode === 'signup-email' || mode === 'signup-id-form') && (
+          <>
+        {/* 改善 15b-2: メアド/PW サインアップ詳細フォーム (= 旧 activeTab === 'email')。
+            内部の Google ボタン + 区切り線は メッセージ 3 で削除予定。 */}
+        {mode === 'signup-email' && (
+          <>
+            {/* 改善 15b-2: サインアップ画面の Google ボタン削除 (= 「Google でログイン」 文言が
+                サインアップ画面で混乱招くため、 ログイン画面の統一フォーム上のみに残す)。 */}
             <form onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-sm text-dimension mb-1">メールアドレス</label>
@@ -470,7 +485,8 @@ export default function AuthPage() {
           </>
         )}
 
-        {activeTab === 'id' && (
+        {/* 改善 15b-2: ID/PW サインアップ詳細フォーム (= 旧 activeTab === 'id') */}
+        {mode === 'signup-id-form' && (
           <form onSubmit={handleIdSubmit} className="space-y-4">
             <div>
               <label className="block text-sm text-dimension mb-1">ID</label>
@@ -645,27 +661,21 @@ export default function AuthPage() {
               {loading ? '処理中...' : isSignUp ? 'アカウント作成' : 'ログイン'}
             </button>
 
-            {/* ID/PW を忘れたとき → /auth/recover (= Day 4-5 Step 3) */}
-            {!isSignUp && (
-              <button
-                type="button"
-                onClick={() => router.push('/auth/recover')}
-                className="w-full py-2 text-accent text-xs hover:underline"
-              >
-                ID / パスワードを忘れた
-              </button>
-            )}
           </form>
         )}
           </>
         )}
 
-        <button
-          onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
-          className="w-full mt-4 py-3 text-accent text-sm hover:underline"
-        >
-          {isSignUp ? 'アカウントをお持ちの方はログイン' : '新規アカウント作成'}
-        </button>
+        {/* 改善 15b-2: ログイン or サインアップ詳細フォーム時のみ表示。
+            signup-method / signup-id-intro 画面では各画面内の「← 戻る」 リンクが担当。 */}
+        {(mode === 'login' || isSignUp) && (
+          <button
+            onClick={() => { setIsSignUp(!isSignUp); setError(''); }}
+            className="w-full mt-4 py-3 text-accent text-sm hover:underline"
+          >
+            {isSignUp ? 'アカウントをお持ちの方はログイン' : '新規アカウント作成'}
+          </button>
+        )}
       </div>
 
       {/* PIN-生年月日 同一警告 Modal (= showLockedAlert パターン、 z-[70]) */}
