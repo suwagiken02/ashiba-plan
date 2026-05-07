@@ -38,7 +38,47 @@ export default function AuthPage() {
   const [showPinWarning, setShowPinWarning] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // 改善 15b-1: 統一ログインフォーム用 (= 「ID もしくはメールアドレス」 の入力値)
+  const [identifier, setIdentifier] = useState('');
 
+  /**
+   * 改善 15b-1: 統一ログイン handler (= 「ID もしくはメールアドレス」 + パスワード)。
+   *
+   * identifier に `@` が含まれていればメールアドレスログイン (= signIn) として処理、
+   * 含まれていなければ ID ログイン (= signInWithId) として処理。
+   *
+   * ID のバリデーション (= 半角英数字 + アンダースコア + ハイフン、 既存の pattern) は
+   * `@` を含まないため、 単純な `.includes('@')` で完全に区別可能。
+   *
+   * 成功時 else でも setLoading(false) を明示 (= 改善 14/15a パターンと整合、
+   * 同一ページ内 router.replace で state リセットされない問題への保険)。
+   */
+  const handleUnifiedLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    const isEmail = identifier.includes('@');
+    const err = isEmail
+      ? await signIn(identifier, password)
+      : await signInWithId(identifier, password);
+
+    if (err) {
+      setError(err);
+      setLoading(false);
+    } else {
+      setLoading(false);
+      router.replace('/projects');
+    }
+  };
+
+  /**
+   * メールアドレス/パスワードのサインアップ + ログイン用 handler。
+   * 改善 15b-1 (= ログインフォーム統一) 後、 ログインは handleUnifiedLogin が担当するため、
+   * 本 handler の if (!isSignUp) 分岐は実質デッドコード (= mode === 'login' 時の JSX で
+   * handleUnifiedLogin が onSubmit に指定されるため、 ここの else が呼ばれなくなる)。
+   * 完全削除は commit 15b-2 のリファクタで対応予定。
+   */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -214,6 +254,93 @@ export default function AuthPage() {
           </div>
         )}
 
+        {/* 改善 15b-1: ログイン時は統一フォーム (= ID もしくはメールアドレス + パスワード)。
+            タブを廃止し、 identifier に @ を含むかで自動判別 (= handleUnifiedLogin)。 */}
+        {mode === 'login' && (
+          <>
+            {/* Google OAuth ログイン (= 既存と同じ実装、 統一フォームの上に配置) */}
+            <button
+              type="button"
+              onClick={async () => {
+                setError('');
+                setLoading(true);
+                const err = await signInWithGoogle();
+                if (err) {
+                  setError(err);
+                  setLoading(false);
+                }
+              }}
+              disabled={loading}
+              className="w-full py-3 mb-4 bg-white text-gray-700 font-bold rounded-lg border border-gray-300 hover:bg-gray-50 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+            >
+              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4"/>
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853"/>
+                <path d="M3.964 10.71A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.958L3.964 7.29C4.672 5.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+              </svg>
+              Google でログイン
+            </button>
+
+            {/* 区切り線 */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex-1 h-px bg-dark-border"></div>
+              <span className="text-xs text-dimension">または</span>
+              <div className="flex-1 h-px bg-dark-border"></div>
+            </div>
+
+            <form onSubmit={handleUnifiedLogin} className="space-y-4">
+              <div>
+                <label className="block text-sm text-dimension mb-1">ID もしくはメールアドレス</label>
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  className="w-full px-4 py-3 bg-dark-surface border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                  placeholder="suwaniki01 もしくは suwaniki@mail.com"
+                  autoComplete="username"
+                  required
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-dimension mb-1">パスワード</label>
+                <PasswordInput
+                  value={password}
+                  onChange={setPassword}
+                  placeholder="パスワード"
+                  required
+                />
+              </div>
+
+              {error && (
+                <p className="text-red-400 text-sm">{error}</p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-accent text-white font-bold rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
+              >
+                {loading ? '処理中...' : 'ログイン'}
+              </button>
+            </form>
+
+            {/* ID / パスワードを忘れた → /auth/recover (= Day 4-5 Step 3) */}
+            <button
+              type="button"
+              onClick={() => router.push('/auth/recover')}
+              className="w-full mt-2 py-2 text-accent text-xs hover:underline"
+            >
+              ID / パスワードを忘れた
+            </button>
+          </>
+        )}
+
+        {/* 改善 15b-1: サインアップ時のみ既存のタブ + 個別フォーム表示 (= ラッパー開始)。
+            commit 15b-2 でサインアップ方式選択 + ID 説明画面に置き換え予定。 */}
+        {mode === 'signup' && (
+          <>
         {/* タブバー (= mode 共通、 ラベルはシンプル化) */}
         <div className="flex gap-1 mb-5 bg-dark-surface border border-dark-border rounded-lg p-1">
           <button
@@ -529,6 +656,8 @@ export default function AuthPage() {
               </button>
             )}
           </form>
+        )}
+          </>
         )}
 
         <button
