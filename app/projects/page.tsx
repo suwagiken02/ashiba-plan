@@ -19,6 +19,17 @@ export default function ProjectsPage() {
   const [newAddress, setNewAddress] = useState('');
   const [creating, setCreating] = useState(false);
 
+  // Phase 3b: プロジェクト共有 URL モーダル用 state
+  const [shareModal, setShareModal] = useState<{
+    open: boolean;
+    projectId: string | null;
+  }>({ open: false, projectId: null });
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [shareExpiresAt, setShareExpiresAt] = useState<string | null>(null);
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareError, setShareError] = useState('');
+  const [copied, setCopied] = useState(false);
+
   const loadProjects = useCallback(async () => {
     // Day 7 commit B: company_id フィルタは削除。 RLS (= auth.uid() = owner_id) で
     // 自動的に自分の projects のみ取得される。
@@ -120,6 +131,46 @@ export default function ProjectsPage() {
     await supabase.from('drawings').delete().eq('project_id', id);
     await supabase.from('projects').delete().eq('id', id);
     setProjects((prev) => prev.filter((p) => p.id !== id));
+  };
+
+  // Phase 3b: 共有 URL 発行 (= POST /api/share/create)
+  const handleShare = async (projectId: string) => {
+    setShareModal({ open: true, projectId });
+    setShareUrl(null);
+    setShareExpiresAt(null);
+    setShareError('');
+    setCopied(false);
+    setShareLoading(true);
+    try {
+      const res = await fetch('/api/share/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ projectId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setShareError(data.error || '共有 URL の発行に失敗しました');
+      } else {
+        setShareUrl(`${window.location.origin}/share/${data.token}`);
+        setShareExpiresAt(data.expiresAt);
+      }
+    } catch (e) {
+      setShareError(e instanceof Error ? e.message : '共有 URL の発行に失敗しました');
+    } finally {
+      setShareLoading(false);
+    }
+  };
+
+  // Phase 3b: 共有 URL を clipboard にコピー
+  const handleCopy = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShareError('コピーに失敗しました。 URL を選択して手動でコピーしてください。');
+    }
   };
 
   const openProject = async (projectId: string) => {
@@ -230,6 +281,12 @@ export default function ProjectsPage() {
                     </p>
                   </div>
                   <button
+                    onClick={(e) => { e.stopPropagation(); handleShare(project.id); }}
+                    className="ml-2 px-3 py-1 text-xs text-accent hover:bg-accent/10 rounded-lg"
+                  >
+                    共有
+                  </button>
+                  <button
                     onClick={(e) => { e.stopPropagation(); deleteProject(project.id); }}
                     className="ml-2 px-3 py-1 text-xs text-red-400 hover:bg-red-400/10 rounded-lg"
                   >
@@ -297,6 +354,66 @@ export default function ProjectsPage() {
                 {creating ? '作成中...' : '作成'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3b: 共有 URL モーダル */}
+      {shareModal.open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 modal-overlay" onClick={() => setShareModal({ open: false, projectId: null })} />
+          <div className="relative bg-dark-surface border border-dark-border rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-bold mb-4">共有 URL</h2>
+
+            {shareLoading && (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin w-6 h-6 border-2 border-accent border-t-transparent rounded-full" />
+              </div>
+            )}
+
+            {shareUrl && (
+              <>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={shareUrl}
+                    readOnly
+                    onFocus={(e) => e.target.select()}
+                    className="flex-1 px-3 py-2 bg-dark-bg border border-dark-border rounded-lg text-canvas text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className="px-4 py-2 bg-accent text-white rounded-lg text-sm font-bold whitespace-nowrap"
+                  >
+                    {copied ? 'コピー済' : 'コピー'}
+                  </button>
+                </div>
+                <p className="text-xs text-dimension mb-2">
+                  この URL を共有相手に送ってください。 7 日間有効です。
+                  受信者はログイン後にプロジェクトとして取り込めます。
+                </p>
+                {shareExpiresAt && (
+                  <p className="text-xs text-dimension mb-4">
+                    有効期限: {new Date(shareExpiresAt).toLocaleDateString('ja-JP', {
+                      year: 'numeric', month: 'long', day: 'numeric'
+                    })}
+                  </p>
+                )}
+              </>
+            )}
+
+            {shareError && (
+              <p className="text-red-400 text-sm mb-4">{shareError}</p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShareModal({ open: false, projectId: null })}
+              className="w-full py-2 text-accent text-sm hover:underline"
+            >
+              閉じる
+            </button>
           </div>
         </div>
       )}
