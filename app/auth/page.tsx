@@ -89,16 +89,14 @@ export default function AuthPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    if (isSignUp) {
-      // 確認入力チェック (= メアド/PW サインアップ時のみ、 不一致なら error + return)
-      if (email !== confirmEmail) {
-        setError('メールアドレスが一致しません');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError('パスワードが一致しません');
-        return;
-      }
+    // 改善 15b-3: 確認入力チェック (= サインアップ専用化、 不一致なら error + return)
+    if (email !== confirmEmail) {
+      setError('メールアドレスが一致しません');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('パスワードが一致しません');
+      return;
     }
     setLoading(true);
 
@@ -113,24 +111,20 @@ export default function AuthPage() {
       // 改善 14: 同一ページ内 URL 変更で state 残存 → 明示的に loading リセット。
       setLoading(false);
       // 改善 15: サインアップ成功時はフォーム state を完全リセット + ログインモードに切替。
-      // 注: 既存の if (isSignUp) ラップ (= サインアップ専用化により常に true) は
-      // commit 15b-3 のリファクタで削除予定。
-      if (isSignUp) {
-        setMode('login');
-        setEmail('');
-        setConfirmEmail('');
-        setPassword('');
-        setConfirmPassword('');
-        setUsername('');
-        setConfirmUsername('');
-        setLastName('');
-        setFirstName('');
-        setBirthYear(currentYear - 30);
-        setBirthMonth(1);
-        setBirthDay(1);
-        setPin('');
-        setConfirmPin('');
-      }
+      setMode('login');
+      setEmail('');
+      setConfirmEmail('');
+      setPassword('');
+      setConfirmPassword('');
+      setUsername('');
+      setConfirmUsername('');
+      setLastName('');
+      setFirstName('');
+      setBirthYear(currentYear - 30);
+      setBirthMonth(1);
+      setBirthDay(1);
+      setPin('');
+      setConfirmPin('');
       // 改善 11: サインアップ完了 → /auth?signup=success (= 完了 banner 表示)
       router.replace('/auth?signup=success');
     }
@@ -196,49 +190,33 @@ export default function AuthPage() {
 
   const handleIdSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSignUp) {
-      // 確認入力チェック (= 不一致なら error + submit ブロック、 ボタン無効化はしない)
-      if (username !== confirmUsername) {
-        setError('ID が一致しません');
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError('パスワードが一致しません');
-        return;
-      }
-      if (pin !== confirmPin) {
-        setError('PIN が一致しません');
-        return;
-      }
-      // 生年月日 妥当性チェック (= 2 月 30 日 等を弾く)
-      if (!isValidDate(birthYear, birthMonth, birthDay)) {
-        setError('生年月日が正しくありません (= 月の日数を確認してください)');
-        return;
-      }
-      // クライアント側 早期警告判定 (= サーバーラウンドトリップ削減)
-      const birthDateStr = buildBirthDateStr(birthYear, birthMonth, birthDay);
-      if (isPinMatchingBirthDate(pin, birthDateStr)) {
-        setError('');
-        setShowPinWarning(true);
-        return;
-      }
-      await submitIdSignUp(false);
-    } else {
-      // ログイン (= 確認入力なし)
-      setError('');
-      setLoading(true);
-      const err = await signInWithId(username, password);
-      if (err) {
-        setError(err);
-        setLoading(false);
-      } else {
-        // 改善 14: 一貫性のため明示的に loading リセット
-        // (= ログイン時は /projects 別ページ遷移でアンマウントされるが、
-        //  将来 /projects が React で再マウントしない設計に変わった時の保険)
-        setLoading(false);
-        router.replace('/projects');
-      }
+    // 改善 15b-3: ログイン分岐削除 (= mode === 'signup-id-form' でのみ呼ばれるサインアップ専用)。
+    // 確認入力チェック (= 不一致なら error + submit ブロック、 ボタン無効化はしない)
+    if (username !== confirmUsername) {
+      setError('ID が一致しません');
+      return;
     }
+    if (password !== confirmPassword) {
+      setError('パスワードが一致しません');
+      return;
+    }
+    if (pin !== confirmPin) {
+      setError('PIN が一致しません');
+      return;
+    }
+    // 生年月日 妥当性チェック (= 2 月 30 日 等を弾く)
+    if (!isValidDate(birthYear, birthMonth, birthDay)) {
+      setError('生年月日が正しくありません (= 月の日数を確認してください)');
+      return;
+    }
+    // クライアント側 早期警告判定 (= サーバーラウンドトリップ削減)
+    const birthDateStr = buildBirthDateStr(birthYear, birthMonth, birthDay);
+    if (isPinMatchingBirthDate(pin, birthDateStr)) {
+      setError('');
+      setShowPinWarning(true);
+      return;
+    }
+    await submitIdSignUp(false);
   };
 
   return (
@@ -403,12 +381,9 @@ export default function AuthPage() {
           </>
         )}
 
-        {/* 改善 15b-2: メアド/PW or ID/PW のサインアップ詳細フォーム表示。
-            commit 15b-3 のリファクタで 個別 mode ラップに整理予定 (= ラッパー削除可能)。 */}
-        {(mode === 'signup-email' || mode === 'signup-id-form') && (
-          <>
-        {/* 改善 15b-2: メアド/PW サインアップ詳細フォーム (= 旧 activeTab === 'email')。
-            内部の Google ボタン + 区切り線は メッセージ 3 で削除予定。 */}
+        {/* 改善 15b-3: 既存ラッパー削除、 個別 mode ラップに分解。
+            ラッパー削除に伴うインデント整理は別タスク (= prettier 未設定のため)。 */}
+        {/* 改善 15b-2: メアド/PW サインアップ詳細フォーム (= 旧 activeTab === 'email') */}
         {mode === 'signup-email' && (
           <>
             {/* 改善 15b-2: サインアップ画面の Google ボタン削除 (= 「Google でログイン」 文言が
@@ -663,8 +638,7 @@ export default function AuthPage() {
 
           </form>
         )}
-          </>
-        )}
+        {/* 改善 15b-3: 既存ラッパー閉じ削除済 */}
 
         {/* 改善 15b-2: ログイン or サインアップ詳細フォーム時のみ表示。
             signup-method / signup-id-intro 画面では各画面内の「← 戻る」 リンクが担当。 */}
