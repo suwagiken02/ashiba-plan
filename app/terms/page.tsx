@@ -232,7 +232,13 @@ export default function TermsPage() {
 
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => {
+            if (typeof window !== 'undefined' && window.history.length > 1) {
+              router.back();
+            } else {
+              router.push('/');
+            }
+          }}
           className="mt-8 w-full py-3 text-accent text-sm hover:underline"
         >
           ← 戻る
