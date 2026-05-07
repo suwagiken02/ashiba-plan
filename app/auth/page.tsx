@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import PasswordInput from '@/components/ui/PasswordInput';
 
-export default function AuthPage() {
+function AuthPageInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
   // 改善 11: サインアップ後のリダイレクト先 /auth?signup=success で完了 banner 表示
@@ -683,5 +683,16 @@ export default function AuthPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// Vercel build fix: useSearchParams は Suspense boundary 内で実行する必要があるため、
+// 関数本体を AuthPageInner に切り出し、 export default は Suspense wrapper に。
+// 参照: https://nextjs.org/docs/messages/missing-suspense-with-csr-bailout
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center min-h-screen p-4" />}>
+      <AuthPageInner />
+    </Suspense>
   );
 }
