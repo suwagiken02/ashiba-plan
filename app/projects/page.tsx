@@ -173,6 +173,27 @@ export default function ProjectsPage() {
     }
   };
 
+  // Phase 3e: URL 貼り付け取り込み (= LINE 等で受け取った URL から token 抽出 + navigate)
+  const SHARE_URL_REGEX = /\/share\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+  const [pasteModal, setPasteModal] = useState(false);
+  const [pasteUrl, setPasteUrl] = useState('');
+  const [pasteError, setPasteError] = useState('');
+
+  const handlePasteUrl = () => {
+    setPasteError('');
+    const trimmed = pasteUrl.trim();
+    if (!trimmed) {
+      setPasteError('URL を入力してください');
+      return;
+    }
+    const match = trimmed.match(SHARE_URL_REGEX);
+    if (!match) {
+      setPasteError('正しい共有 URL を入力してください');
+      return;
+    }
+    router.push(`/share/${match[1]}`);
+  };
+
   const openProject = async (projectId: string) => {
     const { data } = await supabase
       .from('drawings')
@@ -251,9 +272,18 @@ export default function ProjectsPage() {
         <button
           type="button"
           onClick={() => setShowNewModal(true)}
-          className="w-full mb-6 py-4 bg-accent text-white font-bold rounded-xl text-lg hover:bg-blue-600 transition-colors"
+          className="w-full mb-3 py-4 bg-accent text-white font-bold rounded-xl text-lg hover:bg-blue-600 transition-colors"
         >
           + 新規プロジェクト作成
+        </button>
+
+        {/* Phase 3e: URL 貼り付け取り込みボタン (= secondary、 dark-surface 背景) */}
+        <button
+          type="button"
+          onClick={() => { setPasteModal(true); setPasteUrl(''); setPasteError(''); }}
+          className="w-full mb-6 py-4 bg-dark-surface border border-dark-border text-canvas font-bold rounded-xl text-lg hover:bg-dark-border transition-colors"
+        >
+          URL から取り込み
         </button>
 
         {/* プロジェクト一覧 */}
@@ -414,6 +444,54 @@ export default function ProjectsPage() {
             >
               閉じる
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Phase 3e: URL 貼り付け取り込みモーダル */}
+      {pasteModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 modal-overlay" onClick={() => setPasteModal(false)} />
+          <div className="relative bg-dark-surface border border-dark-border rounded-2xl p-6 w-full max-w-sm">
+            <h2 className="text-lg font-bold mb-4">URL から取り込み</h2>
+
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="block text-sm text-dimension mb-1">共有 URL</label>
+                <input
+                  type="text"
+                  value={pasteUrl}
+                  onChange={(e) => setPasteUrl(e.target.value)}
+                  placeholder="https://ashiba-plan.vercel.app/share/..."
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas text-sm focus:outline-none focus:border-accent"
+                />
+                <p className="mt-1 text-[10px] text-dimension">
+                  送られた共有 URL をここに貼り付けてください。
+                </p>
+              </div>
+            </div>
+
+            {pasteError && (
+              <p className="text-red-400 text-sm mb-4">{pasteError}</p>
+            )}
+
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setPasteModal(false)}
+                className="flex-1 py-3 bg-dark-bg border border-dark-border rounded-lg text-dimension"
+              >
+                キャンセル
+              </button>
+              <button
+                type="button"
+                onClick={handlePasteUrl}
+                disabled={!pasteUrl.trim()}
+                className="flex-1 py-3 bg-accent text-white font-bold rounded-lg disabled:opacity-50"
+              >
+                開く
+              </button>
+            </div>
           </div>
         </div>
       )}
