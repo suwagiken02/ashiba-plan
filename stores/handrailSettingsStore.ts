@@ -8,6 +8,13 @@ import { HandrailLengthMm, DEFAULT_ENABLED_SIZES, ALL_HANDRAIL_SIZES, PriorityCo
 /** Phase 0b: 現在の company_id を取得（authStore 未ロード時は Default Company にフォールバック） */
 const getCompanyId = () => useAuthStore.getState().currentCompanyId ?? DEFAULT_COMPANY_ID;
 
+/** Day 7 commit C: 現在ユーザーの owner_id を取得 (= 認証必須、 ANON 時は null)。
+ *  null 返却時は呼び出し側で console.error + 早期 return (= middleware で防がれる前提)。 */
+const getOwnerId = (): string | null => {
+  const uid = useAuthStore.getState().user?.id;
+  return uid && uid !== 'anonymous' ? uid : null;
+};
+
 // Phase J-5: 寸法線の段別表示設定
 export type DimensionVisibility = {
   roof1F: boolean;
@@ -117,14 +124,10 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
 
   loadHandrailSettings: async () => {
     try {
-      // Phase 0b: company_id で絞り込み（owner_id null の既存レコードは Phase 0a で
-      // Default Company に backfill 済みのため、両条件マッチで動作維持）
-      const companyId = getCompanyId();
+      // Day 7 commit C: RLS で auto フィルタ (= auth.uid() = owner_id)、 自分のレコードのみ返る
       const { data, error } = await supabase
         .from('handrail_settings')
         .select('enabled_sizes, priority_config, dimension_visibility')
-        .is('owner_id', null)
-        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (error) {
@@ -168,13 +171,17 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
     const ordered = ALL_HANDRAIL_SIZES.filter(s => sizes.includes(s));
     set({ enabledSizes: ordered });
     try {
-      // Phase 0b: company_id で絞り込み。既存レコードを update、無ければ insert
+      // Day 7 commit C: 認証必須 (= ANON 時は middleware で防がれる前提)
+      const ownerId = getOwnerId();
+      if (!ownerId) {
+        console.error('[handrailSettings] save skipped: not authenticated');
+        return;
+      }
       const companyId = getCompanyId();
+      // Day 7 commit C: RLS で auto フィルタ。 既存レコードを update、 無ければ insert
       const { data: existing } = await supabase
         .from('handrail_settings')
         .select('id')
-        .is('owner_id', null)
-        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (existing?.id) {
@@ -185,7 +192,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
       } else {
         await supabase
           .from('handrail_settings')
-          .insert({ owner_id: null, company_id: companyId, enabled_sizes: ordered });
+          .insert({ owner_id: ownerId, company_id: companyId, enabled_sizes: ordered });
       }
     } catch (e) {
       console.warn('[handrailSettings] save exception:', e);
@@ -196,13 +203,17 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
     // 楽観的更新: 先に state を更新して UI 即応、失敗時はログのみ
     set({ priorityConfig: { ...config, order: [...config.order] } });
     try {
-      // Phase 0b: company_id で絞り込み
+      // Day 7 commit C: 認証必須 (= ANON 時は middleware で防がれる前提)
+      const ownerId = getOwnerId();
+      if (!ownerId) {
+        console.error('[handrailSettings] savePriorityConfig skipped: not authenticated');
+        return;
+      }
       const companyId = getCompanyId();
+      // Day 7 commit C: RLS で auto フィルタ。 既存レコードを update、 無ければ insert
       const { data: existing } = await supabase
         .from('handrail_settings')
         .select('id')
-        .is('owner_id', null)
-        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (existing?.id) {
@@ -213,7 +224,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
       } else {
         await supabase
           .from('handrail_settings')
-          .insert({ owner_id: null, company_id: companyId, priority_config: config });
+          .insert({ owner_id: ownerId, company_id: companyId, priority_config: config });
       }
     } catch (e) {
       console.warn('[handrailSettings] savePriorityConfig exception:', e);
@@ -245,12 +256,17 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
     const next = { ...cur, ...updates };
     set({ dimensionVisibility: next });
     try {
+      // Day 7 commit C: 認証必須 (= ANON 時は middleware で防がれる前提)
+      const ownerId = getOwnerId();
+      if (!ownerId) {
+        console.error('[handrailSettings] updateDimensionVisibility skipped: not authenticated');
+        return;
+      }
       const companyId = getCompanyId();
+      // Day 7 commit C: RLS で auto フィルタ。 既存レコードを update、 無ければ insert
       const { data: existing } = await supabase
         .from('handrail_settings')
         .select('id')
-        .is('owner_id', null)
-        .eq('company_id', companyId)
         .limit(1)
         .maybeSingle();
       if (existing?.id) {
@@ -261,7 +277,7 @@ export const useHandrailSettingsStore = create<HandrailSettingsStore>((set, get)
       } else {
         await supabase
           .from('handrail_settings')
-          .insert({ owner_id: null, company_id: companyId, dimension_visibility: next });
+          .insert({ owner_id: ownerId, company_id: companyId, dimension_visibility: next });
       }
     } catch (e) {
       console.warn('[handrailSettings] updateDimensionVisibility exception:', e);
