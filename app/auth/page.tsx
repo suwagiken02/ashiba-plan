@@ -50,6 +50,9 @@ function AuthPageInner() {
   // 改善 15b-1: 統一ログインフォーム用 (= 「ID もしくはメールアドレス」 の入力値)
   const [identifier, setIdentifier] = useState('');
 
+  // 利用規約 + プラポリ 同意チェック (= サインアップ専用、 mode === 'signup-email' / 'signup-id-form' の form で使用)
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+
   /**
    * 改善 15b-1: 統一ログイン handler (= 「ID もしくはメールアドレス」 + パスワード)。
    *
@@ -127,6 +130,7 @@ function AuthPageInner() {
       setBirthDay(1);
       setPin('');
       setConfirmPin('');
+      setAgreedToTerms(false);
       // 改善 11: サインアップ完了 → /auth?signup=success (= 完了 banner 表示)
       router.replace('/auth?signup=success');
     }
@@ -185,6 +189,7 @@ function AuthPageInner() {
       setBirthDay(1);
       setPin('');
       setConfirmPin('');
+      setAgreedToTerms(false);
       // 改善 11: ID/PW サインアップ後も /auth?signup=success へ (= 完了 banner 表示)
       router.replace('/auth?signup=success');
     }
@@ -459,9 +464,25 @@ function AuthPageInner() {
                 <p className="text-red-400 text-sm">{error}</p>
               )}
 
+              {/* 利用規約 + プラポリ 同意チェック (= サインアップ必須、 mode === 'signup-email' / 'signup-id-form' 共通 state) */}
+              <label className="flex items-start gap-2 text-sm text-dimension cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-1"
+                />
+                <span>
+                  <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">利用規約</a>
+                  と
+                  <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-accent hover:underline">プライバシーポリシー</a>
+                  に同意します
+                </span>
+              </label>
+
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || !agreedToTerms}
                 className="w-full py-3 bg-accent text-white font-bold rounded-lg hover:bg-blue-600 disabled:opacity-50 transition-colors"
               >
                 {loading ? '処理中...' : isSignUp ? 'アカウント作成' : 'ログイン'}

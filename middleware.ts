@@ -33,8 +33,12 @@ export async function middleware(req: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession();
 
   const path = req.nextUrl.pathname;
-  // 認証不要パス (= /auth および /api/auth で始まるパス)
-  const isPublicPath = path.startsWith('/auth') || path.startsWith('/api/auth');
+  // 認証不要パス (= /auth および /api/auth で始まるパス、 /terms と /privacy は完全一致)
+  const isPublicPath =
+    path.startsWith('/auth')
+    || path.startsWith('/api/auth')
+    || path === '/terms'
+    || path === '/privacy';
 
   // 未ログイン + 認証必須パス → /auth へリダイレクト
   if (!session && !isPublicPath) {
