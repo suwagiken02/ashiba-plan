@@ -16,9 +16,27 @@ const ITEMS: Array<{ key: keyof DimensionVisibility; label: string }> = [
   { key: 'scaffold2F', label: '2F 足場' },
 ];
 
-export default function DimensionVisibilityCheckboxes({ disabled = false }: { disabled?: boolean }) {
-  const dimensionVisibility = useHandrailSettingsStore(s => s.dimensionVisibility);
-  const updateDimensionVisibility = useHandrailSettingsStore(s => s.updateDimensionVisibility);
+type DimensionVisibilityCheckboxesProps = {
+  disabled?: boolean;
+  value?: DimensionVisibility;
+  onChange?: (updates: Partial<DimensionVisibility>) => void;
+};
+
+export default function DimensionVisibilityCheckboxes({ disabled = false, value, onChange }: DimensionVisibilityCheckboxesProps) {
+  const storeDimensionVisibility = useHandrailSettingsStore(s => s.dimensionVisibility);
+  const storeUpdate = useHandrailSettingsStore(s => s.updateDimensionVisibility);
+
+  // controlled 判定: value + onChange 両方渡されたら controlled mode (= /settings 画面)
+  // そうでなければ uncontrolled (= store 直接読み書き、 SettingsPanel + editor 右上 既存挙動維持)
+  const isControlled = value !== undefined && onChange !== undefined;
+  const dimensionVisibility = isControlled ? value : storeDimensionVisibility;
+  const handleChange = (updates: Partial<DimensionVisibility>) => {
+    if (isControlled) {
+      onChange!(updates);
+    } else {
+      storeUpdate(updates);
+    }
+  };
 
   return (
     <div className="grid grid-cols-2 gap-1.5">
@@ -39,7 +57,7 @@ export default function DimensionVisibilityCheckboxes({ disabled = false }: { di
               disabled={disabled}
               onChange={(e) => {
                 if (disabled) return;
-                updateDimensionVisibility({ [item.key]: e.target.checked });
+                handleChange({ [item.key]: e.target.checked });
               }}
               className="w-4 h-4 accent-accent shrink-0"
             />

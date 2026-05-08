@@ -73,11 +73,11 @@ function sanitize(raw: unknown): HandrailLengthMm[] {
   return raw.filter((v): v is HandrailLengthMm => typeof v === 'number' && valid.has(v));
 }
 
-/** チェック ON/OFF に応じて priorityConfig を調整
+/** チェック ON/OFF に応じて priorityConfig を調整 (= /settings 画面の local state 用に export)
  *  - OFF: order から該当サイズを除外末尾に移動、元セクションの Count を -1
  *  - ON: 未登録なら除外末尾に追加、登録済みなら位置維持
  */
-function adjustPriorityOnToggle(
+export function adjustPriorityOnToggle(
   cfg: PriorityConfig,
   size: HandrailLengthMm,
   nowEnabled: boolean,

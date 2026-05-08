@@ -179,17 +179,19 @@ function SortableSeparator({ kind }: { kind: SeparatorKind }) {
   );
 }
 
-export default function DraggablePriorityList() {
-  const priorityConfig = useHandrailSettingsStore((s) => s.priorityConfig);
-  const enabledSizes = useHandrailSettingsStore((s) => s.enabledSizes);
-  const savePriorityConfig = useHandrailSettingsStore((s) => s.savePriorityConfig);
+type DraggablePriorityListProps = {
+  value: PriorityConfig;
+  enabledSizes: HandrailLengthMm[];
+  onChange: (next: PriorityConfig) => void;
+};
 
+export default function DraggablePriorityList({ value, enabledSizes, onChange }: DraggablePriorityListProps) {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
-  const items = buildItems(priorityConfig);
+  const items = buildItems(value);
   const itemIds = items.map((it) => it.id);
   const enabledSet = new Set<HandrailLengthMm>(enabledSizes);
 
@@ -204,7 +206,7 @@ export default function DraggablePriorityList() {
     const moved = arrayMove(items, oldIndex, newIndex);
     const next = extractConfig(moved);
     if (!next) return; // 追い越し等の不変条件違反 → 変更なし (スナップバック)
-    savePriorityConfig(next);
+    onChange(next);
   };
 
   return (

@@ -1,22 +1,54 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
-import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
+import {
+  useHandrailSettingsStore,
+  adjustPriorityOnToggle,
+  DEFAULT_DIMENSION_VISIBILITY,
+  type DimensionVisibility,
+} from '@/stores/handrailSettingsStore';
 import { supabase } from '@/lib/supabase/client';
-import { ALL_HANDRAIL_SIZES } from '@/types';
+import {
+  ALL_HANDRAIL_SIZES,
+  DEFAULT_ENABLED_SIZES,
+  DEFAULT_PRIORITY_CONFIG,
+  type HandrailLengthMm,
+  type PriorityConfig,
+} from '@/types';
 import DraggablePriorityList from '@/components/settings/DraggablePriorityList';
 import DimensionVisibilityCheckboxes from '@/components/dimension/DimensionVisibilityCheckboxes';
 
 export default function SettingsPage() {
   const router = useRouter();
   const { user, profile, updateProfile } = useAuthStore();
-  const { enabledSizes, loading: handrailLoading, loadHandrailSettings, toggleSize } = useHandrailSettingsStore();
+  const {
+    enabledSizes: storeEnabledSizes,
+    priorityConfig: storePriorityConfig,
+    dimensionVisibility: storeDimensionVisibility,
+    loading: handrailLoading,
+    loadHandrailSettings,
+    saveHandrailSettings: storeSaveHandrailSettings,
+    savePriorityConfig: storeSavePriorityConfig,
+    updateDimensionVisibility: storeUpdateDimensionVisibility,
+  } = useHandrailSettingsStore();
+
+  // 既存 state
   const [companyName, setCompanyName] = useState('');
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [activeTab, setActiveTab] = useState<'enabled' | 'priority'>('enabled');
+
+  // Task A: 統一保存ボタン用 local state
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [enabledSizesLocal, setEnabledSizesLocal] = useState<HandrailLengthMm[]>([...DEFAULT_ENABLED_SIZES]);
+  const [priorityConfigLocal, setPriorityConfigLocal] = useState<PriorityConfig>({
+    ...DEFAULT_PRIORITY_CONFIG,
+    order: [...DEFAULT_PRIORITY_CONFIG.order],
+  });
+  const [dimensionVisibilityLocal, setDimensionVisibilityLocal] = useState<DimensionVisibility>({ ...DEFAULT_DIMENSION_VISIBILITY });
 
   useEffect(() => {
     if (profile) setCompanyName(profile.company_name || '');
@@ -27,32 +59,112 @@ export default function SettingsPage() {
     loadHandrailSettings();
   }, [loadHandrailSettings]);
 
-  const handleSave = async () => {
-    setSaving(true);
-    await updateProfile(companyName);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // Task A: store 値 → local state 同期 (= 初回ロード後 + 他箇所での変更追従)
+  useEffect(() => {
+    if (!handrailLoading) {
+      setEnabledSizesLocal([...storeEnabledSizes]);
+      setPriorityConfigLocal({ ...storePriorityConfig, order: [...storePriorityConfig.order] });
+      setDimensionVisibilityLocal({ ...storeDimensionVisibility });
+    }
+  }, [handrailLoading, storeEnabledSizes, storePriorityConfig, storeDimensionVisibility]);
+
+  // Task A: dirty 判定
+  const isDirty = useMemo(() => {
+    if (companyName !== (profile?.company_name || '')) return true;
+    if (logoFile !== null) return true;
+    // enabledSizes: 配列内容比較 (= sort 済比較)
+    const a = [...enabledSizesLocal].sort();
+    const b = [...storeEnabledSizes].sort();
+    if (a.length !== b.length || a.some((v, i) => v !== b[i])) return true;
+    // priorityConfig: order + counts
+    const pcl = priorityConfigLocal;
+    const pcs = storePriorityConfig;
+    if (pcl.mainCount !== pcs.mainCount || pcl.subCount !== pcs.subCount || pcl.adjustCount !== pcs.adjustCount) return true;
+    if (pcl.order.length !== pcs.order.length || pcl.order.some((v, i) => v !== pcs.order[i])) return true;
+    // dimensionVisibility: 全 key 比較
+    const dvKeys = Object.keys(dimensionVisibilityLocal) as (keyof DimensionVisibility)[];
+    if (dvKeys.some((k) => dimensionVisibilityLocal[k] !== storeDimensionVisibility[k])) return true;
+    return false;
+  }, [
+    companyName, profile, logoFile,
+    enabledSizesLocal, storeEnabledSizes,
+    priorityConfigLocal, storePriorityConfig,
+    dimensionVisibilityLocal, storeDimensionVisibility,
+  ]);
+
+  // Task A: 使用部材チェックボックス (= local state 更新 + adjustPriorityOnToggle で priorityConfig 連動)
+  const handleToggleSizeLocal = (size: HandrailLengthMm) => {
+    const wasOn = enabledSizesLocal.includes(size);
+    const next = wasOn
+      ? enabledSizesLocal.filter((s) => s !== size)
+      : [...enabledSizesLocal, size];
+    if (next.length === 0) return; // 全 OFF 防止
+    const ordered = ALL_HANDRAIL_SIZES.filter((s) => next.includes(s));
+    setEnabledSizesLocal(ordered);
+    // priorityConfig 連動 (= adjustPriorityOnToggle 経由、 store 動作再現)
+    const nextConfig = adjustPriorityOnToggle(priorityConfigLocal, size, !wasOn);
+    if (nextConfig !== priorityConfigLocal) {
+      setPriorityConfigLocal(nextConfig);
+    }
   };
 
-  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Task A: ロゴ ファイル選択 (= 案 b: 保存時 upload、 ここでは保持のみ)
+  const handleLogoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || !user) return;
+    if (!file) return;
+    setLogoFile(file);
+    // ローカル preview (= URL.createObjectURL)
+    const url = URL.createObjectURL(file);
+    setLogoPreviewUrl(url);
+  };
 
-    const ext = file.name.split('.').pop();
-    const path = `logos/${user.id}.${ext}`;
-    const { error } = await supabase.storage.from('assets').upload(path, file, { upsert: true });
-    if (error) return;
+  // Task A: 統一保存ボタン
+  const handleSaveAll = async () => {
+    if (!user) return;
+    setSaving(true);
+    try {
+      let logoUrl: string | undefined = undefined;
+      // ロゴ upload (= 案 b: 保存時に Storage 触る)
+      if (logoFile) {
+        const ext = logoFile.name.split('.').pop();
+        const path = `logos/${user.id}.${ext}`;
+        const { error } = await supabase.storage.from('assets').upload(path, logoFile, { upsert: true });
+        if (!error) {
+          const { data } = supabase.storage.from('assets').getPublicUrl(path);
+          logoUrl = data.publicUrl;
+        }
+      }
+      // profile 更新 (= 会社名 + ロゴ、 logoUrl undefined なら updateProfile 内 if (logoUrl) ガードで既存 logo 維持)
+      await updateProfile(companyName, logoUrl);
+      // 部材設定 (= store action 経由、 内部で DB 保存)
+      await storeSaveHandrailSettings(enabledSizesLocal);
+      await storeSavePriorityConfig(priorityConfigLocal);
+      // 寸法表示
+      await storeUpdateDimensionVisibility(dimensionVisibilityLocal);
+      // ロゴ ファイルクリア
+      setLogoFile(null);
+      if (logoPreviewUrl) {
+        URL.revokeObjectURL(logoPreviewUrl);
+        setLogoPreviewUrl(null);
+      }
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-    const { data } = supabase.storage.from('assets').getPublicUrl(path);
-    await updateProfile(companyName, data.publicUrl);
+  // Task A: 戻る確認
+  const handleBack = () => {
+    if (isDirty && !confirm('保存していません。 離れますか？')) return;
+    router.back();
   };
 
   return (
     <div className="min-h-screen">
       <header className="sticky top-0 z-10 bg-dark-surface border-b border-dark-border px-4 py-3">
         <div className="flex items-center justify-between max-w-md mx-auto">
-          <button onClick={() => router.back()} className="text-accent text-sm px-3 py-2">
+          <button onClick={handleBack} className="text-accent text-sm px-3 py-2">
             ← 戻る
           </button>
           <h1 className="font-bold">設定</h1>
@@ -60,7 +172,7 @@ export default function SettingsPage() {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto p-4 space-y-6">
+      <main className="max-w-md mx-auto p-4 pb-24 space-y-6">
         <section>
           <h2 className="text-sm text-dimension mb-2 font-bold">会社情報</h2>
           <div className="bg-dark-surface border border-dark-border rounded-xl p-4 space-y-4">
@@ -75,9 +187,9 @@ export default function SettingsPage() {
             </div>
             <div>
               <label className="block text-sm text-dimension mb-1">会社ロゴ</label>
-              {profile?.logo_url && (
+              {(logoPreviewUrl || profile?.logo_url) && (
                 <img
-                  src={profile.logo_url}
+                  src={logoPreviewUrl ?? profile?.logo_url ?? ''}
                   alt="Logo"
                   className="w-24 h-24 object-contain bg-white rounded-lg mb-2"
                 />
@@ -85,17 +197,10 @@ export default function SettingsPage() {
               <input
                 type="file"
                 accept="image/*"
-                onChange={handleLogoUpload}
+                onChange={handleLogoSelect}
                 className="text-sm text-dimension"
               />
             </div>
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="w-full py-3 bg-accent text-white font-bold rounded-lg disabled:opacity-50"
-            >
-              {saving ? '保存中...' : saved ? '保存しました' : '保存'}
-            </button>
           </div>
         </section>
 
@@ -133,8 +238,8 @@ export default function SettingsPage() {
             </p>
             <div className="grid grid-cols-2 gap-2">
               {ALL_HANDRAIL_SIZES.map((size) => {
-                const on = enabledSizes.includes(size);
-                const disabled = handrailLoading || (on && enabledSizes.length <= 1);
+                const on = enabledSizesLocal.includes(size);
+                const disabled = handrailLoading || (on && enabledSizesLocal.length <= 1);
                 return (
                   <label
                     key={size}
@@ -149,14 +254,14 @@ export default function SettingsPage() {
                       type="checkbox"
                       checked={on}
                       disabled={disabled && on}
-                      onChange={() => toggleSize(size)}
+                      onChange={() => handleToggleSizeLocal(size)}
                       className="w-5 h-5 accent-accent"
                     />
                   </label>
                 );
               })}
             </div>
-            {enabledSizes.length <= 1 && (
+            {enabledSizesLocal.length <= 1 && (
               <p className="mt-2 text-[11px] text-yellow-500">
                 最低 1 サイズは ON にしておく必要があります
               </p>
@@ -169,7 +274,11 @@ export default function SettingsPage() {
                 <div className="text-sm text-gray-600">
                   ドラッグで並べ替えできます。上が優先度高。
                 </div>
-                <DraggablePriorityList />
+                <DraggablePriorityList
+                  value={priorityConfigLocal}
+                  enabledSizes={enabledSizesLocal}
+                  onChange={setPriorityConfigLocal}
+                />
               </div>
             )}
           </div>
@@ -182,7 +291,10 @@ export default function SettingsPage() {
               図面に表示する寸法線の段を選択します。<br />
               マスタートグル (図面右上 / フッター設定) が OFF のときは全段非表示です。
             </p>
-            <DimensionVisibilityCheckboxes />
+            <DimensionVisibilityCheckboxes
+              value={dimensionVisibilityLocal}
+              onChange={(updates) => setDimensionVisibilityLocal((prev) => ({ ...prev, ...updates }))}
+            />
           </div>
         </section>
 
@@ -195,6 +307,19 @@ export default function SettingsPage() {
           </div>
         </section>
       </main>
+
+      {/* Task A: 統一保存ボタン (= 画面下 fixed) */}
+      <div className="fixed bottom-0 left-0 right-0 z-30 bg-dark-surface border-t border-dark-border px-4 py-3 safe-area-bottom">
+        <div className="max-w-md mx-auto">
+          <button
+            onClick={handleSaveAll}
+            disabled={!isDirty || saving}
+            className="w-full py-3 bg-accent text-white font-bold rounded-lg disabled:opacity-50"
+          >
+            {saving ? '保存中...' : saved ? '保存しました' : '保存'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
