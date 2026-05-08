@@ -202,6 +202,9 @@ export default function RecoverPage() {
                     title="半角英数字 + アンダースコア + ハイフンの 3〜32 文字"
                     required
                   />
+                  <p className="mt-1 text-[10px] text-dimension">
+                    半角英数字、 アンダースコア (_)、 ハイフン (-) の 3〜32 文字
+                  </p>
                 </div>
 
                 <div className="flex gap-2">
@@ -230,6 +233,9 @@ export default function RecoverPage() {
                     />
                   </div>
                 </div>
+                <p className="mt-1 text-[10px] text-dimension">
+                  漢字 / カタカナ どちらでも入力できます
+                </p>
 
                 <div>
                   <label className="block text-sm text-dimension mb-1">生年月日</label>
@@ -278,6 +284,9 @@ export default function RecoverPage() {
                     title="4 桁の数字"
                     required
                   />
+                  <p className="mt-1 text-[10px] text-dimension">
+                    サインアップ時に設定した 4 桁 PIN を入力
+                  </p>
                 </div>
 
                 <div>
@@ -289,6 +298,9 @@ export default function RecoverPage() {
                     minLength={6}
                     required
                   />
+                  <p className="mt-1 text-[10px] text-dimension">
+                    6 文字以上の英数字を推奨
+                  </p>
                 </div>
 
                 <div>
@@ -347,6 +359,9 @@ export default function RecoverPage() {
                     />
                   </div>
                 </div>
+                <p className="mt-1 text-[10px] text-dimension">
+                  漢字 / カタカナ どちらでも入力できます
+                </p>
 
                 <div>
                   <label className="block text-sm text-dimension mb-1">生年月日</label>
@@ -390,6 +405,9 @@ export default function RecoverPage() {
                     minLength={6}
                     required
                   />
+                  <p className="mt-1 text-[10px] text-dimension">
+                    6 文字以上の英数字を推奨
+                  </p>
                 </div>
 
                 <div>
@@ -406,6 +424,9 @@ export default function RecoverPage() {
                     title="4 桁の数字"
                     required
                   />
+                  <p className="mt-1 text-[10px] text-dimension">
+                    サインアップ時に設定した 4 桁 PIN を入力
+                  </p>
                 </div>
 
                 {error && (

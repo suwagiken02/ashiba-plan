@@ -442,6 +442,9 @@ function AuthPageInner() {
                   minLength={6}
                   required
                 />
+                <p className="mt-1 text-[10px] text-dimension">
+                  6 文字以上の英数字を推奨
+                </p>
               </div>
 
               {isSignUp && (
@@ -506,6 +509,9 @@ function AuthPageInner() {
                 title="半角英数字 + アンダースコア + ハイフンの 3〜32 文字"
                 required
               />
+              <p className="mt-1 text-[10px] text-dimension">
+                半角英数字、 アンダースコア (_)、 ハイフン (-) の 3〜32 文字
+              </p>
             </div>
 
             {isSignUp && (
@@ -551,6 +557,9 @@ function AuthPageInner() {
                     />
                   </div>
                 </div>
+                <p className="mt-1 text-[10px] text-dimension">
+                  漢字 / カタカナ どちらでも入力できます
+                </p>
 
                 <div>
                   <label className="block text-sm text-dimension mb-1">生年月日</label>
@@ -596,6 +605,9 @@ function AuthPageInner() {
                 minLength={6}
                 required
               />
+              <p className="mt-1 text-[10px] text-dimension">
+                6 文字以上の英数字を推奨
+              </p>
             </div>
 
             {isSignUp && (

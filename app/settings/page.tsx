@@ -182,6 +182,7 @@ export default function SettingsPage() {
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
+                placeholder="諏訪技建株式会社"
                 className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
               />
             </div>

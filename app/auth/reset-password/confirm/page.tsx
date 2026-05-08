@@ -114,6 +114,9 @@ export default function ResetPasswordConfirmPage() {
               minLength={6}
               required
             />
+            <p className="mt-1 text-[10px] text-dimension">
+              6 文字以上の英数字を推奨
+            </p>
           </div>
 
           <div>
