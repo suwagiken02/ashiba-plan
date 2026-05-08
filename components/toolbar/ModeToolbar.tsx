@@ -54,6 +54,11 @@ export default function ModeToolbar() {
     if (id !== 'magnet-pin' && isMagnetPinMode) setMagnetPinMode(false);
     // Phase K-1: 入れ替えモードはどのメインボタン押下でも解除 (足場メニューから再開可)
     if (isReorderMode) toggleReorderMode();
+    // erase mode 中に「erase / select 以外のボタン」 押下時、 erase 解除 (= 誤タップ削除防止)
+    // (= 既存 isMeasuring / isMagnetPinMode / isReorderMode と同パターン)
+    if (mode === 'erase' && id !== 'erase' && id !== 'select') {
+      setMode('select');
+    }
     if (id === 'magnet-pin') {
       setMagnetPinMode(!isMagnetPinMode);
       return;
