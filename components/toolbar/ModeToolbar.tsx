@@ -58,8 +58,11 @@ export default function ModeToolbar() {
       setMagnetPinMode(!isMagnetPinMode);
       return;
     }
-    if (id === 'select' || id === 'erase') {
-      setMode(id as ModeType);
+    if (id === 'select') {
+      setMode('select');
+    } else if (id === 'erase') {
+      // トグル動作: 既に erase なら select に戻す (= 削除モード OFF)
+      setMode(mode === 'erase' ? 'select' : 'erase');
     } else if (id === 'memo') {
       useCanvasStore.getState().setShowMemoCreateModal(true);
     } else if (id === 'kutai') {
