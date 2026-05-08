@@ -17,7 +17,6 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useHandrailSettingsStore } from '@/stores/handrailSettingsStore';
 import { HandrailLengthMm, PriorityConfig } from '@/types';
 
 type Section = 'main' | 'sub' | 'adjust' | 'excluded';
