@@ -462,7 +462,7 @@ export default function ProjectsPage() {
                   type="text"
                   value={pasteUrl}
                   onChange={(e) => setPasteUrl(e.target.value)}
-                  placeholder="https://ashiba-plan.vercel.app/share/..."
+                  placeholder="https://app.cadpassport.com/share/..."
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas text-sm focus:outline-none focus:border-accent"
                 />
                 <p className="mt-1 text-[10px] text-dimension">
