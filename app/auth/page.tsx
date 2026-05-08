@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/authStore';
 import PasswordInput from '@/components/ui/PasswordInput';
 import { useIsWebView } from '@/hooks/useIsWebView';
+import { useIsAndroid } from '@/hooks/useIsAndroid';
 
 function AuthPageInner() {
   const router = useRouter();
@@ -56,6 +57,24 @@ function AuthPageInner() {
 
   // OAuth WebView ブロック対策: アプリ内 webview からのアクセス検知
   const isWebView = useIsWebView();
+  // WebView Phase 2: Android のみ「Chrome で開く」 button (= intent:// URI) を表示
+  const isAndroid = useIsAndroid();
+
+  /**
+   * Android Chrome 強制起動 handler (= intent:// URI scheme)。
+   *
+   * webview 内で押すと、 現在 URL を Chrome に渡して開き直す。
+   * package=com.android.chrome で Chrome 限定起動 (= 他ブラウザにフォールバックさせない)。
+   *
+   * 注: iOS は intent:// 非対応のため、 button は isAndroid && で Android のみ表示。
+   * fragment (= URL の #xxx) は intent パラメータの #Intent と衝突するため除外。
+   */
+  const handleOpenInChrome = () => {
+    if (typeof window === 'undefined') return;
+    const { host, pathname, search } = window.location;
+    const intentUrl = `intent://${host}${pathname}${search}#Intent;scheme=https;package=com.android.chrome;end`;
+    window.location.href = intentUrl;
+  };
 
   /**
    * 改善 15b-1: 統一ログイン handler (= 「ID もしくはメールアドレス」 + パスワード)。
@@ -265,6 +284,16 @@ function AuthPageInner() {
                   ⚠ この画面では Google ログインができません。<br />
                   Chrome 等のブラウザで開き直すか、 メールアドレス・ID ログインをご利用ください。
                 </p>
+                {/* Phase 2: Android のみ intent:// で Chrome ワンタップ起動 (= iOS は非対応で非表示) */}
+                {isAndroid && (
+                  <button
+                    type="button"
+                    onClick={handleOpenInChrome}
+                    className="w-full mt-2 py-2 bg-dark-bg border border-dark-border text-accent text-sm font-bold rounded-lg hover:bg-dark-border transition-colors"
+                  >
+                    Chrome で開く
+                  </button>
+                )}
               </div>
             ) : (
               <>
