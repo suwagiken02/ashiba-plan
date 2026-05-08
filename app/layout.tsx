@@ -3,10 +3,17 @@ import './globals.css';
 import DarkModeInit from '@/components/DarkModeInit';
 import ShowDimensionsInit from '@/components/ShowDimensionsInit';
 import { DevToolsExposer } from '@/components/DevToolsExposer';
+import { PWARegister } from '@/components/PWARegister';
 
 export const metadata: Metadata = {
   title: 'CAD パスポート - 足場平面図アプリ',
   description: 'くさび式足場の平面図をスマホで直感的に作成',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'CAD パスポート',
+  },
 };
 
 export const viewport: Viewport = {
@@ -14,6 +21,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  themeColor: '#378ADD',
 };
 
 export default function RootLayout({
@@ -27,6 +35,7 @@ export default function RootLayout({
         <DarkModeInit />
         <ShowDimensionsInit />
         <DevToolsExposer />
+        <PWARegister />
         {children}
       </body>
     </html>

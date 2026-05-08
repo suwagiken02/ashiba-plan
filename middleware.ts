@@ -33,12 +33,19 @@ export async function middleware(req: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession();
 
   const path = req.nextUrl.pathname;
-  // 認証不要パス (= /auth および /api/auth で始まるパス、 /terms と /privacy は完全一致)
+  // 認証不要パス (= /auth および /api/auth で始まるパス、 静的 path は完全一致)
   const isPublicPath =
     path.startsWith('/auth')
     || path.startsWith('/api/auth')
     || path === '/terms'
-    || path === '/privacy';
+    || path === '/privacy'
+    // PWA 関連 path (= 未認証時の /auth redirect で JSON パース失敗・SW 登録失敗を回避)
+    || path === '/manifest.webmanifest'
+    || path === '/sw.js'
+    || path === '/icon'
+    || path === '/icon0'
+    || path === '/icon1'
+    || path === '/apple-icon';
 
   // 未ログイン + 認証必須パス → /auth へリダイレクト
   if (!session && !isPublicPath) {
