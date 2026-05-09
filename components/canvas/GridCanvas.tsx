@@ -21,11 +21,13 @@ import MagnetPinLayer from './MagnetPinLayer';
 import PinAnchorPickerLayer from './PinAnchorPickerLayer';
 import PinDirectionPad from './PinDirectionPad';
 import PinDraftLayer from './PinDraftLayer';
+import HeightMarkerLayer from './HeightMarkerLayer';
 import CompassWidget from './CompassWidget';
 import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
 import { getAllExistingVertices } from '@/lib/konva/snapUtils';
 import { getPrintAreaGrid } from '@/lib/export/pdfExport';
+import { findClosestOutlineEdge } from '@/lib/konva/heightMarkerUtils';
 
 type Props = {
   width: number;
@@ -34,7 +36,7 @@ type Props = {
 
 export default function GridCanvas({ width, height }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide, showDimensionLines } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide, showDimensionLines, isHeightMarkerMode } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -333,6 +335,31 @@ export default function GridCanvas({ width, height }: Props) {
       listening={true}
       onWheel={handleWheel}
       onTouchStart={(e) => {
+        // 高さマーカー配置 (= Task #8 Phase C)
+        if (isHeightMarkerMode && e.evt.touches.length === 1) {
+          const stage = e.target.getStage();
+          if (stage) {
+            const pointer = stage.getPointerPosition();
+            if (pointer) {
+              const clickGrid = {
+                x: (pointer.x - panX) / (INITIAL_GRID_PX * zoom),
+                y: (pointer.y - panY) / (INITIAL_GRID_PX * zoom),
+              };
+              const thresholdGrid = 20 / (INITIAL_GRID_PX * zoom);
+              const result = findClosestOutlineEdge(clickGrid, canvasData.buildings, thresholdGrid);
+              if (result) {
+                useCanvasStore.getState().addHeightMarker({
+                  id: uuidv4(),
+                  buildingId: result.buildingId,
+                  edgeIndex: result.edgeIndex,
+                  t: result.t,
+                  heightMm: 0,
+                });
+              }
+            }
+          }
+          return;
+        }
         handleTouchStart(e);
         if (e.evt.touches.length === 1) handleStageMouseDown(e);
       }}
@@ -362,6 +389,31 @@ export default function GridCanvas({ width, height }: Props) {
           });
           useCanvasStore.getState().clearBuilding2FDraft();
           setDraft2FPos(null);
+          return;
+        }
+        // 高さマーカー配置 (= Task #8 Phase C)
+        if (isHeightMarkerMode) {
+          const stage = e.target.getStage();
+          if (stage) {
+            const pointer = stage.getPointerPosition();
+            if (pointer) {
+              const clickGrid = {
+                x: (pointer.x - panX) / (INITIAL_GRID_PX * zoom),
+                y: (pointer.y - panY) / (INITIAL_GRID_PX * zoom),
+              };
+              const thresholdGrid = 20 / (INITIAL_GRID_PX * zoom);
+              const result = findClosestOutlineEdge(clickGrid, canvasData.buildings, thresholdGrid);
+              if (result) {
+                useCanvasStore.getState().addHeightMarker({
+                  id: uuidv4(),
+                  buildingId: result.buildingId,
+                  edgeIndex: result.edgeIndex,
+                  t: result.t,
+                  heightMm: 0,
+                });
+              }
+            }
+          }
           return;
         }
         handleMouseDown(e); handleStageMouseDown(e);
@@ -473,6 +525,9 @@ export default function GridCanvas({ width, height }: Props) {
 
       {/* マグネットピンレイヤー（最前面のガイド） */}
       <MagnetPinLayer />
+
+      {/* 高さマーカーレイヤー (= Task #8 Phase C、 listening=false で配置のみ) */}
+      <HeightMarkerLayer />
 
       {/* マグネットピン: 起点候補ピッカー（ピンモード中のみ表示） */}
       <PinAnchorPickerLayer />

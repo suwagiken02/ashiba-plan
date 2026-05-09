@@ -4,13 +4,13 @@ import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
 
 export default function ModeToolbar() {
-  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData, isMagnetPinMode, setMagnetPinMode, isReorderMode, toggleReorderMode } = useCanvasStore();
+  const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData, isMagnetPinMode, setMagnetPinMode, isReorderMode, toggleReorderMode, isHeightMarkerMode, setHeightMarkerMode } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
   const [showAshibaMenu, setShowAshibaMenu] = useState(false);
   const [dismissedStage, setDismissedStage] = useState<string | null>(null);
 
-  // 躯体グループ（建物・障害物）
-  const isKutaiMode = mode === 'building' || mode === 'obstacle';
+  // 躯体グループ（建物・障害物・高さマーカー）
+  const isKutaiMode = mode === 'building' || mode === 'obstacle' || isHeightMarkerMode;
 
   const mainButtons = [
     { id: 'select' as const, label: '選択', icon: '↖', color: '#378ADD' },
@@ -52,6 +52,8 @@ export default function ModeToolbar() {
     if (isMeasuring) toggleMeasuring();
     // ピンモードは「magnet-pin 自身」以外のボタン押下で解除（既存 isMeasuring と同パターン）
     if (id !== 'magnet-pin' && isMagnetPinMode) setMagnetPinMode(false);
+    // 高さマーカーモードは「kutai 自身」以外のボタン押下で解除 (= 既存 obstacle と同パターン、 Task #8 Phase C)
+    if (id !== 'kutai' && isHeightMarkerMode) setHeightMarkerMode(false);
     // Phase K-1: 入れ替えモードはどのメインボタン押下でも解除 (足場メニューから再開可)
     if (isReorderMode) toggleReorderMode();
     // erase mode 中に「erase / select 以外のボタン」 押下時、 erase 解除 (= 誤タップ削除防止)
@@ -101,7 +103,7 @@ export default function ModeToolbar() {
       {showKutaiMenu && (
         <>
           <div className="fixed inset-0 bg-black/30 z-40" onClick={() => setShowKutaiMenu(false)} />
-          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3">
+          <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-2xl shadow-2xl p-4 flex gap-3 flex-wrap justify-center max-w-[calc(100vw-32px)]">
             <button
               onClick={() => {
                 useCanvasStore.getState().setShowBuildingModal(true);
@@ -131,6 +133,16 @@ export default function ModeToolbar() {
             >
               <span className="text-3xl mb-1">⬒</span>
               <span className="text-sm font-bold">障害物</span>
+            </button>
+            <button
+              onClick={() => {
+                setHeightMarkerMode(true);
+                setShowKutaiMenu(false);
+              }}
+              className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
+            >
+              <span className="text-3xl mb-1">↕</span>
+              <span className="text-sm font-bold">高さ</span>
             </button>
           </div>
         </>
