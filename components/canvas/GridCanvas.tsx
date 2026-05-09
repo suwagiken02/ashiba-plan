@@ -348,13 +348,16 @@ export default function GridCanvas({ width, height }: Props) {
               const thresholdGrid = 20 / (INITIAL_GRID_PX * zoom);
               const result = findClosestOutlineEdge(clickGrid, canvasData.buildings, thresholdGrid);
               if (result) {
+                const newId = uuidv4();
                 useCanvasStore.getState().addHeightMarker({
-                  id: uuidv4(),
+                  id: newId,
                   buildingId: result.buildingId,
                   edgeIndex: result.edgeIndex,
                   t: result.t,
                   heightMm: 0,
                 });
+                // 配置直後に入力 modal 自動 open (= Task #8 Phase D)
+                useCanvasStore.getState().setHeightInputMarkerId(newId);
               }
             }
           }
@@ -404,13 +407,16 @@ export default function GridCanvas({ width, height }: Props) {
               const thresholdGrid = 20 / (INITIAL_GRID_PX * zoom);
               const result = findClosestOutlineEdge(clickGrid, canvasData.buildings, thresholdGrid);
               if (result) {
+                const newId = uuidv4();
                 useCanvasStore.getState().addHeightMarker({
-                  id: uuidv4(),
+                  id: newId,
                   buildingId: result.buildingId,
                   edgeIndex: result.edgeIndex,
                   t: result.t,
                   heightMm: 0,
                 });
+                // 配置直後に入力 modal 自動 open (= Task #8 Phase D)
+                useCanvasStore.getState().setHeightInputMarkerId(newId);
               }
             }
           }

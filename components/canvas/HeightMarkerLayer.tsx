@@ -9,12 +9,12 @@ import { getOutlinePolygon } from '@/lib/konva/heightMarkerUtils';
 const MARKER_COLOR = '#378ADD';
 
 export default function HeightMarkerLayer() {
-  const { canvasData, zoom, panX, panY } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, setHeightInputMarkerId } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
   const markers = canvasData.heightMarkers ?? [];
 
   return (
-    <Layer listening={false}>
+    <Layer>
       {markers.map((marker) => {
         const building = canvasData.buildings.find((b) => b.id === marker.buildingId);
         if (!building) return null;
@@ -36,7 +36,8 @@ export default function HeightMarkerLayer() {
             <Circle
               x={screenX} y={screenY} radius={r}
               fill={MARKER_COLOR} stroke="#fff" strokeWidth={1.5}
-              listening={false}
+              onClick={() => setHeightInputMarkerId(marker.id)}
+              onTap={() => setHeightInputMarkerId(marker.id)}
             />
             <Text
               x={screenX + r + 4} y={screenY - fs / 2}
