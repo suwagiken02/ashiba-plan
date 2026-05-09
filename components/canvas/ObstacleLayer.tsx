@@ -1,11 +1,11 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Layer, Rect, Circle, Text, Line } from 'react-konva';
 import { useCanvasStore } from '@/stores/canvasStore';
-import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
+import { INITIAL_GRID_PX, gridToMm } from '@/lib/konva/gridUtils';
 import { snapObstacleToWall, snapToMagnetPin } from '@/lib/konva/snapUtils';
-import { ObstacleType, Obstacle } from '@/types';
+import { ObstacleType, Obstacle, BuildingShape, Point } from '@/types';
 
 const OBSTACLE_COLORS: Record<ObstacleType, string> = {
   ecocute: '#B5D4F4',
@@ -27,9 +27,92 @@ const OBSTACLE_LABELS: Record<ObstacleType, string> = {
   custom_circle: '',
 };
 
+/**
+ * 障害物が建物のどの壁辺に吸着しているかを検出する。
+ * 障害物の 4 辺のいずれかが建物の辺と軸並行 + 同 X or 同 Y + 範囲内で
+ * 一致すれば、 その建物辺の端点 (= p1, p2) を返す。 軸並行ではない壁
+ * (= 斜め壁) は対象外 (= Phase 1 では矩形/L字建物前提)。
+ */
+function findWallEdgeForObstacle(
+  obs: { x: number; y: number; width: number; height: number },
+  buildings: BuildingShape[],
+): { p1: Point; p2: Point; isHorizontal: boolean } | null {
+  const TOL = 0.5;
+  const obstacleEdges = [
+    { isH: true, fixed: obs.y, min: obs.x, max: obs.x + obs.width },
+    { isH: true, fixed: obs.y + obs.height, min: obs.x, max: obs.x + obs.width },
+    { isH: false, fixed: obs.x, min: obs.y, max: obs.y + obs.height },
+    { isH: false, fixed: obs.x + obs.width, min: obs.y, max: obs.y + obs.height },
+  ];
+
+  for (const oe of obstacleEdges) {
+    for (const b of buildings) {
+      const pts = b.points;
+      for (let i = 0; i < pts.length; i++) {
+        const p1 = pts[i];
+        const p2 = pts[(i + 1) % pts.length];
+        const beIsH = Math.abs(p1.y - p2.y) < TOL;
+        const beIsV = Math.abs(p1.x - p2.x) < TOL;
+
+        if (oe.isH && beIsH && Math.abs(oe.fixed - p1.y) < TOL) {
+          const beMin = Math.min(p1.x, p2.x);
+          const beMax = Math.max(p1.x, p2.x);
+          if (oe.min >= beMin - TOL && oe.max <= beMax + TOL) {
+            return { p1, p2, isHorizontal: true };
+          }
+        } else if (!oe.isH && beIsV && Math.abs(oe.fixed - p1.x) < TOL) {
+          const beMin = Math.min(p1.y, p2.y);
+          const beMax = Math.max(p1.y, p2.y);
+          if (oe.min >= beMin - TOL && oe.max <= beMax + TOL) {
+            return { p1, p2, isHorizontal: false };
+          }
+        }
+      }
+    }
+  }
+  return null;
+}
+
 export default function ObstacleLayer() {
   const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
+
+  // ドラッグ中の壁吸着距離表示用 (= 投影スナップ位置 + 壁辺端点)
+  const [dragInfo, setDragInfo] = useState<{
+    obs: Obstacle;
+    snappedX: number;
+    snappedY: number;
+    wallP1: Point;
+    wallP2: Point;
+    isHorizontalWall: boolean;
+  } | null>(null);
+
+  // ドラッグ中、 投影スナップ位置で壁辺検出 → dragInfo 更新 (= リアルタイム再計算)
+  const updateDragInfo = (curX: number, curY: number, obs: Obstacle) => {
+    const cx = curX + obs.width / 2;
+    const cy = curY + obs.height / 2;
+    const snapped = snapObstacleToWall({ x: cx, y: cy }, obs.width, obs.height, canvasData.buildings);
+    if (!snapped) {
+      if (dragInfo) setDragInfo(null);
+      return;
+    }
+    const wallEdge = findWallEdgeForObstacle(
+      { x: snapped.x, y: snapped.y, width: obs.width, height: obs.height },
+      canvasData.buildings,
+    );
+    if (!wallEdge) {
+      if (dragInfo) setDragInfo(null);
+      return;
+    }
+    setDragInfo({
+      obs,
+      snappedX: snapped.x,
+      snappedY: snapped.y,
+      wallP1: wallEdge.p1,
+      wallP2: wallEdge.p2,
+      isHorizontalWall: wallEdge.isHorizontal,
+    });
+  };
   const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
   /**
@@ -208,10 +291,16 @@ export default function ObstacleLayer() {
               id={obs.id}
               draggable={mode === 'select'}
               onDragStart={() => useCanvasStore.getState().pushHistory()}
+              onDragMove={(e) => {
+                const curX = obs.x + (e.target.x() - screenX) / gridPx;
+                const curY = obs.y + (e.target.y() - screenY) / gridPx;
+                updateDragInfo(curX, curY, obs);
+              }}
               onDragEnd={(e) => {
                 const dx = Math.round((e.target.x() - screenX) / gridPx);
                 const dy = Math.round((e.target.y() - screenY) / gridPx);
                 e.target.x(screenX); e.target.y(screenY);
+                setDragInfo(null);
                 if (dx !== 0 || dy !== 0) {
                   finalizeMove(dx, dy, obs);
                 }
@@ -230,6 +319,55 @@ export default function ObstacleLayer() {
           </React.Fragment>
         );
       })}
+      {/* 壁吸着中の距離ラベル (= ドラッグ中のみ表示、 rect 障害物のみ対応) */}
+      {dragInfo && (() => {
+        const { snappedX, snappedY, obs: dragObs, wallP1, wallP2, isHorizontalWall } = dragInfo;
+        const fs = Math.max(11, 13 * zoom);
+        const color = '#E85D3A';
+        if (isHorizontalWall) {
+          const wallY = wallP1.y;
+          const wallMinX = Math.min(wallP1.x, wallP2.x);
+          const wallMaxX = Math.max(wallP1.x, wallP2.x);
+          const obsLeftX = snappedX;
+          const obsRightX = snappedX + dragObs.width;
+          const distLeftMm = Math.round(gridToMm(obsLeftX - wallMinX));
+          const distRightMm = Math.round(gridToMm(wallMaxX - obsRightX));
+          const labelLeftXGrid = (wallMinX + obsLeftX) / 2;
+          const labelRightXGrid = (obsRightX + wallMaxX) / 2;
+          const yPx = wallY * gridPx + panY - fs - 2;
+          return (
+            <>
+              <Text x={labelLeftXGrid * gridPx + panX} y={yPx}
+                text={`${distLeftMm}`} fontSize={fs} fontStyle="bold"
+                fill={color} align="center" offsetX={fs * 1.5} listening={false} />
+              <Text x={labelRightXGrid * gridPx + panX} y={yPx}
+                text={`${distRightMm}`} fontSize={fs} fontStyle="bold"
+                fill={color} align="center" offsetX={fs * 1.5} listening={false} />
+            </>
+          );
+        } else {
+          const wallX = wallP1.x;
+          const wallMinY = Math.min(wallP1.y, wallP2.y);
+          const wallMaxY = Math.max(wallP1.y, wallP2.y);
+          const obsTopY = snappedY;
+          const obsBottomY = snappedY + dragObs.height;
+          const distTopMm = Math.round(gridToMm(obsTopY - wallMinY));
+          const distBottomMm = Math.round(gridToMm(wallMaxY - obsBottomY));
+          const labelTopYGrid = (wallMinY + obsTopY) / 2;
+          const labelBottomYGrid = (obsBottomY + wallMaxY) / 2;
+          const xPx = wallX * gridPx + panX + 4;
+          return (
+            <>
+              <Text x={xPx} y={labelTopYGrid * gridPx + panY - fs / 2}
+                text={`${distTopMm}`} fontSize={fs} fontStyle="bold"
+                fill={color} listening={false} />
+              <Text x={xPx} y={labelBottomYGrid * gridPx + panY - fs / 2}
+                text={`${distBottomMm}`} fontSize={fs} fontStyle="bold"
+                fill={color} listening={false} />
+            </>
+          );
+        }
+      })()}
     </Layer>
   );
 }
