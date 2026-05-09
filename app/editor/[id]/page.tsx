@@ -17,6 +17,7 @@ import RoofSettingsModal from '@/components/building/RoofSettingsModal';
 import UdekiModal from '@/components/scaffold/UdekiModal';
 import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import AlertDialog from '@/components/ui/AlertDialog';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import MoveSelectCategoryModal from '@/components/scaffold/MoveSelectCategoryModal';
 import MoveSelectRangePanel from '@/components/scaffold/MoveSelectRangePanel';
@@ -140,6 +141,7 @@ export default function EditorPage() {
   const [showRoofModal, setShowRoofModal] = useState(false);
   const [showUdekiModal, setShowUdekiModal] = useState(false);
   const [showAutoLayoutModal, setShowAutoLayoutModal] = useState(false);
+  const [showBackConfirm, setShowBackConfirm] = useState(false);
   const [drawingTitle, setDrawingTitle] = useState('');
   const [siteName, setSiteName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
@@ -267,7 +269,13 @@ export default function EditorPage() {
       <header className="flex-shrink-0 bg-dark-surface border-b border-dark-border px-3 py-2 flex items-center justify-between z-10">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => router.push('/projects')}
+            onClick={() => {
+              if (isDirty) {
+                setShowBackConfirm(true);
+              } else {
+                router.push('/projects');
+              }
+            }}
             className="text-accent text-sm px-2 py-1"
           >
             ←
@@ -672,6 +680,28 @@ export default function EditorPage() {
       )}
       {alertMessage && (
         <AlertDialog message={alertMessage} onClose={() => setAlertMessage(null)} />
+      )}
+      {showBackConfirm && (
+        <ConfirmDialog
+          title="未保存の変更があります"
+          message="戻るとこれまでの編集内容が失われます。"
+          primaryLabel="保存して戻る"
+          secondaryLabel="保存せずに戻る"
+          cancelLabel="キャンセル"
+          onPrimary={async () => {
+            setShowBackConfirm(false);
+            await handleSave();
+            // 保存失敗時 (= saveStatus === 'error') は留まり、 既存 UI で通知
+            if (useCanvasStore.getState().saveStatus !== 'error') {
+              router.push('/projects');
+            }
+          }}
+          onSecondary={() => {
+            setShowBackConfirm(false);
+            router.push('/projects');
+          }}
+          onCancel={() => setShowBackConfirm(false)}
+        />
       )}
       {(showAutoLayoutModal || showAutoLayout) && (
         <AutoLayoutModal onClose={() => { setShowAutoLayoutModal(false); setShowAutoLayout(false); }} onOpenScaffoldStart={() => setShowScaffoldStartModal(true)} />
