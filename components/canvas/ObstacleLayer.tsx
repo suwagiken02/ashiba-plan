@@ -11,7 +11,7 @@ const OBSTACLE_COLORS: Record<ObstacleType, string> = {
   ecocute: '#B5D4F4',
   aircon: '#C0DD97',
   bay_window: '#FAC775',
-  carport: '#CECBF6',
+  carport: '#7B6DE8',
   sunroom: '#F5C4B3',
   custom_rect: '#D3D1C7',
   custom_circle: '#D3D1C7',

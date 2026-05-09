@@ -26,7 +26,7 @@ module.exports = {
           ecocute: '#B5D4F4',
           aircon: '#C0DD97',
           baywindow: '#FAC775',
-          carport: '#CECBF6',
+          carport: '#7B6DE8',
           sunroom: '#F5C4B3',
           custom: '#D3D1C7',
         },

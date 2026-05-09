@@ -17,7 +17,7 @@ const OBSTACLE_TYPES: { id: ObstacleType; label: string; color: string }[] = [
   { id: 'ecocute', label: 'エコキュート', color: '#B5D4F4' },
   { id: 'aircon', label: '室外機', color: '#C0DD97' },
   { id: 'bay_window', label: '出窓', color: '#FAC775' },
-  { id: 'carport', label: 'カーポート', color: '#CECBF6' },
+  { id: 'carport', label: 'カーポート', color: '#7B6DE8' },
   { id: 'sunroom', label: 'サンルーム', color: '#F5C4B3' },
   { id: 'custom_rect', label: '自由四角', color: '#D3D1C7' },
   { id: 'custom_circle', label: '自由円', color: '#D3D1C7' },
