@@ -184,6 +184,27 @@ export type MagnetPin = {
   };
 };
 
+// === 高さマーカー (= Task #8) ===
+/**
+ * 高さマーカー: 建物外周/屋根破線上の指定位置に立つ、 高さ (mm) 情報を持つマーカー。
+ * 屋根あり → computeOffsetPolygon 上の辺、 屋根なし → building.points 上の辺、
+ * どちらも辺数 n は同じなので edgeIndex で統一参照可能。
+ * heightMm は 1mm 精度内部保持 (= 仕様通り、 UI 表示は m 換算)。
+ */
+export type HeightMarker = {
+  id: string;
+  /** 紐づく建物 ID */
+  buildingId: string;
+  /** 建物 outline 辺の index (= 0..n-1) */
+  edgeIndex: number;
+  /** 辺上の位置 (= 0.0 = p1 端、 1.0 = p2 端) */
+  t: number;
+  /** 高さ (mm 単位) */
+  heightMm: number;
+  /** 階指定 (= undefined は全階共通、 既存 MagnetPin と同パターン) */
+  floor?: 1 | 2;
+};
+
 // === キャンバスデータ（保存用） ===
 export type CanvasData = {
   version: string;
@@ -209,6 +230,8 @@ export type CanvasData = {
   scaffoldStart2F?: ScaffoldStartConfig;
   /** マグネットピン（undefined は既存プロジェクト互換、実行時は [] に正規化）*/
   magnetPins?: MagnetPin[];
+  /** 高さマーカー (= undefined は既存プロジェクト互換、 normalize で [] に正規化) */
+  heightMarkers?: HeightMarker[];
 };
 
 // === 建物テンプレート ===

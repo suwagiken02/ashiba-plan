@@ -18,6 +18,7 @@ import {
   ScaffoldStartConfig,
   MemoShape,
   MagnetPin,
+  HeightMarker,
 } from '@/types';
 import { PinAnchor } from '@/lib/magnetPin/anchorPoints';
 import { DEFAULT_COLS, DEFAULT_ROWS, INITIAL_GRID_PX, ZOOM_MIN, ZOOM_MAX } from '@/lib/konva/gridUtils';
@@ -34,6 +35,7 @@ const createEmptyCanvasData = (): CanvasData => ({
   memos: [],
   compass: { angle: 0 },
   magnetPins: [],
+  heightMarkers: [],
 });
 
 /** 互換: 旧プロジェクトで欠落しているフィールドを補完する */
@@ -41,6 +43,7 @@ const normalizeCanvasData = (data: CanvasData): CanvasData => {
   const normalized: CanvasData = {
     ...data,
     magnetPins: data.magnetPins ?? [],
+    heightMarkers: data.heightMarkers ?? [],
   };
   // 旧 scaffoldStart → scaffoldStart1F / scaffoldStart2F への移行。
   // 既に 1F/2F 側が入っていればそちらを優先（二重上書きしない）。
@@ -320,6 +323,15 @@ type CanvasStore = {
   updateMagnetPin: (id: string, updates: Partial<MagnetPin>) => void;
   removeMagnetPin: (id: string) => void;
   removeMagnetPins: (ids: string[]) => void;
+  // 高さマーカー (= Task #8 Phase B)
+  isHeightMarkerMode: boolean;
+  setHeightMarkerMode: (v: boolean) => void;
+  heightInputMarkerId: string | null;
+  setHeightInputMarkerId: (id: string | null) => void;
+  addHeightMarker: (m: HeightMarker) => void;
+  updateHeightMarker: (id: string, patch: Partial<HeightMarker>) => void;
+  removeHeightMarker: (id: string) => void;
+  moveHeightMarker: (id: string, edgeIndex: number, t: number) => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   moveElement: (id: string, dx: number, dy: number) => void;
@@ -931,6 +943,58 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       isDirty: true,
     });
   },
+
+  // === 高さマーカー (= Task #8 Phase B) ===
+  isHeightMarkerMode: false,
+  setHeightMarkerMode: (v) => set({ isHeightMarkerMode: v }),
+  heightInputMarkerId: null,
+  setHeightInputMarkerId: (id) => set({ heightInputMarkerId: id }),
+  addHeightMarker: (m) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: { ...canvasData, heightMarkers: [...(canvasData.heightMarkers ?? []), m] },
+      isDirty: true,
+    });
+  },
+  updateHeightMarker: (id, patch) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: {
+        ...canvasData,
+        heightMarkers: (canvasData.heightMarkers ?? []).map((m) =>
+          m.id === id ? { ...m, ...patch } : m
+        ),
+      },
+      isDirty: true,
+    });
+  },
+  removeHeightMarker: (id) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: {
+        ...canvasData,
+        heightMarkers: (canvasData.heightMarkers ?? []).filter((m) => m.id !== id),
+      },
+      isDirty: true,
+    });
+  },
+  moveHeightMarker: (id, edgeIndex, t) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    set({
+      canvasData: {
+        ...canvasData,
+        heightMarkers: (canvasData.heightMarkers ?? []).map((m) =>
+          m.id === id ? { ...m, edgeIndex, t } : m
+        ),
+      },
+      isDirty: true,
+    });
+  },
+
   removeElement: (id) => {
     const { canvasData, pushHistory } = get();
     pushHistory();
