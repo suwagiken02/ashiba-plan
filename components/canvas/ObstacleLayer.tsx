@@ -74,7 +74,7 @@ function findWallEdgeForObstacle(
 }
 
 export default function ObstacleLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode, obstaclePreview } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
 
   // ドラッグ中の壁吸着距離表示用 (= 投影スナップ位置 + 壁辺端点)
@@ -319,9 +319,44 @@ export default function ObstacleLayer() {
           </React.Fragment>
         );
       })}
-      {/* 壁吸着中の距離ラベル (= ドラッグ中のみ表示、 rect 障害物のみ対応) */}
-      {dragInfo && (() => {
-        const { snappedX, snappedY, obs: dragObs, wallP1, wallP2, isHorizontalWall } = dragInfo;
+      {/* 壁吸着中の距離ラベル (= 既存配置移動 + 新規配置プレビュー両方、 rect 障害物のみ対応、 Task #3 修正) */}
+      {(() => {
+        // 表示ソース選択: dragInfo (= 既存配置の移動) 優先、
+        // なければ obstaclePreview (= 新規配置中) を吸着判定。
+        // PartSelector が既に snapObstacleToWall を適用しているので、
+        // 吸着時のみ findWallEdgeForObstacle が非 null を返す。
+        let snappedX: number, snappedY: number, width: number, height: number;
+        let wallP1: Point, wallP2: Point, isHorizontalWall: boolean;
+        if (dragInfo) {
+          snappedX = dragInfo.snappedX;
+          snappedY = dragInfo.snappedY;
+          width = dragInfo.obs.width;
+          height = dragInfo.obs.height;
+          wallP1 = dragInfo.wallP1;
+          wallP2 = dragInfo.wallP2;
+          isHorizontalWall = dragInfo.isHorizontalWall;
+        } else if (obstaclePreview) {
+          const wallEdge = findWallEdgeForObstacle(
+            {
+              x: obstaclePreview.x,
+              y: obstaclePreview.y,
+              width: obstaclePreview.widthGrid,
+              height: obstaclePreview.heightGrid,
+            },
+            canvasData.buildings,
+          );
+          if (!wallEdge) return null;
+          snappedX = obstaclePreview.x;
+          snappedY = obstaclePreview.y;
+          width = obstaclePreview.widthGrid;
+          height = obstaclePreview.heightGrid;
+          wallP1 = wallEdge.p1;
+          wallP2 = wallEdge.p2;
+          isHorizontalWall = wallEdge.isHorizontal;
+        } else {
+          return null;
+        }
+
         const fs = Math.max(11, 13 * zoom);
         const color = '#E85D3A';
         if (isHorizontalWall) {
@@ -329,7 +364,7 @@ export default function ObstacleLayer() {
           const wallMinX = Math.min(wallP1.x, wallP2.x);
           const wallMaxX = Math.max(wallP1.x, wallP2.x);
           const obsLeftX = snappedX;
-          const obsRightX = snappedX + dragObs.width;
+          const obsRightX = snappedX + width;
           const distLeftMm = Math.round(gridToMm(obsLeftX - wallMinX));
           const distRightMm = Math.round(gridToMm(wallMaxX - obsRightX));
           const labelLeftXGrid = (wallMinX + obsLeftX) / 2;
@@ -350,7 +385,7 @@ export default function ObstacleLayer() {
           const wallMinY = Math.min(wallP1.y, wallP2.y);
           const wallMaxY = Math.max(wallP1.y, wallP2.y);
           const obsTopY = snappedY;
-          const obsBottomY = snappedY + dragObs.height;
+          const obsBottomY = snappedY + height;
           const distTopMm = Math.round(gridToMm(obsTopY - wallMinY));
           const distBottomMm = Math.round(gridToMm(wallMaxY - obsBottomY));
           const labelTopYGrid = (wallMinY + obsTopY) / 2;
