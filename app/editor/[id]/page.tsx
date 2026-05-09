@@ -211,6 +211,7 @@ export default function EditorPage() {
     }
 
     setSaveStatus(error ? 'error' : 'saved');
+    if (!error) useCanvasStore.setState({ isDirty: false });
     setTimeout(() => setSaveStatus('idle'), 2000);
   }, [drawingId, canvasData, setSaveStatus]);
 
