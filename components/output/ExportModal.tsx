@@ -74,7 +74,7 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
   if (step === 'range') {
     return (
       <div className="fixed bottom-20 left-1/2 -translate-x-1/2 z-50 bg-dark-surface border border-dark-border rounded-xl shadow-2xl px-4 py-3 flex items-center gap-3">
-        <span className="text-sm text-canvas">印刷枠をドラッグして範囲を調整</span>
+        <span className="text-sm text-canvas">範囲をドラッグで指定</span>
         <button type="button" onClick={handleExport}
           className="px-4 py-2 bg-accent text-white font-bold rounded-lg text-sm">
           PDF出力
