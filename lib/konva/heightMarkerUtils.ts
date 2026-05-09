@@ -49,3 +49,59 @@ export function findClosestOutlineEdge(
   }
   return bestResult;
 }
+
+/**
+ * 任意の点を建物 outline に射影し、 最寄り辺の edgeIndex + t を返す。
+ * findClosestOutlineEdge と異なり、 閾値なしで「必ず最寄り辺」 を返す
+ * (= ドラッグ中の連続射影用、 Phase E)。
+ */
+export function projectPointToOutline(
+  point: Point,
+  building: BuildingShape,
+): { edgeIndex: number; t: number } {
+  const outline = getOutlinePolygon(building);
+  let bestDist = Infinity;
+  let best = { edgeIndex: 0, t: 0 };
+  for (let i = 0; i < outline.length; i++) {
+    const p1 = outline[i];
+    const p2 = outline[(i + 1) % outline.length];
+    const ex = p2.x - p1.x;
+    const ey = p2.y - p1.y;
+    const len2 = ex * ex + ey * ey;
+    if (len2 < 0.001) continue;
+    const t = Math.max(0, Math.min(1, ((point.x - p1.x) * ex + (point.y - p1.y) * ey) / len2));
+    const projX = p1.x + t * ex;
+    const projY = p1.y + t * ey;
+    const dist = Math.hypot(point.x - projX, point.y - projY);
+    if (dist < bestDist) {
+      bestDist = dist;
+      best = { edgeIndex: i, t };
+    }
+  }
+  return best;
+}
+
+/**
+ * 辺上の位置 (= edgeIndex + t) を、 t=0/0.5/1 のいずれかが
+ * snapToleranceGrid 以内なら吸着させる。 ドラッグ中のスナップ用 (= Phase E)。
+ */
+export function snapToCornersAndMidpoint(
+  edgeIndex: number,
+  t: number,
+  outline: Point[],
+  snapToleranceGrid: number,
+): { edgeIndex: number; t: number } {
+  if (edgeIndex < 0 || edgeIndex >= outline.length) return { edgeIndex, t };
+  const p1 = outline[edgeIndex];
+  const p2 = outline[(edgeIndex + 1) % outline.length];
+  const edgeLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+  if (edgeLen < 0.001) return { edgeIndex, t };
+  const candidates = [0, 0.5, 1];
+  for (const ct of candidates) {
+    const distGrid = Math.abs(t - ct) * edgeLen;
+    if (distGrid < snapToleranceGrid) {
+      return { edgeIndex, t: ct };
+    }
+  }
+  return { edgeIndex, t };
+}
