@@ -8,7 +8,7 @@ import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
 import {
   getOutlinePolygon,
   projectPointToOutline,
-  snapToCornersAndMidpoint,
+  snapToCorners,
 } from '@/lib/konva/heightMarkerUtils';
 
 const MARKER_COLOR = '#378ADD';
@@ -80,7 +80,7 @@ export default function HeightMarkerLayer() {
         const outline = getOutlinePolygon(building);
         const projected = projectPointToOutline(pointGrid, building);
         const snapToleranceGrid = SNAP_PX / gridPx;
-        const snapped = snapToCornersAndMidpoint(projected.edgeIndex, projected.t, outline, snapToleranceGrid);
+        const snapped = snapToCorners(projected.edgeIndex, projected.t, outline, snapToleranceGrid);
         updateDragInfo({ markerId: marker.id, edgeIndex: snapped.edgeIndex, t: snapped.t });
       }
     };

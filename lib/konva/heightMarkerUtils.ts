@@ -82,10 +82,14 @@ export function projectPointToOutline(
 }
 
 /**
- * 辺上の位置 (= edgeIndex + t) を、 t=0/0.5/1 のいずれかが
- * snapToleranceGrid 以内なら吸着させる。 ドラッグ中のスナップ用 (= Phase E)。
+ * 辺上の位置 (= edgeIndex + t) を、 t=0/1 (= 角) のいずれかが
+ * snapToleranceGrid 以内なら吸着させる。 ドラッグ中のスナップ用。
+ *
+ * Phase E 当初は中点 (t=0.5) もスナップ対象だったが、 実機テストで
+ * 中点に粘着して反対側に動かせない「stuck」 症状発生のため中点を削除
+ * (= 足場職人用途で中点スナップの実用性低い、 Issue 1 修正)。
  */
-export function snapToCornersAndMidpoint(
+export function snapToCorners(
   edgeIndex: number,
   t: number,
   outline: Point[],
@@ -96,7 +100,7 @@ export function snapToCornersAndMidpoint(
   const p2 = outline[(edgeIndex + 1) % outline.length];
   const edgeLen = Math.hypot(p2.x - p1.x, p2.y - p1.y);
   if (edgeLen < 0.001) return { edgeIndex, t };
-  const candidates = [0, 0.5, 1];
+  const candidates = [0, 1];
   for (const ct of candidates) {
     const distGrid = Math.abs(t - ct) * edgeLen;
     if (distGrid < snapToleranceGrid) {
