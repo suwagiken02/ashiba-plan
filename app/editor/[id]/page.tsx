@@ -239,6 +239,14 @@ export default function EditorPage() {
             store.panX,
             store.panY,
           );
+          // PDF 保存完了案内 (= UA 判定で端末別文言)
+          const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+          const deviceMsg = /iPhone|iPad|iPod/.test(ua)
+            ? '『ファイル』 アプリの「ダウンロード」 で確認できます。'
+            : /Android/i.test(ua)
+            ? 'ダウンロードフォルダ または Files アプリで確認できます。'
+            : 'ダウンロードフォルダに保存されました。';
+          useCanvasStore.getState().setAlertMessage(`PDFを保存しました\n\n${deviceMsg}`);
         } else {
           const { exportToDxf } = await import('@/lib/export/dxfExport');
           exportToDxf(canvasData, siteName);
