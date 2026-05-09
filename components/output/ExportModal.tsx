@@ -30,7 +30,7 @@ const SCALES: { id: ScaleOption; label: string }[] = [
 ];
 
 export default function ExportModal({ onClose, onExport, siteName }: Props) {
-  const { setPrintPaperSize, setPrintScale, showPrintArea, toggleShowPrintArea, setPrintAreaCenter } = useCanvasStore();
+  const { setPrintPaperSize, setPrintScale, showPrintArea, toggleShowPrintArea, setPrintAreaCenter, canvasSize, zoomToFitPrintArea } = useCanvasStore();
   const [step, setStep] = useState<'settings' | 'range'>('settings');
   const [format, setFormat] = useState<'pdf' | 'png' | 'dxf'>('pdf');
   const [paperSize, setPaperSize] = useState<PaperSize>('A4_landscape');
@@ -43,10 +43,13 @@ export default function ExportModal({ onClose, onExport, siteName }: Props) {
       onExport({ format, paperSize, scale });
       return;
     }
-    // PDF: 印刷枠を表示してステップ2へ
+    // PDF: 印刷枠を表示してステップ2へ + 印刷範囲全体を画面に収める
     setPrintPaperSize(paperSize);
     setPrintScale(scale);
     if (!showPrintArea) toggleShowPrintArea();
+    const vw = canvasSize.width || window.innerWidth;
+    const vh = canvasSize.height || (window.innerHeight - 120);
+    zoomToFitPrintArea(vw, vh);
     setStep('range');
   };
 

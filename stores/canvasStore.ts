@@ -330,6 +330,7 @@ type CanvasStore = {
   removeScaffoldStart1F: () => void;
   removeScaffoldStart2F: () => void;
   zoomToFitBuildings: (viewportWidth: number, viewportHeight: number, marginMm?: number) => void;
+  zoomToFitPrintArea: (viewportWidth: number, viewportHeight: number, marginMm?: number) => void;
   resetCanvas: () => void;
 };
 
@@ -1079,6 +1080,59 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     // 建物中心が画面中央に来るようにパンを計算
     const centerGridX = (minX + maxX) / 2;
     const centerGridY = (minY + maxY) / 2;
+    const newPanX = viewportWidth / 2 - centerGridX * INITIAL_GRID_PX * newZoom;
+    const newPanY = viewportHeight / 2 - centerGridY * INITIAL_GRID_PX * newZoom;
+
+    set({ zoom: newZoom, panX: newPanX, panY: newPanY });
+  },
+  zoomToFitPrintArea: (viewportWidth, viewportHeight, marginMm = 500) => {
+    const { canvasData, printPaperSize, printScale, printAreaCenter } = get();
+    // 用紙寸法 (mm) と縮尺係数 (= getPrintAreaGrid 相当をインライン化、
+    // pdf-lib + Konva を bundle に巻き込まないため pdfExport.ts から import しない)
+    const PAPER_MM: Record<string, { width: number; height: number }> = {
+      A4_portrait: { width: 210, height: 297 },
+      A4_landscape: { width: 297, height: 210 },
+      A3_portrait: { width: 297, height: 420 },
+      A3_landscape: { width: 420, height: 297 },
+    };
+    const SCALE_FACTORS: Record<string, number> = {
+      '1/50': 50, '1/100': 100, '1/200': 200, '1/300': 300,
+    };
+    const paper = PAPER_MM[printPaperSize];
+    const factor = SCALE_FACTORS[printScale];
+    if (!paper || !factor) return;
+    const areaWidthGrid = (paper.width * factor) / 10;
+    const areaHeightGrid = (paper.height * factor) / 10;
+
+    // 中心座標 (= GridCanvas の印刷枠ロジックと同等)
+    let centerGridX: number, centerGridY: number;
+    if (printAreaCenter) {
+      centerGridX = printAreaCenter.x;
+      centerGridY = printAreaCenter.y;
+    } else if (canvasData.buildings.length > 0) {
+      let bMinX = Infinity, bMinY = Infinity, bMaxX = -Infinity, bMaxY = -Infinity;
+      for (const b of canvasData.buildings) {
+        for (const p of b.points) {
+          if (p.x < bMinX) bMinX = p.x; if (p.y < bMinY) bMinY = p.y;
+          if (p.x > bMaxX) bMaxX = p.x; if (p.y > bMaxY) bMaxY = p.y;
+        }
+      }
+      centerGridX = (bMinX + bMaxX) / 2;
+      centerGridY = (bMinY + bMaxY) / 2;
+    } else {
+      centerGridX = 0;
+      centerGridY = 0;
+    }
+
+    // 印刷範囲 + 余白を画面に収めるズーム計算
+    const marginGrid = marginMm / 10;
+    const fitW = areaWidthGrid + marginGrid * 2;
+    const fitH = areaHeightGrid + marginGrid * 2;
+    const zoomX = viewportWidth / (fitW * INITIAL_GRID_PX);
+    const zoomY = viewportHeight / (fitH * INITIAL_GRID_PX);
+    const newZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Math.min(zoomX, zoomY)));
+
+    // 中心が画面中央に来るようパン
     const newPanX = viewportWidth / 2 - centerGridX * INITIAL_GRID_PX * newZoom;
     const newPanY = viewportHeight / 2 - centerGridY * INITIAL_GRID_PX * newZoom;
 
