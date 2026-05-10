@@ -349,12 +349,14 @@ export default function GridCanvas({ width, height }: Props) {
               const result = findClosestOutlineEdge(clickGrid, canvasData.buildings, thresholdGrid);
               if (result) {
                 const newId = uuidv4();
+                // 配置時の初期値は前回入力値 (= Issue 3、 0 の場合は従来通り)
+                const initialHeightMm = useCanvasStore.getState().lastHeightInputMm;
                 useCanvasStore.getState().addHeightMarker({
                   id: newId,
                   buildingId: result.buildingId,
                   edgeIndex: result.edgeIndex,
                   t: result.t,
-                  heightMm: 0,
+                  heightMm: initialHeightMm,
                 });
                 // 配置直後に入力 modal 自動 open (= Task #8 Phase D)
                 useCanvasStore.getState().setHeightInputMarkerId(newId);
@@ -408,12 +410,14 @@ export default function GridCanvas({ width, height }: Props) {
               const result = findClosestOutlineEdge(clickGrid, canvasData.buildings, thresholdGrid);
               if (result) {
                 const newId = uuidv4();
+                // 配置時の初期値は前回入力値 (= Issue 3、 0 の場合は従来通り)
+                const initialHeightMm = useCanvasStore.getState().lastHeightInputMm;
                 useCanvasStore.getState().addHeightMarker({
                   id: newId,
                   buildingId: result.buildingId,
                   edgeIndex: result.edgeIndex,
                   t: result.t,
-                  heightMm: 0,
+                  heightMm: initialHeightMm,
                 });
                 // 配置直後に入力 modal 自動 open (= Task #8 Phase D)
                 useCanvasStore.getState().setHeightInputMarkerId(newId);

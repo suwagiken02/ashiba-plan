@@ -328,6 +328,8 @@ type CanvasStore = {
   setHeightMarkerMode: (v: boolean) => void;
   heightInputMarkerId: string | null;
   setHeightInputMarkerId: (id: string | null) => void;
+  /** 直前に入力した高さ (mm) (= 次回マーカー配置時の初期値、 セッション内のみ、 Issue 3) */
+  lastHeightInputMm: number;
   addHeightMarker: (m: HeightMarker) => void;
   updateHeightMarker: (id: string, patch: Partial<HeightMarker>) => void;
   removeHeightMarker: (id: string) => void;
@@ -949,6 +951,8 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   setHeightMarkerMode: (v) => set({ isHeightMarkerMode: v }),
   heightInputMarkerId: null,
   setHeightInputMarkerId: (id) => set({ heightInputMarkerId: id }),
+  // 直前入力値の保持 (= セッション内のみ、 Issue 3 修正)
+  lastHeightInputMm: 0,
   addHeightMarker: (m) => {
     const { canvasData, pushHistory } = get();
     pushHistory();
@@ -960,6 +964,11 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   updateHeightMarker: (id, patch) => {
     const { canvasData, pushHistory } = get();
     pushHistory();
+    // patch に heightMm が含まれていれば lastHeightInputMm を更新 (= Issue 3、 次回配置時の初期値)
+    const next: Partial<{ lastHeightInputMm: number }> = {};
+    if (typeof patch.heightMm === 'number' && patch.heightMm > 0) {
+      next.lastHeightInputMm = patch.heightMm;
+    }
     set({
       canvasData: {
         ...canvasData,
@@ -968,6 +977,7 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
         ),
       },
       isDirty: true,
+      ...next,
     });
   },
   removeHeightMarker: (id) => {
