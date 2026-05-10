@@ -167,7 +167,7 @@ export default function HeightMarkerLayer() {
         const fs = Math.max(11, 13 * zoom);
         const labelText = marker.heightMm === 0
           ? 'H?'
-          : `H${(marker.heightMm / 1000).toFixed(1)}m`;
+          : `H${marker.heightMm}mm`;
         return (
           <React.Fragment key={marker.id}>
             <Circle

@@ -24,12 +24,11 @@ export default function HeightInputModal() {
 
   if (!marker) return null;
 
-  const heightM = marker.heightMm / 1000;
-
   const handleChange = (v: number) => {
-    // 範囲: 0..99 m (= NumInput min=0、 max は onChange 側で clamp)
-    const clamped = Math.max(0, Math.min(99, v));
-    updateHeightMarker(marker.id, { heightMm: Math.round(clamped * 1000) });
+    // 範囲: 0..99000 mm (= NumInput min=0、 max は onChange 側で clamp)
+    // step 100 (= 10cm 刻み、 足場高さは 10cm 刻みで十分)、 Issue 2 修正
+    const clamped = Math.max(0, Math.min(99000, v));
+    updateHeightMarker(marker.id, { heightMm: Math.round(clamped) });
   };
 
   const handleDelete = () => {
@@ -45,12 +44,12 @@ export default function HeightInputModal() {
         <h2 className="text-base text-canvas font-bold mb-4">高さ入力</h2>
         <div className="flex items-center gap-2 mb-5">
           <NumInput
-            value={heightM}
+            value={marker.heightMm}
             onChange={handleChange}
             min={0}
-            step={0.1}
+            step={100}
           />
-          <span className="text-sm text-canvas">m</span>
+          <span className="text-sm text-canvas">mm</span>
         </div>
         <div className="flex gap-2">
           <button
