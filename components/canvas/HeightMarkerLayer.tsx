@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Layer, Circle, Text } from 'react-konva';
+import { Layer, Circle, Text, Rect } from 'react-konva';
 import Konva from 'konva';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
@@ -9,12 +9,14 @@ import {
   getOutlinePolygon,
   projectPointToOutline,
   snapToCorners,
+  snapToMidpointIfNear,
 } from '@/lib/konva/heightMarkerUtils';
 
 const MARKER_COLOR = '#378ADD';
 const LONG_PRESS_MS = 300;
 const SNAP_PX = 10;
 const PRESS_MOVE_THRESHOLD_PX = 10;
+const MIDPOINT_SNAP_PX = 10;
 
 type DragInfo = {
   markerId: string;
@@ -23,7 +25,7 @@ type DragInfo = {
 };
 
 export default function HeightMarkerLayer() {
-  const { canvasData, zoom, panX, panY, setHeightInputMarkerId, moveHeightMarker } = useCanvasStore();
+  const { canvasData, zoom, panX, panY, setHeightInputMarkerId, moveHeightMarker, isHeightMarkerMode } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
   const markers = canvasData.heightMarkers ?? [];
 
@@ -37,6 +39,8 @@ export default function HeightMarkerLayer() {
 
   // ドラッグ中の論理位置 (= 視覚フィードバック用 state、 dragEnd で 1 回 store 確定)
   const [dragInfo, setDragInfo] = useState<DragInfo | null>(null);
+  // 中点 ◇ ハイライト用ポインタ screen 位置 (= ドラッグ中のみ更新、 通常時は null)
+  const [pointerScreenPos, setPointerScreenPos] = useState<{ x: number; y: number } | null>(null);
 
   const updateDragInfo = (info: DragInfo | null) => {
     dragInfoRef.current = info;
@@ -67,8 +71,11 @@ export default function HeightMarkerLayer() {
         }
       }
 
-      // 長押し成立後 (= ドラッグ中): 射影 + スナップ
+      // 長押し成立後 (= ドラッグ中): 射影 + 角スナップ + 中点 ◇ ハイライト用 pointer 位置更新
       if (isDraggingRef.current && dragMarkerIdRef.current) {
+        // 中点 ◇ ハイライト用 (= 中点スナップ自体はドラッグ中は適用しない、 stuck 回避)
+        setPointerScreenPos({ x: pointer.x, y: pointer.y });
+
         const marker = (canvasData.heightMarkers ?? []).find((m) => m.id === dragMarkerIdRef.current);
         if (!marker) return;
         const building = canvasData.buildings.find((b) => b.id === marker.buildingId);
@@ -96,12 +103,28 @@ export default function HeightMarkerLayer() {
       // ドラッグ確定 (= 1 回 moveHeightMarker、 history 1 件のみ追加)
       if (isDraggingRef.current && dragInfoRef.current) {
         const info = dragInfoRef.current;
-        moveHeightMarker(info.markerId, info.edgeIndex, info.t);
+        // 中点スナップ補正 (= dragEnd のみ、 ドラッグ中は適用しない、 stuck 回避)
+        const pointer = stage.getPointerPosition();
+        let finalT = info.t;
+        if (pointer) {
+          const marker = (canvasData.heightMarkers ?? []).find((m) => m.id === info.markerId);
+          if (marker) {
+            const building = canvasData.buildings.find((b) => b.id === marker.buildingId);
+            if (building) {
+              finalT = snapToMidpointIfNear(
+                info.edgeIndex, info.t, pointer.x, pointer.y,
+                building, gridPx, panX, panY, MIDPOINT_SNAP_PX,
+              );
+            }
+          }
+        }
+        moveHeightMarker(info.markerId, info.edgeIndex, finalT);
         wasDraggingRef.current = true; // onClick での modal 抑止フラグ
       }
       isDraggingRef.current = false;
       dragMarkerIdRef.current = null;
       updateDragInfo(null);
+      setPointerScreenPos(null);
     };
 
     stage.on('pointermove.heightmarker', onStagePointerMove);
@@ -148,6 +171,36 @@ export default function HeightMarkerLayer() {
 
   return (
     <Layer ref={layerRef}>
+      {/* 中点 ◇ ガイド (= isHeightMarkerMode 時のみ、 ドラッグ中ポインタ近傍ならハイライト) */}
+      {isHeightMarkerMode && canvasData.buildings.flatMap((building) => {
+        const outline = getOutlinePolygon(building);
+        return outline.map((p1, i) => {
+          const p2 = outline[(i + 1) % outline.length];
+          const midX = (p1.x + p2.x) / 2;
+          const midY = (p1.y + p2.y) / 2;
+          const screenMidX = midX * gridPx + panX;
+          const screenMidY = midY * gridPx + panY;
+          let isNear = false;
+          if (pointerScreenPos && isDraggingRef.current) {
+            const dist = Math.hypot(pointerScreenPos.x - screenMidX, pointerScreenPos.y - screenMidY);
+            isNear = dist < MIDPOINT_SNAP_PX;
+          }
+          const size = isNear ? Math.max(7, 9 * zoom) : Math.max(5, 6 * zoom);
+          const opacity = isNear ? 1.0 : 0.5;
+          return (
+            <Rect
+              key={`midpoint-${building.id}-${i}`}
+              x={screenMidX} y={screenMidY}
+              width={size * 2} height={size * 2}
+              offsetX={size} offsetY={size}
+              rotation={45}
+              fill={MARKER_COLOR}
+              opacity={opacity}
+              listening={false}
+            />
+          );
+        });
+      })}
       {markers.map((marker) => {
         const building = canvasData.buildings.find((b) => b.id === marker.buildingId);
         if (!building) return null;

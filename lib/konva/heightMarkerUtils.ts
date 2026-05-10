@@ -109,3 +109,34 @@ export function snapToCorners(
   }
   return { edgeIndex, t };
 }
+
+/**
+ * 辺中点 (= t=0.5) からポインタまでの screen px 距離が snapPx 以内なら
+ * t を 0.5 に補正、 それ以外は元の t を返す。
+ *
+ * ドラッグ中は使わず、 配置時 / dragEnd 時のみ呼び出すこと
+ * (= ドラッグ中の中点粘着 stuck を回避するため、 Issue 1 の経緯)。
+ * 切妻屋根の中央高所マーカー配置等の用途を支援。
+ */
+export function snapToMidpointIfNear(
+  edgeIndex: number,
+  t: number,
+  pointerScreenX: number,
+  pointerScreenY: number,
+  building: BuildingShape,
+  gridPx: number,
+  panX: number,
+  panY: number,
+  snapPx: number,
+): number {
+  const outline = getOutlinePolygon(building);
+  if (edgeIndex < 0 || edgeIndex >= outline.length) return t;
+  const p1 = outline[edgeIndex];
+  const p2 = outline[(edgeIndex + 1) % outline.length];
+  const midX = (p1.x + p2.x) / 2;
+  const midY = (p1.y + p2.y) / 2;
+  const screenMidX = midX * gridPx + panX;
+  const screenMidY = midY * gridPx + panY;
+  const dist = Math.hypot(pointerScreenX - screenMidX, pointerScreenY - screenMidY);
+  return dist < snapPx ? 0.5 : t;
+}

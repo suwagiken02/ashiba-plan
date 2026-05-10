@@ -27,7 +27,7 @@ import { useCanvasInteraction } from '@/lib/konva/useCanvasInteraction';
 import { mmToGrid } from '@/lib/konva/gridUtils';
 import { getAllExistingVertices } from '@/lib/konva/snapUtils';
 import { getPrintAreaGrid } from '@/lib/export/pdfExport';
-import { findClosestOutlineEdge } from '@/lib/konva/heightMarkerUtils';
+import { findClosestOutlineEdge, snapToMidpointIfNear } from '@/lib/konva/heightMarkerUtils';
 
 type Props = {
   width: number;
@@ -351,11 +351,16 @@ export default function GridCanvas({ width, height }: Props) {
                 const newId = uuidv4();
                 // 配置時の初期値は前回入力値 (= Issue 3、 0 の場合は従来通り)
                 const initialHeightMm = useCanvasStore.getState().lastHeightInputMm;
+                // 中点スナップ (= ポインタが中点 ◇ から 10px 以内なら t=0.5 補正)
+                const placementBuilding = canvasData.buildings.find((b) => b.id === result.buildingId);
+                const finalT = placementBuilding
+                  ? snapToMidpointIfNear(result.edgeIndex, result.t, pointer.x, pointer.y, placementBuilding, INITIAL_GRID_PX * zoom, panX, panY, 10)
+                  : result.t;
                 useCanvasStore.getState().addHeightMarker({
                   id: newId,
                   buildingId: result.buildingId,
                   edgeIndex: result.edgeIndex,
-                  t: result.t,
+                  t: finalT,
                   heightMm: initialHeightMm,
                 });
                 // 配置直後に入力 modal 自動 open (= Task #8 Phase D)
@@ -412,11 +417,16 @@ export default function GridCanvas({ width, height }: Props) {
                 const newId = uuidv4();
                 // 配置時の初期値は前回入力値 (= Issue 3、 0 の場合は従来通り)
                 const initialHeightMm = useCanvasStore.getState().lastHeightInputMm;
+                // 中点スナップ (= ポインタが中点 ◇ から 10px 以内なら t=0.5 補正)
+                const placementBuilding = canvasData.buildings.find((b) => b.id === result.buildingId);
+                const finalT = placementBuilding
+                  ? snapToMidpointIfNear(result.edgeIndex, result.t, pointer.x, pointer.y, placementBuilding, INITIAL_GRID_PX * zoom, panX, panY, 10)
+                  : result.t;
                 useCanvasStore.getState().addHeightMarker({
                   id: newId,
                   buildingId: result.buildingId,
                   edgeIndex: result.edgeIndex,
-                  t: result.t,
+                  t: finalT,
                   heightMm: initialHeightMm,
                 });
                 // 配置直後に入力 modal 自動 open (= Task #8 Phase D)
