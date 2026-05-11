@@ -20,6 +20,7 @@ import AlertDialog from '@/components/ui/AlertDialog';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import HeightInputModal from '@/components/canvas/HeightInputModal';
 import AreaCalculationModal from '@/components/canvas/AreaCalculationModal';
+import AreaDesignationModeBar from '@/components/scaffold/AreaDesignationModeBar';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import MoveSelectCategoryModal from '@/components/scaffold/MoveSelectCategoryModal';
 import MoveSelectRangePanel from '@/components/scaffold/MoveSelectRangePanel';
@@ -685,6 +686,7 @@ export default function EditorPage() {
       )}
       <HeightInputModal />
       <AreaCalculationModal />
+      <AreaDesignationModeBar />
       {showBackConfirm && (
         <ConfirmDialog
           title="未保存の変更があります"

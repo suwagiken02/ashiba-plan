@@ -337,6 +337,14 @@ type CanvasStore = {
   // 平米計算 modal (= 平米計算 Phase C)
   showAreaCalcModal: boolean;
   setShowAreaCalcModal: (v: boolean) => void;
+  // 平米計算: 1F足場指定モード (= 平米計算 Phase D-2)
+  isAreaDesignationMode: boolean;
+  floorDesignation: Record<string, 1 | 2>;
+  enterAreaDesignationMode: () => void;
+  toggleHandrailFloor: (id: string) => void;
+  toggleFaceFloor: (handrailIds: string[]) => void;
+  commitAreaDesignation: () => void;
+  cancelAreaDesignation: () => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   moveElement: (id: string, dx: number, dy: number) => void;
@@ -1011,6 +1019,31 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   // === 平米計算 modal (= 平米計算 Phase C) ===
   showAreaCalcModal: false,
   setShowAreaCalcModal: (v) => set({ showAreaCalcModal: v }),
+
+  // === 平米計算: 1F足場指定モード (= 平米計算 Phase D-2) ===
+  isAreaDesignationMode: false,
+  floorDesignation: {},
+  enterAreaDesignationMode: () => set({ isAreaDesignationMode: true, floorDesignation: {} }),
+  toggleHandrailFloor: (id) => {
+    const { floorDesignation } = get();
+    const current = floorDesignation[id];
+    // 1 なら 2 に、 それ以外 (= undefined / 2) なら 1 に
+    const next: 1 | 2 = current === 1 ? 2 : 1;
+    set({ floorDesignation: { ...floorDesignation, [id]: next } });
+  },
+  toggleFaceFloor: (handrailIds) => {
+    const { floorDesignation } = get();
+    // 一括 toggle: 全員 1F なら全員 2F に、 それ以外は全員 1F に
+    const allAre1F = handrailIds.every((id) => floorDesignation[id] === 1);
+    const targetFloor: 1 | 2 = allAre1F ? 2 : 1;
+    const next = { ...floorDesignation };
+    for (const id of handrailIds) {
+      next[id] = targetFloor;
+    }
+    set({ floorDesignation: next });
+  },
+  commitAreaDesignation: () => set({ isAreaDesignationMode: false, showAreaCalcModal: true }),
+  cancelAreaDesignation: () => set({ isAreaDesignationMode: false, floorDesignation: {} }),
 
   removeElement: (id) => {
     const { canvasData, pushHistory } = get();

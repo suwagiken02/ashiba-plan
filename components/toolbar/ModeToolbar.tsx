@@ -223,7 +223,7 @@ export default function ModeToolbar() {
               <span className="text-3xl mb-1">●</span>
               <span className="text-xs font-bold">自動内柱配置</span>
             </button>
-            {/* 平米計算 (= 平米計算 Phase C + D-1 事前チェック) */}
+            {/* 平米計算 (= 平米計算 Phase C + D-1 事前チェック + D-2 1F+2F 分岐) */}
             <button
               onClick={() => {
                 const s = useCanvasStore.getState();
@@ -233,7 +233,14 @@ export default function ModeToolbar() {
                   setShowNoScaffoldConfirm(true);
                   return;
                 }
-                // 足場あり → 直接 modal open (= D-2 で 1F+2F 両建物時の分岐追加予定)
+                // 1F + 2F 建物両方あり → 1F足場指定モード突入 (= 平米計算 Phase D-2)
+                const has1F = s.canvasData.buildings.some((b) => (b.floor ?? 1) === 1);
+                const has2F = s.canvasData.buildings.some((b) => (b.floor ?? 1) === 2);
+                if (has1F && has2F) {
+                  s.enterAreaDesignationMode();
+                  return;
+                }
+                // 片建物のみ → 直接 modal open
                 s.setShowAreaCalcModal(true);
               }}
               className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
