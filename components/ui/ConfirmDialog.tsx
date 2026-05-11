@@ -5,10 +5,10 @@ type Props = {
   message: string;
   primaryLabel: string;
   secondaryLabel: string;
-  cancelLabel: string;
+  cancelLabel?: string;
   onPrimary: () => void;
   onSecondary: () => void;
-  onCancel: () => void;
+  onCancel?: () => void;
 };
 
 export default function ConfirmDialog({
@@ -39,12 +39,14 @@ export default function ConfirmDialog({
           >
             {secondaryLabel}
           </button>
-          <button
-            onClick={onCancel}
-            className="w-full py-2 text-dimension rounded-xl text-sm"
-          >
-            {cancelLabel}
-          </button>
+          {cancelLabel && onCancel && (
+            <button
+              onClick={onCancel}
+              className="w-full py-2 text-dimension rounded-xl text-sm"
+            >
+              {cancelLabel}
+            </button>
+          )}
         </div>
       </div>
     </div>

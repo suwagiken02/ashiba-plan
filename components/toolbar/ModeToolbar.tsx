@@ -2,12 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { useCanvasStore } from '@/stores/canvasStore';
 import { ModeType } from '@/types';
+import ConfirmDialog from '@/components/ui/ConfirmDialog';
 
 export default function ModeToolbar() {
   const { mode, setMode, isMeasuring, toggleMeasuring, showPartSelector, canvasData, isMagnetPinMode, setMagnetPinMode, isReorderMode, toggleReorderMode, isHeightMarkerMode, setHeightMarkerMode } = useCanvasStore();
   const [showKutaiMenu, setShowKutaiMenu] = useState(false);
   const [showAshibaMenu, setShowAshibaMenu] = useState(false);
   const [dismissedStage, setDismissedStage] = useState<string | null>(null);
+  // 平米計算: 足場 0 個時の確認 dialog (= 平米計算 Phase D-1、 局所性高いため store 経由でなく useState)
+  const [showNoScaffoldConfirm, setShowNoScaffoldConfirm] = useState(false);
 
   // 躯体グループ（建物・障害物・高さマーカー）
   const isKutaiMode = mode === 'building' || mode === 'obstacle' || isHeightMarkerMode;
@@ -220,11 +223,18 @@ export default function ModeToolbar() {
               <span className="text-3xl mb-1">●</span>
               <span className="text-xs font-bold">自動内柱配置</span>
             </button>
-            {/* 平米計算 (= 平米計算 Phase C、 Phase D/E で機能完成) */}
+            {/* 平米計算 (= 平米計算 Phase C + D-1 事前チェック) */}
             <button
               onClick={() => {
-                useCanvasStore.getState().setShowAreaCalcModal(true);
+                const s = useCanvasStore.getState();
                 setShowAshibaMenu(false);
+                // 事前チェック: 足場 0 個 → ConfirmDialog 表示 (= 床㎡のみ計算するか確認)
+                if (s.canvasData.handrails.length === 0) {
+                  setShowNoScaffoldConfirm(true);
+                  return;
+                }
+                // 足場あり → 直接 modal open (= D-2 で 1F+2F 両建物時の分岐追加予定)
+                s.setShowAreaCalcModal(true);
               }}
               className="flex flex-col items-center justify-center w-24 h-24 rounded-xl bg-accent/10 border-2 border-accent text-accent hover:bg-accent/20 transition-colors"
             >
@@ -233,6 +243,21 @@ export default function ModeToolbar() {
             </button>
           </div>
         </>
+      )}
+
+      {/* 平米計算: 足場 0 個時の確認 dialog (= 平米計算 Phase D-1) */}
+      {showNoScaffoldConfirm && (
+        <ConfirmDialog
+          title="足場がありません"
+          message="建物の延べ床㎡のみ計算しますか？"
+          primaryLabel="はい"
+          secondaryLabel="いいえ"
+          onPrimary={() => {
+            setShowNoScaffoldConfirm(false);
+            useCanvasStore.getState().setShowAreaCalcModal(true);
+          }}
+          onSecondary={() => setShowNoScaffoldConfirm(false)}
+        />
       )}
 
       <div className="fixed bottom-0 left-0 right-0 z-30 bg-dark-surface border-t border-dark-border safe-area-bottom">
