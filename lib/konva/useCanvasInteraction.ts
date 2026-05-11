@@ -248,6 +248,8 @@ export function useCanvasInteraction() {
   const stageRef = useRef<Konva.Stage | null>(null);
   // move-select: 空キャンバスで mousedown したかフラグ (ラバーバンド開始条件)
   const moveSelectRubberBandArmed = useRef(false);
+  // area-designation: 空キャンバスで mousedown したかフラグ (= ラバーバンド開始条件、 平米計算 Phase D-2-c)
+  const areaDesignationRubberBandArmed = useRef(false);
 
   // キャンバス外でのドラッグ追跡: window の pointer/touch イベントを使用
   useEffect(() => {
@@ -390,6 +392,18 @@ export function useCanvasInteraction() {
 
       const rawPos = toGrid(stage, clientPos);
       const s = useCanvasStore.getState();
+
+      // 平米計算 1F足場指定モード: 他 mode handler 競合回避の早期分岐 (= 平米計算 Phase D-2-c)
+      if (s.isAreaDesignationMode) {
+        if (e.target === stage) {
+          // 空キャンバス → ラバーバンド arm
+          areaDesignationRubberBandArmed.current = true;
+          dragStart.current = rawPos;
+          isDragging.current = false;
+        }
+        // Handrail Line への hit は ScaffoldLayer onClick で処理 → ここでは何もしない
+        return;
+      }
 
       // 寸法計測モード
       if (s.isMeasuring) {
@@ -620,6 +634,19 @@ export function useCanvasInteraction() {
 
       const s = useCanvasStore.getState();
 
+      // 平米計算 1F足場指定モード: ラバーバンドのみ動作 (= 平米計算 Phase D-2-c)
+      if (s.isAreaDesignationMode) {
+        if (!dragStart.current || !areaDesignationRubberBandArmed.current) return;
+        const gridPos = toGrid(stage, clientPos);
+        setSelectionRect({
+          x: Math.min(dragStart.current.x, gridPos.x),
+          y: Math.min(dragStart.current.y, gridPos.y),
+          w: Math.abs(gridPos.x - dragStart.current.x),
+          h: Math.abs(gridPos.y - dragStart.current.y),
+        });
+        return;
+      }
+
       // 寸法計測モード
       if (s.isMeasuring && s.measurePoint1) {
         const raw = toGrid(stage, clientPos);
@@ -702,6 +729,26 @@ export function useCanvasInteraction() {
 
       const gridPos = toGrid(stage, clientPos);
       const s = useCanvasStore.getState();
+
+      // 平米計算 1F足場指定モード: ラバーバンド確定 → 個別反転 (= 平米計算 Phase D-2-c)
+      if (s.isAreaDesignationMode && areaDesignationRubberBandArmed.current) {
+        if (selectionRect) {
+          const rect = selectionRect;
+          const inRect = (p: { x: number; y: number }) =>
+            p.x >= rect.x && p.y >= rect.y && p.x <= rect.x + rect.w && p.y <= rect.y + rect.h;
+          const ids: string[] = [];
+          s.canvasData.handrails.forEach((h) => {
+            const [p1, p2] = getHandrailEndpoints(h);
+            if (inRect(p1) || inRect(p2)) ids.push(h.id);
+          });
+          if (ids.length > 0) s.toggleHandrailsBulk(ids);
+          setSelectionRect(null);
+        }
+        areaDesignationRubberBandArmed.current = false;
+        dragStart.current = null;
+        isDragging.current = false;
+        return;
+      }
 
       // 手摺モード: キャンバスドラッグでの配置は無効化（パレットD&Dのみ）
       s.setHandrailPreview(null);

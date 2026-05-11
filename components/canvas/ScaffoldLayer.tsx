@@ -13,7 +13,11 @@ const LINE_COLORS = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#DD
 const TOL = 3;
 
 export default function ScaffoldLayer() {
-  const { canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode, isDuplicateMode, highlightIds, isReorderMode } = useCanvasStore();
+  const {
+    canvasData, zoom, panX, panY, mode, selectedIds, moveSelectMode,
+    isDuplicateMode, highlightIds, isReorderMode,
+    isAreaDesignationMode, floorDesignation, toggleHandrailFloor,
+  } = useCanvasStore();
   const gridPx = INITIAL_GRID_PX * zoom;
   const effectiveSelectedIds = mode === 'move-select' ? moveSelectMode.selectedIds : selectedIds;
 
@@ -43,6 +47,11 @@ export default function ScaffoldLayer() {
   }, [isReorderMode, canvasData.handrails]);
 
   const handleHandrailClick = (hId: string) => {
+    // 平米計算 1F足場指定モード: タップで個別反転 (= 平米計算 Phase D-2-c)
+    if (isAreaDesignationMode) {
+      toggleHandrailFloor(hId);
+      return;
+    }
     if (!isReorderMode) {
       // 通常の選択処理
       useCanvasStore.getState().setSelectedIds([hId]);
@@ -123,7 +132,14 @@ export default function ScaffoldLayer() {
         const isHighlighted = highlightIds.includes(h.id);
         const defaultColor = getHandrailColor(h.lengthMm as HandrailLengthMm);
         const lineColor = lineColorMap.get(h.id);
-        const color = isHighlighted ? '#FF6B35' : isSelected ? '#FF6B35' : (lineColor || defaultColor);
+        // 平米計算 1F足場指定モード: 1F 指定済 Handrail は amber 強調 (= 平米計算 Phase D-2-c)
+        const is1F = isAreaDesignationMode && floorDesignation[h.id] === 1;
+        const color = is1F
+          ? '#f59e0b'
+          : isHighlighted ? '#FF6B35'
+          : isSelected ? '#FF6B35'
+          : (lineColor || defaultColor);
+        const strokeWidth = (isHighlighted ? 5 : lineColor ? 4 : 3) + (is1F ? 1 : 0);
 
         return (
           <React.Fragment key={h.id}>
@@ -135,9 +151,9 @@ export default function ScaffoldLayer() {
                 end.y * gridPx + panY,
               ]}
               stroke={color}
-              strokeWidth={isHighlighted ? 5 : lineColor ? 4 : 3}
+              strokeWidth={strokeWidth}
               lineCap="round"
-              hitStrokeWidth={isReorderMode ? 30 : 10}
+              hitStrokeWidth={isReorderMode || isAreaDesignationMode ? 30 : 10}
               listening={true}
               id={h.id}
               draggable={mode === 'select'}

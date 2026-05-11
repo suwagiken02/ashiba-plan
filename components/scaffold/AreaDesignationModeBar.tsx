@@ -34,7 +34,7 @@ export default function AreaDesignationModeBar() {
         <span className="text-xs font-bold text-canvas">1F足場指定モード</span>
       </div>
       <p className="text-[10px] text-dimension mb-3 leading-relaxed">
-        タップで面一括 / 長押しで個別。 amber 色 = 1F指定。
+        タップで1本反転 / 範囲ドラッグで一括反転。 amber 色 = 1F指定。
       </p>
       <div className="flex gap-2">
         <button

@@ -342,7 +342,7 @@ type CanvasStore = {
   floorDesignation: Record<string, 1 | 2>;
   enterAreaDesignationMode: () => void;
   toggleHandrailFloor: (id: string) => void;
-  toggleFaceFloor: (handrailIds: string[]) => void;
+  toggleHandrailsBulk: (handrailIds: string[]) => void;
   commitAreaDesignation: () => void;
   cancelAreaDesignation: () => void;
   removeElement: (id: string) => void;
@@ -1031,14 +1031,13 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     const next: 1 | 2 = current === 1 ? 2 : 1;
     set({ floorDesignation: { ...floorDesignation, [id]: next } });
   },
-  toggleFaceFloor: (handrailIds) => {
+  toggleHandrailsBulk: (handrailIds) => {
     const { floorDesignation } = get();
-    // 一括 toggle: 全員 1F なら全員 2F に、 それ以外は全員 1F に
-    const allAre1F = handrailIds.every((id) => floorDesignation[id] === 1);
-    const targetFloor: 1 | 2 = allAre1F ? 2 : 1;
+    // 個別反転: 範囲内の各 Handrail を 1F ↔ 2F それぞれ反転 (= 平米計算 Phase D-2-c)
     const next = { ...floorDesignation };
     for (const id of handrailIds) {
-      next[id] = targetFloor;
+      const current = next[id];
+      next[id] = current === 1 ? 2 : 1;
     }
     set({ floorDesignation: next });
   },
