@@ -334,6 +334,9 @@ type CanvasStore = {
   updateHeightMarker: (id: string, patch: Partial<HeightMarker>) => void;
   removeHeightMarker: (id: string) => void;
   moveHeightMarker: (id: string, edgeIndex: number, t: number) => void;
+  // 平米計算 modal (= 平米計算 Phase C)
+  showAreaCalcModal: boolean;
+  setShowAreaCalcModal: (v: boolean) => void;
   removeElement: (id: string) => void;
   removeElements: (ids: string[]) => void;
   moveElement: (id: string, dx: number, dy: number) => void;
@@ -1004,6 +1007,10 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       isDirty: true,
     });
   },
+
+  // === 平米計算 modal (= 平米計算 Phase C) ===
+  showAreaCalcModal: false,
+  setShowAreaCalcModal: (v) => set({ showAreaCalcModal: v }),
 
   removeElement: (id) => {
     const { canvasData, pushHistory } = get();

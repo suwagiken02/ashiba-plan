@@ -19,6 +19,7 @@ import AutoLayoutModal from '@/components/scaffold/AutoLayoutModal';
 import AlertDialog from '@/components/ui/AlertDialog';
 import ConfirmDialog from '@/components/ui/ConfirmDialog';
 import HeightInputModal from '@/components/canvas/HeightInputModal';
+import AreaCalculationModal from '@/components/canvas/AreaCalculationModal';
 import HandrailReorderModal from '@/components/scaffold/HandrailReorderModal';
 import MoveSelectCategoryModal from '@/components/scaffold/MoveSelectCategoryModal';
 import MoveSelectRangePanel from '@/components/scaffold/MoveSelectRangePanel';
@@ -683,6 +684,7 @@ export default function EditorPage() {
         <AlertDialog message={alertMessage} onClose={() => setAlertMessage(null)} />
       )}
       <HeightInputModal />
+      <AreaCalculationModal />
       {showBackConfirm && (
         <ConfirmDialog
           title="未保存の変更があります"
