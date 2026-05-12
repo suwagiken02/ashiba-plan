@@ -13,6 +13,7 @@ export const HANDRAIL_COLORS: Record<HandrailLengthMm, string> = {
    400: '#f87171',
    300: '#c084fc',
    200: '#f472b6',
+   150: '#e879f9',
    100: '#94a3b8',
 };
 
@@ -34,5 +35,6 @@ export const HANDRAIL_LEGEND: { lengthMm: HandrailLengthMm; color: string }[] = 
   { lengthMm:  400, color: '#f87171' },
   { lengthMm:  300, color: '#c084fc' },
   { lengthMm:  200, color: '#f472b6' },
+  { lengthMm:  150, color: '#e879f9' },
   { lengthMm:  100, color: '#94a3b8' },
 ];
