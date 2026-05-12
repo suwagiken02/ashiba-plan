@@ -177,9 +177,47 @@ export function groupHandrailsByFace(
 }
 
 /**
+ * 0-indexed 連番を Excel 風ラベルに変換 (= A, B, ..., Z, AA, AB, ..., AZ, BA, ...)。
+ * 26 個超過時の挙動 (= 平米計算 Phase E-1)。
+ */
+function indexToLabel(i: number): string {
+  let n = i;
+  let label = '';
+  while (n >= 0) {
+    label = String.fromCharCode(65 + (n % 26)) + label;
+    n = Math.floor(n / 26) - 1;
+  }
+  return label;
+}
+
+/**
+ * faceKey (= `${buildingId}-${edgeIndex}`) を building.id 昇順 → edgeIndex 昇順
+ * でソートし、 ABCDEF... を決定論的に割り振り (= 平米計算 Phase E-1)。
+ * building.id が uuidv4 (= '-' 含む) のため lastIndexOf で分離。
+ */
+function assignFaceLabels(faceAreas: Map<string, number>): Map<string, string> {
+  const keys = Array.from(faceAreas.keys()).sort((a, b) => {
+    const lastA = a.lastIndexOf('-');
+    const lastB = b.lastIndexOf('-');
+    const buildingIdA = a.slice(0, lastA);
+    const buildingIdB = b.slice(0, lastB);
+    if (buildingIdA !== buildingIdB) return buildingIdA.localeCompare(buildingIdB);
+    const edgeA = parseInt(a.slice(lastA + 1), 10);
+    const edgeB = parseInt(b.slice(lastB + 1), 10);
+    return edgeA - edgeB;
+  });
+  const labels = new Map<string, string>();
+  keys.forEach((key, i) => { labels.set(key, indexToLabel(i)); });
+  return labels;
+}
+
+/**
  * 全足場の平米集計。 面別 + 全体合計 + byFloor 内部 breakdown。
  *
  * 各 Handrail を computeSpanArea で計算、 計算不能は uncalculable に分離。
+ * uncalculable.reason (= 平米計算 Phase E-1):
+ *   - 'projection-failed' → findHostBuilding が null (建物なし/距離超過)
+ *   - 'height-undefined'  → host 取得後 getHeightAtPosition null (マーカー未配置)
  * byFloor:
  *   - floorDesignation 未指定 → 全 Handrail を floor1 に加算
  *   - 指定 → floorTag (= Map 登録 OR default 2F) に従って加算
@@ -192,12 +230,13 @@ export function computeScaffoldAreaSummary(
   floorDesignation?: Map<string, 1 | 2>,
 ): {
   faceAreas: Map<string, number>;
+  faceLabels: Map<string, string>;
   total: number;
-  uncalculable: Handrail[];
+  uncalculable: { handrail: Handrail; reason: 'projection-failed' | 'height-undefined' }[];
   byFloor: { floor1: number; floor2: number };
 } {
   const faceAreas = new Map<string, number>();
-  const uncalculable: Handrail[] = [];
+  const uncalculable: { handrail: Handrail; reason: 'projection-failed' | 'height-undefined' }[] = [];
   let total = 0;
   const byFloor = { floor1: 0, floor2: 0 };
 
@@ -208,12 +247,13 @@ export function computeScaffoldAreaSummary(
     }
     const host = findHostBuilding(h, buildings, { floorFilter: floorTag });
     if (!host) {
-      uncalculable.push(h);
+      uncalculable.push({ handrail: h, reason: 'projection-failed' });
       continue;
     }
     const area = computeSpanArea(h, buildings, markers, offsetMm, floorTag);
     if (area == null) {
-      uncalculable.push(h);
+      // host は OK だが computeSpanArea null → getHeightAtPosition 失敗確定
+      uncalculable.push({ handrail: h, reason: 'height-undefined' });
       continue;
     }
     const faceKey = `${host.building.id}-${host.edgeIndex}`;
@@ -228,7 +268,8 @@ export function computeScaffoldAreaSummary(
     }
   }
 
-  return { faceAreas, total, uncalculable, byFloor };
+  const faceLabels = assignFaceLabels(faceAreas);
+  return { faceAreas, faceLabels, total, uncalculable, byFloor };
 }
 
 /**

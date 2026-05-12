@@ -328,6 +328,57 @@ describe('computeScaffoldAreaSummary', () => {
     expect(result.byFloor.floor1).toBe(9);
     expect(result.byFloor.floor2).toBe(0);
   });
+
+  // === Phase E-1: uncalculable 理由別 + faceLabels ABCDEF ===
+
+  it('marks projection-failed uncalculable (= 建物が遠すぎる)', () => {
+    const b = makeRect('b1', 1000, 100);
+    const m = makeMarker('m1', 'b1', 0, 0.5, 5000);
+    const h = makeHandrail('h1', 100, -300); // y=-300 → 建物 (y=0..100) から遠すぎ
+    const result = computeScaffoldAreaSummary([h], [b], [m], 0);
+    expect(result.uncalculable.length).toBe(1);
+    expect(result.uncalculable[0].reason).toBe('projection-failed');
+    expect(result.uncalculable[0].handrail.id).toBe('h1');
+  });
+
+  it('marks height-undefined uncalculable (= marker 0 個建物)', () => {
+    const b = makeRect('b1', 1000, 100);
+    const h = makeHandrail('h1', 100, -5);
+    const result = computeScaffoldAreaSummary([h], [b], [], 0); // markers 空
+    expect(result.uncalculable.length).toBe(1);
+    expect(result.uncalculable[0].reason).toBe('height-undefined');
+    expect(result.uncalculable[0].handrail.id).toBe('h1');
+  });
+
+  it('assigns faceLabels A, B in edgeIndex order (single building, 2 faces)', () => {
+    const b = makeRect('b1', 1000, 1000);
+    const ma = makeMarker('ma', 'b1', 0, 0.5, 5000);
+    const mb = makeMarker('mb', 'b1', 1, 0.5, 5000);
+    const ha = makeHandrail('ha', 100, -5);                       // edge 0 (top)
+    const hb = makeHandrail('hb', 1005, 100, 1800, 'vertical');   // edge 1 (right)
+    const result = computeScaffoldAreaSummary([ha, hb], [b], [ma, mb], 0);
+    expect(result.faceLabels.get('b1-0')).toBe('A');
+    expect(result.faceLabels.get('b1-1')).toBe('B');
+  });
+
+  it('assigns faceLabels by building.id then edgeIndex (multi building)', () => {
+    const b1 = makeRect('b1', 1000, 100);
+    const b2 = makeRect('b2', 1000, 100, 3000, 0);
+    const m1 = makeMarker('m1', 'b1', 0, 0.5, 5000);
+    const m2 = makeMarker('m2', 'b2', 0, 0.5, 5000);
+    const ha = makeHandrail('ha', 100, -5);   // b1 edge 0
+    const hb = makeHandrail('hb', 3100, -5);  // b2 edge 0
+    const result = computeScaffoldAreaSummary([ha, hb], [b1, b2], [m1, m2], 0);
+    expect(result.faceLabels.get('b1-0')).toBe('A');
+    expect(result.faceLabels.get('b2-0')).toBe('B');
+  });
+
+  it('returns empty faceLabels Map for 0 faces (= empty handrails)', () => {
+    const b = makeRect('b1', 1000, 100);
+    const m = makeMarker('m1', 'b1', 0, 0.5, 5000);
+    const result = computeScaffoldAreaSummary([], [b], [m], 0);
+    expect(result.faceLabels.size).toBe(0);
+  });
 });
 
 // === computeBuildingFloorAreaSummary ===
