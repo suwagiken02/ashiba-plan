@@ -685,7 +685,7 @@ export default function EditorPage() {
         <AlertDialog message={alertMessage} onClose={() => setAlertMessage(null)} />
       )}
       <HeightInputModal />
-      <AreaCalculationModal />
+      <AreaCalculationModal siteName={siteName} />
       <AreaDesignationModeBar />
       {showBackConfirm && (
         <ConfirmDialog

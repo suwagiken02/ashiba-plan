@@ -95,7 +95,7 @@ function PreviewSVG({
   );
 }
 
-export default function AreaCalculationModal() {
+export default function AreaCalculationModal({ siteName }: { siteName: string }) {
   const {
     showAreaCalcModal, setShowAreaCalcModal,
     canvasData, floorDesignation,
@@ -164,6 +164,38 @@ export default function AreaCalculationModal() {
     store.setMemoDraftSource('area-calc');
     store.setMode('memo');
     setShowAreaCalcModal(false);
+  };
+
+  /** 平米計算 Phase E-4b: 計算結果 + 図面 を A4 縦 1 ページ PDF に出力 */
+  const handleExport = async () => {
+    try {
+      const { exportAreaCalcPdf } = await import('@/lib/export/areaCalcPdfExport');
+      const { useAuthStore } = await import('@/stores/authStore');
+      const store = useCanvasStore.getState();
+      await exportAreaCalcPdf({
+        canvasData,
+        scaffoldSummary,
+        buildingSummary,
+        offsetMm: areaCalcOffsetMm,
+        isFloorOnlyMode,
+        siteName,
+        companyName: useAuthStore.getState().profile?.company_name ?? '',
+        date: new Date().toLocaleDateString('ja-JP'),
+        zoom: store.zoom,
+        panX: store.panX,
+        panY: store.panY,
+      });
+      const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+      const deviceMsg = /iPhone|iPad|iPod/.test(ua)
+        ? '『ファイル』 アプリの「ダウンロード」 で確認できます。'
+        : /Android/i.test(ua)
+        ? 'ダウンロードフォルダ または Files アプリで確認できます。'
+        : 'ダウンロードフォルダに保存されました。';
+      store.setAlertMessage(`平米計算 PDF を保存しました\n\n${deviceMsg}`);
+      setShowAreaCalcModal(false);
+    } catch (e) {
+      alert(`出力エラー: ${e instanceof Error ? e.message : String(e)}`);
+    }
   };
 
   return (
@@ -257,8 +289,8 @@ export default function AreaCalculationModal() {
             計算結果を貼り付け
           </button>
           <button
-            disabled
-            className="w-full py-2 bg-accent text-white rounded-xl text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={handleExport}
+            className="w-full py-2 bg-accent text-white rounded-xl text-sm font-bold"
           >
             計算結果を出力
           </button>

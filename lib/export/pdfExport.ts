@@ -45,8 +45,9 @@ export function getPrintAreaGrid(
 
 /**
  * 表題欄をCanvas で画像化して PNG ArrayBuffer を返す。
+ * 平米計算 PDF 出力 (= Phase E-4b) でも共用するため named export。
  */
-function renderTitleBlock(
+export function renderTitleBlock(
   siteName: string,
   companyName: string,
   date: string,
