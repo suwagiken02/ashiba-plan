@@ -295,3 +295,53 @@ export function computeBuildingFloorAreaSummary(
   }
   return { floor1, floor2, total: floor1 + floor2 };
 }
+
+/**
+ * 面プレビュー mini canvas 用の座標変換ジオメトリ (= 平米計算 Phase E-3)。
+ * BuildingTemplateModal / AutoLayoutModal の PreviewSVG パターンを utility 化。
+ *
+ * - 入力 points の bbox を svgW × svgH の枠内 (pad 残し) に fit させる scale を算出
+ * - toSvg(p) で grid 座標 → SVG 座標 (centered) に変換
+ * - 退化ケース:
+ *   - points 空 → bbox 全ゼロ、 scale 0、 toSvg は中央固定
+ *   - 全点同一 / 1 点 → bw/bh = 0 を 1 で fallback、 中央に collapse
+ */
+export function computeAreaPreviewGeometry(
+  points: Point[],
+  svgW: number,
+  svgH: number,
+  pad: number,
+): {
+  bbox: { minX: number; minY: number; maxX: number; maxY: number };
+  scale: number;
+  toSvg: (p: Point) => { x: number; y: number };
+} {
+  if (points.length === 0) {
+    const cx = svgW / 2, cy = svgH / 2;
+    return {
+      bbox: { minX: 0, minY: 0, maxX: 0, maxY: 0 },
+      scale: 0,
+      toSvg: () => ({ x: cx, y: cy }),
+    };
+  }
+  const xs = points.map((p) => p.x);
+  const ys = points.map((p) => p.y);
+  const minX = Math.min(...xs);
+  const minY = Math.min(...ys);
+  const maxX = Math.max(...xs);
+  const maxY = Math.max(...ys);
+  const bw = (maxX - minX) || 1;
+  const bh = (maxY - minY) || 1;
+  const scale = Math.min((svgW - pad * 2) / bw, (svgH - pad * 2) / bh);
+  const offsetX = pad + ((svgW - pad * 2) - bw * scale) / 2;
+  const offsetY = pad + ((svgH - pad * 2) - bh * scale) / 2;
+  const toSvg = (p: Point) => ({
+    x: offsetX + (p.x - minX) * scale,
+    y: offsetY + (p.y - minY) * scale,
+  });
+  return {
+    bbox: { minX, minY, maxX, maxY },
+    scale,
+    toSvg,
+  };
+}

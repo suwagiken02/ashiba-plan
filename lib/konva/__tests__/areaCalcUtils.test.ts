@@ -7,6 +7,7 @@ import {
   groupHandrailsByFace,
   computeScaffoldAreaSummary,
   computeBuildingFloorAreaSummary,
+  computeAreaPreviewGeometry,
 } from '../areaCalcUtils';
 import type { BuildingShape, Handrail, HeightMarker } from '@/types';
 
@@ -421,5 +422,53 @@ describe('computeBuildingFloorAreaSummary', () => {
     expect(result.floor1).toBe(0);
     expect(result.floor2).toBe(0);
     expect(result.total).toBe(0);
+  });
+});
+
+// === computeAreaPreviewGeometry === (= 平米計算 Phase E-3)
+describe('computeAreaPreviewGeometry', () => {
+  it('1. bbox: 正方形 outline の min/max が正しい', () => {
+    const pts = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+    const geo = computeAreaPreviewGeometry(pts, 280, 180, 24);
+    expect(geo.bbox).toEqual({ minX: 0, minY: 0, maxX: 100, maxY: 100 });
+  });
+
+  it('2. scale (横長 fit): bw > bh、 width 制約で scale 決定', () => {
+    // bw=200, bh=50, svgW=280 pad=24 → (280-48)/200 = 1.16, (180-48)/50 = 2.64 → min=1.16
+    const pts = [{ x: 0, y: 0 }, { x: 200, y: 0 }, { x: 200, y: 50 }, { x: 0, y: 50 }];
+    const geo = computeAreaPreviewGeometry(pts, 280, 180, 24);
+    expect(geo.scale).toBeCloseTo((280 - 48) / 200, 5);
+  });
+
+  it('3. scale (縦長 fit): bh > bw、 height 制約で scale 決定', () => {
+    // bw=50, bh=200, svgW=280 pad=24 → (280-48)/50 = 4.64, (180-48)/200 = 0.66 → min=0.66
+    const pts = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 200 }, { x: 0, y: 200 }];
+    const geo = computeAreaPreviewGeometry(pts, 280, 180, 24);
+    expect(geo.scale).toBeCloseTo((180 - 48) / 200, 5);
+  });
+
+  it('4. toSvg: 正方形 outline が svgW/2 svgH/2 を中心に centered', () => {
+    const pts = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }, { x: 0, y: 100 }];
+    const geo = computeAreaPreviewGeometry(pts, 280, 180, 24);
+    const center = geo.toSvg({ x: 50, y: 50 });
+    expect(center.x).toBeCloseTo(140, 5);
+    expect(center.y).toBeCloseTo(90, 5);
+  });
+
+  it('5. 退化: 空配列 → scale 0、 toSvg は中央固定', () => {
+    const geo = computeAreaPreviewGeometry([], 280, 180, 24);
+    expect(geo.scale).toBe(0);
+    expect(geo.bbox).toEqual({ minX: 0, minY: 0, maxX: 0, maxY: 0 });
+    expect(geo.toSvg({ x: 999, y: -999 })).toEqual({ x: 140, y: 90 });
+  });
+
+  it('6. 退化: 全点同一座標 → 中央に collapse、 NaN/Infinity 出ない', () => {
+    const pts = [{ x: 42, y: 42 }, { x: 42, y: 42 }, { x: 42, y: 42 }];
+    const geo = computeAreaPreviewGeometry(pts, 280, 180, 24);
+    const result = geo.toSvg({ x: 42, y: 42 });
+    expect(Number.isFinite(result.x)).toBe(true);
+    expect(Number.isFinite(result.y)).toBe(true);
+    // bw=bh=0 → fallback 1 → scale = min(232, 132) = 132、 offset で centered
+    expect(geo.bbox).toEqual({ minX: 42, minY: 42, maxX: 42, maxY: 42 });
   });
 });
