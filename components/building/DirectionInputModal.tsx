@@ -15,10 +15,17 @@ const DIR_LABEL: Record<string, string> = {
 };
 
 export default function DirectionInputModal({ onClose }: Props) {
-  const { directionPoints, addDirectionPoint, pendingDirection, setPendingDirection, pendingDirectionTarget, setPendingDirectionTarget } = useCanvasStore();
+  const {
+    directionPoints, addDirectionPoint,
+    pendingDirection, setPendingDirection,
+    pendingDirectionTarget, setPendingDirectionTarget,
+    directionCursor, setDirectionCursor,
+    noWallMode, setNoWallMode,
+  } = useCanvasStore();
 
   // 交点タップ時はターゲットから距離を算出して初期値にする
-  const last = directionPoints.length > 0 ? directionPoints[directionPoints.length - 1] : null;
+  // last = directionCursor 優先 (= キャラのみモード中の位置)、 fallback で polygon の最終頂点
+  const last = directionCursor ?? (directionPoints.length > 0 ? directionPoints[directionPoints.length - 1] : null);
   const initialDistMm = pendingDirectionTarget && last
     ? Math.round(Math.sqrt(Math.pow((pendingDirectionTarget.x - last.x) * 10, 2) + Math.pow((pendingDirectionTarget.y - last.y) * 10, 2)))
     : 3000;
@@ -36,8 +43,8 @@ export default function DirectionInputModal({ onClose }: Props) {
       // 交点タップ: ターゲット座標をそのまま使う
       next = { ...pendingDirectionTarget };
     } else {
-      // 4方向ボタン: 方向×距離で計算
-      const currentLast = directionPoints[directionPoints.length - 1];
+      // 4方向ボタン: 方向×距離で計算 (= directionCursor 優先で polygon last fallback)
+      const currentLast = directionCursor ?? directionPoints[directionPoints.length - 1];
       const distGrid = distanceMm / GRID_UNIT_MM;
       next = { ...currentLast };
       if (pendingDirection === 'up') next.y -= distGrid;
@@ -46,7 +53,15 @@ export default function DirectionInputModal({ onClose }: Props) {
       if (pendingDirection === 'right') next.x += distGrid;
     }
 
-    // 始点に近ければ自動完了
+    // キャラのみモード: polygon 不変、 cursor のみ更新 (= 壁を作らずキャラのみ移動)
+    if (noWallMode) {
+      setDirectionCursor(next);
+      useCanvasStore.getState().setLastMoveDirection(pendingDirection);
+      cleanup();
+      return;
+    }
+
+    // 始点に近ければ自動完了 (= 壁モードのみ、 キャラのみモードでは偶発 close 防止)
     const first = directionPoints[0];
     const dist = Math.hypot(next.x - first.x, next.y - first.y);
     if (directionPoints.length >= 3 && dist < 2) {
@@ -75,6 +90,7 @@ export default function DirectionInputModal({ onClose }: Props) {
     }
 
     addDirectionPoint(next);
+    setDirectionCursor(null); // 壁確定 → cursor は polygon の新 last に追従
     useCanvasStore.getState().setLastMoveDirection(pendingDirection);
     cleanup();
   };
@@ -98,6 +114,16 @@ export default function DirectionInputModal({ onClose }: Props) {
           {directionPoints.length}点入力済み
           {pendingDirectionTarget && <span className="ml-2 text-orange-400">（交点タップ）</span>}
         </p>
+
+        {/* トグル: 壁を作らずキャラのみ移動 */}
+        <label className="flex items-center gap-2 text-xs text-canvas cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={noWallMode}
+            onChange={(e) => setNoWallMode(e.target.checked)}
+          />
+          <span>壁を作らずキャラのみ移動</span>
+        </label>
 
         {/* 距離入力 */}
         <div className="flex items-center gap-2">
@@ -126,7 +152,7 @@ export default function DirectionInputModal({ onClose }: Props) {
           </button>
           <button onClick={handleConfirm}
             className="flex-1 py-2.5 bg-accent text-white rounded-xl text-sm font-bold">
-            壁を追加
+            {noWallMode ? 'キャラを移動' : '壁を追加'}
           </button>
         </div>
       </div>

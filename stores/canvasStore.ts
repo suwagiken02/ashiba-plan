@@ -141,6 +141,12 @@ type CanvasStore = {
   setPendingDirection: (dir: 'up' | 'down' | 'left' | 'right' | null) => void;
   pendingDirectionTarget: { x: number; y: number } | null;
   setPendingDirectionTarget: (p: { x: number; y: number } | null) => void;
+  /** 壁方向入力: キャラのみ移動した場合の現在位置 (= polygon 不変、 cursor のみ分離) */
+  directionCursor: { x: number; y: number } | null;
+  setDirectionCursor: (p: { x: number; y: number } | null) => void;
+  /** 壁方向入力: トグル「壁を作らずキャラのみ移動」(= default false、 session 内保持、 clearDirectionPoints でリセット) */
+  noWallMode: boolean;
+  setNoWallMode: (v: boolean) => void;
   lastMoveDirection: 'up' | 'down' | 'left' | 'right';
   setLastMoveDirection: (dir: 'up' | 'down' | 'left' | 'right') => void;
   showDirectionGuide: boolean;
@@ -437,8 +443,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
     return { directionPoints: prevPoints, directionPointsHistory: newHistory };
   }),
   removeLastDirectionPoint: () => set((s) => ({ directionPoints: s.directionPoints.slice(0, -1) })),
-  clearDirectionPoints: () => set({ directionPoints: [], directionPointsHistory: [] }),
+  clearDirectionPoints: () => set({
+    directionPoints: [], directionPointsHistory: [],
+    directionCursor: null, noWallMode: false,
+  }),
   setDirectionPoints: (points) => set({ directionPoints: points }),
+  directionCursor: null,
+  setDirectionCursor: (p) => set({ directionCursor: p }),
+  noWallMode: false,
+  setNoWallMode: (v) => set({ noWallMode: v }),
   setLastCompletedDirectionSession: (s) => set({ lastCompletedDirectionSession: s }),
   autoOpenRoofForBuildingId: null,
   setAutoOpenRoofForBuildingId: (id) => set({ autoOpenRoofForBuildingId: id }),

@@ -36,7 +36,7 @@ type Props = {
 
 export default function GridCanvas({ width, height }: Props) {
   const stageRef = useRef<Konva.Stage>(null);
-  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, lastMoveDirection, showDirectionGuide, showDimensionLines, isHeightMarkerMode } = useCanvasStore();
+  const { zoom, panX, panY, setZoom, setPan, mode, canvasData, handrailPreview, snapPoint, obstaclePreview, isMeasuring, measurePoint1, measurePoint2, measureCursor, measureResultMm, buildingInputMethod, showGridGuide, showPrintArea, printPaperSize, printScale, printAreaCenter, setPrintAreaCenter, isDarkMode, building2FDraft, memoDraft, directionPoints, directionCursor, lastMoveDirection, showDirectionGuide, showDimensionLines, isHeightMarkerMode } = useCanvasStore();
 
   const colorCanvasBg = isDarkMode ? '#0a0a0a' : '#f5f4f0';
   const colorGridMinor = isDarkMode ? 'rgba(0,255,65,0.15)' : '#e5e4e0';
@@ -811,7 +811,7 @@ export default function GridCanvas({ width, height }: Props) {
           <Layer>
             {(() => {
               const gridPx = INITIAL_GRID_PX * zoom;
-              const last = directionPoints[directionPoints.length - 1];
+              const last = directionCursor ?? directionPoints[directionPoints.length - 1];
               const px = last.x * gridPx + panX;
               const py = last.y * gridPx + panY;
               const btnSize = 36;
@@ -864,7 +864,7 @@ export default function GridCanvas({ width, height }: Props) {
             <Layer>
               {(() => {
                 const gridPx = INITIAL_GRID_PX * zoom;
-                const last = directionPoints[directionPoints.length - 1];
+                const last = directionCursor ?? directionPoints[directionPoints.length - 1];
                 const cx = last.x;
                 const cy = last.y;
                 // 可視範囲をグリッド座標で算出
