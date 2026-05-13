@@ -227,6 +227,9 @@ type CanvasStore = {
   // メモ作成
   memoDraft: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null;
   setMemoDraft: (draft: { shape: MemoShape; text: string; angle: number; scaleX: number; scaleY: number } | null) => void;
+  /** memoDraft の出所識別 (= 平米計算 Phase E-4a)。 'memo' = 既存 MemoCreateModal、 'area-calc' = 平米計算結果貼り付け */
+  memoDraftSource: 'memo' | 'area-calc';
+  setMemoDraftSource: (source: 'memo' | 'area-calc') => void;
   clearMemoDraft: () => void;
   showMemoCreateModal: boolean;
   setShowMemoCreateModal: (show: boolean) => void;
@@ -563,7 +566,9 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   memoDraft: null,
   setMemoDraft: (draft) => set({ memoDraft: draft }),
-  clearMemoDraft: () => set({ memoDraft: null }),
+  clearMemoDraft: () => set({ memoDraft: null, memoDraftSource: 'memo' }),
+  memoDraftSource: 'memo',
+  setMemoDraftSource: (source) => set({ memoDraftSource: source }),
   showMemoCreateModal: false,
   setShowMemoCreateModal: (show) => set({ showMemoCreateModal: show }),
   lastMemoSettings: null,

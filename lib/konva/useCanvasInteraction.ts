@@ -544,6 +544,8 @@ export function useCanvasInteraction() {
       // memo モード
       if (s.mode === 'memo') {
         if (s.memoDraft) {
+          // 平米計算 Phase E-4a: source は clearMemoDraft で reset されるため先に保持
+          const fromAreaCalc = s.memoDraftSource === 'area-calc';
           s.addMemo({
             id: uuidv4(),
             x: rawPos.x,
@@ -556,7 +558,7 @@ export function useCanvasInteraction() {
             scaleY: s.memoDraft.scaleY,
           });
           s.clearMemoDraft();
-          s.setShowMemoCreateModal(true);
+          if (!fromAreaCalc) s.setShowMemoCreateModal(true);
         } else {
           s.setShowMemoCreateModal(true);
         }

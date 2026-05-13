@@ -7,6 +7,7 @@ import {
   computeBuildingFloorAreaSummary,
   computeAreaPreviewGeometry,
 } from '@/lib/konva/areaCalcUtils';
+import { buildAreaCalcText } from '@/lib/konva/areaCalcText';
 import { getOutlinePolygon } from '@/lib/konva/heightMarkerUtils';
 import { getHandrailEndpoints } from '@/lib/konva/snapUtils';
 import type { BuildingShape, Handrail, Point } from '@/types';
@@ -150,6 +151,21 @@ export default function AreaCalculationModal() {
 
   const handleClose = () => setShowAreaCalcModal(false);
 
+  /** 平米計算 Phase E-4a: 計算結果を memo として配置するモードへ遷移 */
+  const handlePaste = () => {
+    const text = buildAreaCalcText({
+      scaffoldSummary,
+      buildingSummary,
+      offsetMm: areaCalcOffsetMm,
+      isFloorOnlyMode,
+    });
+    const store = useCanvasStore.getState();
+    store.setMemoDraft({ shape: 'rect', text, angle: 0, scaleX: 1, scaleY: 1 });
+    store.setMemoDraftSource('area-calc');
+    store.setMode('memo');
+    setShowAreaCalcModal(false);
+  };
+
   return (
     <div className="fixed inset-0 modal-overlay z-50 flex items-center justify-center">
       <div className="bg-dark-surface border border-dark-border rounded-2xl p-5 max-w-sm mx-4 w-full max-h-[90vh] overflow-y-auto">
@@ -235,8 +251,8 @@ export default function AreaCalculationModal() {
 
         <div className="flex flex-col gap-2">
           <button
-            disabled
-            className="w-full py-2 bg-accent text-white rounded-xl text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed"
+            onClick={handlePaste}
+            className="w-full py-2 bg-accent text-white rounded-xl text-sm font-bold"
           >
             計算結果を貼り付け
           </button>
