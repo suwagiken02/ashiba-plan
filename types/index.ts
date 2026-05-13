@@ -49,7 +49,7 @@ export type RoofOverhang = {
 };
 
 // === 障害物 ===
-export type ObstacleType = 'ecocute' | 'aircon' | 'bay_window' | 'carport' | 'sunroom' | 'custom_rect' | 'custom_circle';
+export type ObstacleType = 'ecocute' | 'aircon' | 'bay_window' | 'carport' | 'sunroom' | 'balcony' | 'custom_rect' | 'custom_circle';
 
 export type Obstacle = {
   id: string;

@@ -13,6 +13,7 @@ const OBSTACLE_COLORS: Record<ObstacleType, string> = {
   bay_window: '#FAC775',
   carport: '#7B6DE8',
   sunroom: '#F5C4B3',
+  balcony: '#C9B27A',
   custom_rect: '#D3D1C7',
   custom_circle: '#D3D1C7',
 };
@@ -23,6 +24,7 @@ const OBSTACLE_LABELS: Record<ObstacleType, string> = {
   bay_window: '出窓',
   carport: 'カーポート',
   sunroom: 'サンルーム',
+  balcony: 'バルコニー',
   custom_rect: '',
   custom_circle: '',
 };
@@ -182,6 +184,8 @@ export default function ObstacleLayer() {
         const color = OBSTACLE_COLORS[obs.type];
         const label = obs.label || OBSTACLE_LABELS[obs.type];
         const isCarport = obs.type === 'carport';
+        // 上層階張り出し構造 (= carport / balcony): 破線輪郭 + 透明 fill で「足元障害物ではない」を表現
+        const isElevated = isCarport || obs.type === 'balcony';
         const screenX = obs.x * gridPx + panX;
         const screenY = obs.y * gridPx + panY;
         const w = obs.width * gridPx;
@@ -282,11 +286,11 @@ export default function ObstacleLayer() {
               y={screenY}
               width={w}
               height={h}
-              fill={isCarport ? 'transparent' : color}
+              fill={isElevated ? 'transparent' : color}
               opacity={0.7}
-              stroke={isSelected ? '#378ADD' : isCarport ? color : '#999'}
-              strokeWidth={isSelected ? 2 : isCarport ? 1.5 : 0.5}
-              dash={isCarport ? [8, 4] : undefined}
+              stroke={isSelected ? '#378ADD' : isElevated ? color : '#999'}
+              strokeWidth={isSelected ? 2 : isElevated ? 1.5 : 0.5}
+              dash={isElevated ? [8, 4] : undefined}
               listening={mode === 'select' || mode === 'erase' || mode === 'move-select'}
               id={obs.id}
               draggable={mode === 'select'}

@@ -19,6 +19,7 @@ const OBSTACLE_TYPES: { id: ObstacleType; label: string; color: string }[] = [
   { id: 'bay_window', label: '出窓', color: '#FAC775' },
   { id: 'carport', label: 'カーポート', color: '#7B6DE8' },
   { id: 'sunroom', label: 'サンルーム', color: '#F5C4B3' },
+  { id: 'balcony', label: 'バルコニー', color: '#C9B27A' },
   { id: 'custom_rect', label: '自由四角', color: '#D3D1C7' },
   { id: 'custom_circle', label: '自由円', color: '#D3D1C7' },
 ];
@@ -29,6 +30,7 @@ const OBSTACLE_DEFAULTS: Record<ObstacleType, { w: number; h: number }> = {
   bay_window: { w: 1200, h: 400 },
   carport: { w: 2500, h: 5000 },
   sunroom: { w: 2000, h: 2500 },
+  balcony: { w: 2700, h: 900 },
   custom_rect: { w: 1000, h: 1000 },
   custom_circle: { w: 1000, h: 1000 },
 };
