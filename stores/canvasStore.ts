@@ -19,6 +19,8 @@ import {
   MemoShape,
   MagnetPin,
   HeightMarker,
+  DimensionLineKey,
+  DEFAULT_DIMENSION_OFFSETS_MM,
 } from '@/types';
 import { PinAnchor } from '@/lib/magnetPin/anchorPoints';
 import { DEFAULT_COLS, DEFAULT_ROWS, INITIAL_GRID_PX, ZOOM_MIN, ZOOM_MAX } from '@/lib/konva/gridUtils';
@@ -44,6 +46,7 @@ const normalizeCanvasData = (data: CanvasData): CanvasData => {
     ...data,
     magnetPins: data.magnetPins ?? [],
     heightMarkers: data.heightMarkers ?? [],
+    dimensionOffsetsMm: data.dimensionOffsetsMm ?? { ...DEFAULT_DIMENSION_OFFSETS_MM },
   };
   // 旧 scaffoldStart → scaffoldStart1F / scaffoldStart2F への移行。
   // 既に 1F/2F 側が入っていればそちらを優先（二重上書きしない）。
@@ -73,6 +76,8 @@ type CanvasStore = {
   // Canvas data
   canvasData: CanvasData;
   setCanvasData: (data: CanvasData) => void;
+  /** 寸法線オフセット mm 更新 (= 寸法線移動、 種別ごと相対 delta) */
+  setDimensionOffsetMm: (key: DimensionLineKey, mm: number) => void;
 
   // Mode
   mode: ModeType;
@@ -374,6 +379,15 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
 
   canvasData: createEmptyCanvasData(),
   setCanvasData: (data) => set({ canvasData: normalizeCanvasData(data), isDirty: false }),
+  setDimensionOffsetMm: (key, mm) => {
+    const { canvasData, pushHistory } = get();
+    pushHistory();
+    const current = canvasData.dimensionOffsetsMm ?? DEFAULT_DIMENSION_OFFSETS_MM;
+    set({
+      canvasData: { ...canvasData, dimensionOffsetsMm: { ...current, [key]: mm } },
+      isDirty: true,
+    });
+  },
 
   mode: 'select',
   setMode: (mode) => set({ mode, selectedIds: [] }),

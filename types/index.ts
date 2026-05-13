@@ -205,6 +205,17 @@ export type HeightMarker = {
   floor?: 1 | 2;
 };
 
+// === 寸法線オフセット (= 寸法線移動 Phase 1) ===
+/** 寸法線の種別キー (= handrailSettingsStore の DimensionVisibility と同 6 key) */
+export type DimensionLineKey = 'scaffold1F' | 'scaffold2F' | 'wall1F' | 'wall2F' | 'roof1F' | 'roof2F';
+
+/** 種別ごとの外向き mm offset (= 既存 hardcoded px からの相対 delta、 default 0 で挙動完全維持) */
+export type DimensionOffsetsMm = Record<DimensionLineKey, number>;
+
+export const DEFAULT_DIMENSION_OFFSETS_MM: DimensionOffsetsMm = {
+  scaffold1F: 0, scaffold2F: 0, wall1F: 0, wall2F: 0, roof1F: 0, roof2F: 0,
+};
+
 // === キャンバスデータ（保存用） ===
 export type CanvasData = {
   version: string;
@@ -232,6 +243,8 @@ export type CanvasData = {
   magnetPins?: MagnetPin[];
   /** 高さマーカー (= undefined は既存プロジェクト互換、 normalize で [] に正規化) */
   heightMarkers?: HeightMarker[];
+  /** 寸法線オフセット mm (= 既存 hardcoded からの delta、 ドラッグで更新、 normalize で default 補完) */
+  dimensionOffsetsMm?: DimensionOffsetsMm;
 };
 
 // === 建物テンプレート ===
