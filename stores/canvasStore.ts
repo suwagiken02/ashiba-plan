@@ -354,8 +354,6 @@ type CanvasStore = {
   // 平米計算 modal: α offset + PDF flag (= 平米計算 Phase E-2)
   areaCalcOffsetMm: number;
   setAreaCalcOffsetMm: (v: number) => void;
-  areaCalcIncludeInPdf: boolean;
-  setAreaCalcIncludeInPdf: (v: boolean) => void;
   // 平米計算: 1F足場指定モード (= 平米計算 Phase D-2)
   isAreaDesignationMode: boolean;
   floorDesignation: Record<string, 1 | 2>;
@@ -1060,8 +1058,6 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
   // === 平米計算 modal: α offset + PDF flag (= 平米計算 Phase E-2) ===
   areaCalcOffsetMm: 900,
   setAreaCalcOffsetMm: (v) => set({ areaCalcOffsetMm: v }),
-  areaCalcIncludeInPdf: true,
-  setAreaCalcIncludeInPdf: (v) => set({ areaCalcIncludeInPdf: v }),
 
   // === 平米計算: 1F足場指定モード (= 平米計算 Phase D-2) ===
   isAreaDesignationMode: false,

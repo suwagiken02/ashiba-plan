@@ -100,7 +100,6 @@ export default function AreaCalculationModal({ siteName }: { siteName: string })
     showAreaCalcModal, setShowAreaCalcModal,
     canvasData, floorDesignation,
     areaCalcOffsetMm, setAreaCalcOffsetMm,
-    areaCalcIncludeInPdf, setAreaCalcIncludeInPdf,
   } = useCanvasStore();
 
   // 足場 0 個 → 床㎡のみモード自動判定 (= 平米計算 Phase E-2 ★4)
@@ -271,15 +270,6 @@ export default function AreaCalculationModal({ siteName }: { siteName: string })
             )}
           </section>
         )}
-
-        <label className="flex items-center gap-2 mb-4 text-xs text-canvas cursor-pointer">
-          <input
-            type="checkbox"
-            checked={areaCalcIncludeInPdf}
-            onChange={(e) => setAreaCalcIncludeInPdf(e.target.checked)}
-          />
-          PDF に出力する
-        </label>
 
         <div className="flex flex-col gap-2">
           <button
