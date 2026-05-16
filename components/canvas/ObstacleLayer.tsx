@@ -13,7 +13,7 @@ const OBSTACLE_COLORS: Record<ObstacleType, string> = {
   bay_window: '#FAC775',
   carport: '#7B6DE8',
   sunroom: '#F5C4B3',
-  balcony: '#C9B27A',
+  balcony: '#5C4A33',
   custom_rect: '#D3D1C7',
   custom_circle: '#D3D1C7',
 };

@@ -614,7 +614,7 @@ export default function GridCanvas({ width, height }: Props) {
             const h = obstaclePreview.heightGrid * gridPx;
             const colors: Record<string, string> = {
               ecocute: '#B5D4F4', aircon: '#C0DD97', bay_window: '#FAC775',
-              carport: '#CECBF6', sunroom: '#F5C4B3', balcony: '#C9B27A', custom_rect: '#D3D1C7', custom_circle: '#D3D1C7',
+              carport: '#CECBF6', sunroom: '#F5C4B3', balcony: '#5C4A33', custom_rect: '#D3D1C7', custom_circle: '#D3D1C7',
             };
             const labels: Record<string, string> = {
               ecocute: 'ECO', aircon: '室外機', bay_window: '出窓',
