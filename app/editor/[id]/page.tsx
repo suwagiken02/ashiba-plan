@@ -148,6 +148,8 @@ export default function EditorPage() {
   const [drawingTitle, setDrawingTitle] = useState('');
   const [siteName, setSiteName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  // 起動時自動全範囲表示 (= #1): drawingId ごとに 1 回 fit するための ref フラグ
+  const fittedForDrawingIdRef = useRef<string | null>(null);
 
   // 画面サイズ計測
   useEffect(() => {
@@ -192,6 +194,16 @@ export default function EditorPage() {
     };
     loadDrawing();
   }, [drawingId, setDrawingId, setProjectId, setCanvasData]);
+
+  // 起動時自動全範囲表示 (= #1): buildings + canvasSize 確定後、 drawingId ごとに 1 回
+  useEffect(() => {
+    if (!drawingId) return;
+    if (canvasSize.width === 0 || canvasSize.height === 0) return;
+    if (canvasData.buildings.length === 0) return;
+    if (fittedForDrawingIdRef.current === drawingId) return;
+    zoomToFitBuildings(canvasSize.width, canvasSize.height, 3000);
+    fittedForDrawingIdRef.current = drawingId;
+  }, [drawingId, canvasData.buildings.length, canvasSize.width, canvasSize.height, zoomToFitBuildings]);
 
 
   // 保存
