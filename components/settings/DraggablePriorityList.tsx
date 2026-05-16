@@ -131,18 +131,15 @@ function SortableRow({ size, section, enabled }: { size: HandrailLengthMm; secti
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center h-10 ${bgClass} border rounded-md overflow-hidden select-none ${dragClass}`}
+      {...attributes}
+      {...listeners}
+      aria-label="ドラッグハンドル"
+      className={`flex items-center h-10 ${bgClass} border rounded-md overflow-hidden select-none cursor-grab active:cursor-grabbing touch-none ${dragClass}`}
     >
       <div className={`w-1 self-stretch ${SECTION_BAR_COLOR[section]}`} />
-      <button
-        type="button"
-        {...attributes}
-        {...listeners}
-        aria-label="ドラッグハンドル"
-        className="w-10 md:w-8 h-10 flex items-center justify-center text-gray-500 cursor-grab active:cursor-grabbing touch-none"
-      >
+      <span className="w-10 md:w-8 h-10 flex items-center justify-center text-gray-500">
         ≡
-      </button>
+      </span>
       <span className={`flex-1 text-sm font-semibold ${textClass}`}>{size}mm</span>
     </div>
   );
