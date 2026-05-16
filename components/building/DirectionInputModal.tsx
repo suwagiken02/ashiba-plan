@@ -89,6 +89,12 @@ export default function DirectionInputModal({ onClose }: Props) {
       return;
     }
 
+    // キャラのみモード後に壁モードへ戻った場合: cursor 位置を polygon に取り込む
+    // (= 壁起点が古い polygon last ではなく cursor 位置になるよう保証)
+    if (directionCursor) {
+      addDirectionPoint(directionCursor);
+    }
+
     addDirectionPoint(next);
     setDirectionCursor(null); // 壁確定 → cursor は polygon の新 last に追従
     useCanvasStore.getState().setLastMoveDirection(pendingDirection);
