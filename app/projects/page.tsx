@@ -17,6 +17,7 @@ export default function ProjectsPage() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [newName, setNewName] = useState('');
   const [newAddress, setNewAddress] = useState('');
+  const [newContractor, setNewContractor] = useState('');
   const [creating, setCreating] = useState(false);
 
   // Phase 3b: プロジェクト共有 URL モーダル用 state
@@ -67,6 +68,7 @@ export default function ProjectsPage() {
           company_id: companyId,
           name: newName.trim(),
           address: newAddress.trim() || null,
+          contractor_name: newContractor.trim() || null,
         })
         .select()
         .single();
@@ -124,6 +126,7 @@ export default function ProjectsPage() {
     setShowNewModal(false);
     setNewName('');
     setNewAddress('');
+    setNewContractor('');
   };
 
   const deleteProject = async (id: string) => {
@@ -364,6 +367,17 @@ export default function ProjectsPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createProject(); } }}
                   className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
                   placeholder="東京都..."
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-dimension mb-1">元請け様名</label>
+                <input
+                  type="text"
+                  value={newContractor}
+                  onChange={(e) => setNewContractor(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); createProject(); } }}
+                  className="w-full px-4 py-3 bg-dark-bg border border-dark-border rounded-lg text-canvas focus:outline-none focus:border-accent"
+                  placeholder="○○工務店"
                 />
               </div>
             </div>
