@@ -16,7 +16,7 @@ const DIR_LABEL: Record<string, string> = {
 
 export default function DirectionInputModal({ onClose }: Props) {
   const {
-    directionPoints, addDirectionPoint,
+    directionPoints, addDirectionPoint, setDirectionPoints,
     pendingDirection, setPendingDirection,
     pendingDirectionTarget, setPendingDirectionTarget,
     directionCursor, setDirectionCursor,
@@ -89,10 +89,17 @@ export default function DirectionInputModal({ onClose }: Props) {
       return;
     }
 
-    // キャラのみモード後に壁モードへ戻った場合: cursor 位置を polygon に取り込む
-    // (= 壁起点が古い polygon last ではなく cursor 位置になるよう保証)
+    // キャラのみモード後に壁モードへ戻った場合の cursor 処理
+    // ケース 1 (= 壁ゼロ + cursor あり): 起点リセット (= 壁なし区間バグ修正)
+    // ケース 2 (= 壁 1 本以上 + cursor あり): cursor を polygon に取り込み (= #4 修正、 起点維持)
     if (directionCursor) {
-      addDirectionPoint(directionCursor);
+      if (directionPoints.length === 1) {
+        // ケース 1: 壁ゼロ + キャラ移動 → 起点リセット
+        setDirectionPoints([directionCursor]);
+      } else {
+        // ケース 2: 壁 1 本以上 + キャラ移動 → cursor を polygon に取り込み (#4 修正)
+        addDirectionPoint(directionCursor);
+      }
     }
 
     addDirectionPoint(next);
