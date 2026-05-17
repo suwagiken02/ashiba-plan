@@ -175,6 +175,8 @@ export default function EditorPage() {
   useEffect(() => {
     if (!drawingId) return;
     setDrawingId(drawingId);
+    // 現場切替時の作業 state 一括リセット (= #5、 modal/mode/preview/history 等を初期化)
+    useCanvasStore.getState().resetForDrawingChange();
 
     const loadDrawing = async () => {
       const { data: drawing } = await supabase

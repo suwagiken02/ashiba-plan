@@ -78,6 +78,8 @@ type CanvasStore = {
   setCanvasData: (data: CanvasData) => void;
   /** 寸法線オフセット mm 更新 (= 寸法線移動、 種別ごと相対 delta) */
   setDimensionOffsetMm: (key: DimensionLineKey, mm: number) => void;
+  /** 現場切替時の作業 state 一括リセット (= #5、 modal/mode/selection/preview/history 等を初期化、 表示トグル/部材選択値/zoom 等は維持) */
+  resetForDrawingChange: () => void;
 
   // Mode
   mode: ModeType;
@@ -395,6 +397,77 @@ export const useCanvasStore = create<CanvasStore>((set, get) => ({
       isDirty: true,
     });
   },
+  resetForDrawingChange: () => set({
+    // modal フラグ
+    showAreaCalcModal: false,
+    showMemoCreateModal: false,
+    showDirectionInputModal: false,
+    showScaffoldStart: false,
+    showAutoLayout: false,
+    showBuildingModal: false,
+    showBuilding2FModal: false,
+    showSettings: false,
+    showInnerPost: false,
+    alertMessage: null,
+    // mode + selection
+    mode: 'select',
+    selectedIds: [],
+    selectedLineIds: [],
+    highlightIds: [],
+    // 壁方向入力 / 建物配置
+    directionPoints: [],
+    directionPointsHistory: [],
+    directionCursor: null,
+    noWallMode: false,
+    pendingDirection: null,
+    pendingDirectionTarget: null,
+    pendingTargetType: 'building',
+    pendingObstacleType: null,
+    pendingBuildingFloor: 1,
+    lastCompletedDirectionSession: null,
+    buildingInputMethod: 'template',
+    autoOpenRoofForBuildingId: null,
+    // 計測
+    isMeasuring: false,
+    measurePoint1: null,
+    measurePoint2: null,
+    measureCursor: null,
+    measureResultMm: null,
+    measureAxisMode: 'free',
+    // 特殊モード
+    isReorderMode: false,
+    isDuplicateMode: false,
+    isMagnetPinMode: false,
+    isAreaDesignationMode: false,
+    floorDesignation: {},
+    isHeightMarkerMode: false,
+    heightInputMarkerId: null,
+    pinAnchor: null,
+    pinDraftOffset: null,
+    pinDirectionInput: null,
+    // preview / draft
+    handrailPreview: null,
+    obstaclePreview: null,
+    snapPoint: null,
+    memoDraft: null,
+    memoDraftSource: 'memo',
+    building2FDraft: null,
+    // 移動モード
+    moveSelectMode: {
+      active: false,
+      step: 'category',
+      categories: { scaffold: true, building: false, obstacle: false, memo: false },
+      selectedIds: [],
+      dxMm: 0,
+      dyMm: 0,
+      backup: null,
+    },
+    // history
+    history: { past: [], future: [] },
+    // 平米計算 offset / 印刷枠
+    areaCalcOffsetMm: 900,
+    printAreaCenter: null,
+  }),
 
   mode: 'select',
   setMode: (mode) => set({ mode, selectedIds: [] }),
