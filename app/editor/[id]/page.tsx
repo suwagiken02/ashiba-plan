@@ -33,6 +33,7 @@ import DimensionVisibilityCheckboxes from '@/components/dimension/DimensionVisib
 import MemoCreateModal from '@/components/memo/MemoCreateModal';
 import DirectionInputModal from '@/components/building/DirectionInputModal';
 import PinDistanceInputModal from '@/components/canvas/PinDistanceInputModal';
+import ProjectEditModal from '@/components/project/ProjectEditModal';
 import { CanvasData, PaperSize, ScaleOption } from '@/types';
 
 // Konvaはクライアントサイドのみ
@@ -150,6 +151,10 @@ export default function EditorPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   // 起動時自動全範囲表示 (= #1): drawingId ごとに 1 回 fit するための ref フラグ
   const fittedForDrawingIdRef = useRef<string | null>(null);
+  // 編集モーダル用 state (= γ、 元請け様名追加)
+  const [projectAddress, setProjectAddress] = useState('');
+  const [projectContractor, setProjectContractor] = useState('');
+  const [showProjectEditModal, setShowProjectEditModal] = useState(false);
 
   // 画面サイズ計測
   useEffect(() => {
@@ -181,7 +186,7 @@ export default function EditorPage() {
     const loadDrawing = async () => {
       const { data: drawing } = await supabase
         .from('drawings')
-        .select('*, projects(name)')
+        .select('*, projects(name, address, contractor_name)')
         .eq('id', drawingId)
         .single();
 
@@ -190,7 +195,10 @@ export default function EditorPage() {
         setProjectId(drawing.project_id);
         setDrawingTitle(drawing.title);
         if (drawing.projects) {
-          setSiteName((drawing.projects as { name: string }).name);
+          const p = drawing.projects as { name: string; address: string | null; contractor_name: string | null };
+          setSiteName(p.name);
+          setProjectAddress(p.address ?? '');
+          setProjectContractor(p.contractor_name ?? '');
         }
       }
     };
@@ -297,7 +305,10 @@ export default function EditorPage() {
           >
             ←
           </button>
-          <div>
+          <div
+            className="cursor-pointer"
+            onClick={() => setShowProjectEditModal(true)}
+          >
             <h1 className="text-sm font-bold truncate max-w-[150px]">{siteName}</h1>
             <p className="text-xs text-dimension">{drawingTitle}</p>
           </div>
@@ -765,6 +776,31 @@ export default function EditorPage() {
           />
         ) : null;
       })()}
+      {showProjectEditModal && (
+        <ProjectEditModal
+          initialName={siteName}
+          initialAddress={projectAddress}
+          initialContractor={projectContractor}
+          onClose={() => setShowProjectEditModal(false)}
+          onSave={async ({ name, address, contractor_name }) => {
+            const projectId = useCanvasStore.getState().projectId;
+            if (!projectId) return;
+            const { error } = await supabase.from('projects').update({
+              name,
+              address: address || null,
+              contractor_name: contractor_name || null,
+              updated_at: new Date().toISOString(),
+            }).eq('id', projectId);
+            if (error) {
+              alert(`保存エラー: ${error.message}`);
+              return;
+            }
+            setSiteName(name);
+            setProjectAddress(address);
+            setProjectContractor(contractor_name);
+          }}
+        />
+      )}
     </div>
   );
 }
