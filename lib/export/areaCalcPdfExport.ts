@@ -1,12 +1,10 @@
 import { PDFDocument } from 'pdf-lib';
-import Konva from 'konva';
 import type {
   CanvasData,
   BuildingShape,
   Handrail,
   Point,
 } from '@/types';
-import { INITIAL_GRID_PX } from '@/lib/konva/gridUtils';
 import {
   computeScaffoldAreaSummary,
   computeBuildingFloorAreaSummary,
@@ -17,15 +15,14 @@ import { getOutlinePolygon } from '@/lib/konva/heightMarkerUtils';
 import { getHandrailEndpoints } from '@/lib/konva/snapUtils';
 import { renderTitleBlock } from './pdfExport';
 
-/** 平米計算 PDF レイアウト定数 (= 平米計算 Phase E-4b、 A4 縦固定) */
+/** 平米計算 PDF レイアウト定数 (= 平米計算 Phase E-4b、 A4 縦固定、 #8 で平面図削除しシンプル化) */
 const PAPER_W = 595.28;
 const PAPER_H = 841.89;
 const MARGIN = 16;
 const TITLE_BLOCK_H = 60;
-const HEADER_BAND_H = 170;
-const HEADER_TEXT_W = 380;
-const HEADER_MINI_W = 170;
-const HEADER_GAP = 8;
+const TEXT_BLOCK_H = 280;
+const TEXT_MINI_GAP = 8;
+const MINI_TITLE_GAP = 8;
 
 function dataUrlToArrayBuffer(dataUrl: string): ArrayBuffer {
   const base64 = dataUrl.split(',')[1];
@@ -160,81 +157,11 @@ function renderMiniCanvasPng(
 }
 
 /**
- * Konva stage の建物 bbox 範囲を PNG 化 (= 寸法線含む)。
- * 建物 0 個時は stage 全体をフォールバック。
- * 印刷枠 (赤破線) を一時非表示にしてキャプチャ。
- */
-async function captureDrawingPng(
-  canvasData: CanvasData,
-  zoom: number,
-  panX: number,
-  panY: number,
-): Promise<{ buffer: ArrayBuffer; width: number; height: number } | null> {
-  const stages = Konva.stages;
-  if (stages.length === 0) return null;
-  const stage = stages[0];
-  const gridPx = INITIAL_GRID_PX * zoom;
-
-  if (canvasData.buildings.length === 0) {
-    const dataUrl = stage.toDataURL({ pixelRatio: 2 });
-    const buffer = await fetch(dataUrl).then((r) => r.arrayBuffer());
-    return { buffer, width: stage.width(), height: stage.height() };
-  }
-
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  for (const b of canvasData.buildings) {
-    for (const p of b.points) {
-      if (p.x < minX) minX = p.x;
-      if (p.y < minY) minY = p.y;
-      if (p.x > maxX) maxX = p.x;
-      if (p.y > maxY) maxY = p.y;
-    }
-  }
-  // 寸法線 + 余白用に建物 bbox を 30 grid (= 300mm) 外側へ拡張
-  const marginGrid = 30;
-  minX -= marginGrid; minY -= marginGrid;
-  maxX += marginGrid; maxY += marginGrid;
-
-  const rectX = minX * gridPx + panX;
-  const rectY = minY * gridPx + panY;
-  const rectW = (maxX - minX) * gridPx;
-  const rectH = (maxY - minY) * gridPx;
-
-  // 印刷枠 (赤破線) を一時非表示にしてキャプチャ (= 既存 pdfExport.ts 同パターン)
-  const layers = stage.getLayers();
-  const hiddenLayers: Konva.Layer[] = [];
-  for (const layer of layers) {
-    const printRects = layer.find('Rect').filter((node: Konva.Node) => {
-      const rect = node as Konva.Rect;
-      return rect.stroke() === '#EF4444' && (rect.dash()?.length ?? 0) > 0;
-    });
-    if (printRects.length > 0) {
-      layer.visible(false);
-      hiddenLayers.push(layer);
-    }
-  }
-  stage.batchDraw();
-
-  const dataUrl = stage.toDataURL({
-    x: rectX,
-    y: rectY,
-    width: rectW,
-    height: rectH,
-    pixelRatio: 2,
-  });
-
-  for (const layer of hiddenLayers) layer.visible(true);
-  stage.batchDraw();
-
-  const buffer = await fetch(dataUrl).then((r) => r.arrayBuffer());
-  return { buffer, width: rectW, height: rectH };
-}
-
-/**
- * 平米計算結果を A4 縦 1 ページの PDF として出力 (= 平米計算 Phase E-4b)。
- * 上部帯: 計算結果テキスト + mini canvas
- * 中央: 図面 (= 建物 bbox 中心 + auto-fit)
- * 下部: 表題欄 (現場名 + 会社名 + 日付)
+ * 平米計算結果を A4 縦 1 ページの PDF として出力 (= 平米計算 Phase E-4b、 #8 でシンプル化)。
+ * 上: 計算結果テキスト (= full-width 280pt)
+ * 中: 面プレビュー mini canvas (= full-width ~454pt、 面ラベル A,B,C... 確認用)
+ * 下: 表題欄 (= 現場名 + 会社名 + 日付、 右下 200×60pt)
+ * 平面図 (= 建物 capture) は #8 で削除。 必要なら「貼り付け」 → 既存「出力」 ボタンで対応。
  */
 export async function exportAreaCalcPdf(args: {
   canvasData: CanvasData;
@@ -245,20 +172,12 @@ export async function exportAreaCalcPdf(args: {
   siteName: string;
   companyName: string;
   date: string;
-  zoom: number;
-  panX: number;
-  panY: number;
 }): Promise<void> {
   const {
     canvasData, scaffoldSummary, buildingSummary, offsetMm,
     isFloorOnlyMode,
     siteName, companyName, date,
-    zoom, panX, panY,
   } = args;
-
-  if (Konva.stages.length === 0) {
-    throw new Error('Konva stage が初期化されていません');
-  }
 
   const areaCalcText = buildAreaCalcText({
     scaffoldSummary, buildingSummary, offsetMm, isFloorOnlyMode,
@@ -267,62 +186,42 @@ export async function exportAreaCalcPdf(args: {
   const pdfDoc = await PDFDocument.create();
   const page = pdfDoc.addPage([PAPER_W, PAPER_H]);
 
-  // ── 1. 上部帯 (= テキスト + mini canvas) ──
-  const headerY = PAPER_H - MARGIN - HEADER_BAND_H;
-  const textPngBytes = renderAreaCalcTextPng(areaCalcText, HEADER_TEXT_W, HEADER_BAND_H);
+  // ── 1. 上: 計算結果テキスト (= full-width) ──
+  const textW = PAPER_W - 2 * MARGIN;
+  const textH = TEXT_BLOCK_H;
+  const textY = PAPER_H - MARGIN - textH;
+  const textPngBytes = renderAreaCalcTextPng(areaCalcText, textW, textH);
   const textPng = await pdfDoc.embedPng(textPngBytes);
   page.drawImage(textPng, {
     x: MARGIN,
-    y: headerY,
-    width: HEADER_TEXT_W,
-    height: HEADER_BAND_H,
+    y: textY,
+    width: textW,
+    height: textH,
   });
 
+  // ── 2. 中: 面プレビュー mini canvas (= full-width、 floor-only mode 時は skip) ──
   if (!isFloorOnlyMode && scaffoldSummary) {
+    const miniW = PAPER_W - 2 * MARGIN;
+    const miniBottomY = MARGIN + TITLE_BLOCK_H + MINI_TITLE_GAP;
+    const miniTopY = textY - TEXT_MINI_GAP;
+    const miniH = miniTopY - miniBottomY;
     const miniPngBytes = renderMiniCanvasPng(
       canvasData.buildings,
       canvasData.handrails,
       scaffoldSummary.faceLabels,
-      HEADER_MINI_W,
-      HEADER_BAND_H,
+      miniW,
+      miniH,
     );
     const miniPng = await pdfDoc.embedPng(miniPngBytes);
     page.drawImage(miniPng, {
-      x: MARGIN + HEADER_TEXT_W + HEADER_GAP,
-      y: headerY,
-      width: HEADER_MINI_W,
-      height: HEADER_BAND_H,
+      x: MARGIN,
+      y: miniBottomY,
+      width: miniW,
+      height: miniH,
     });
   }
 
-  // ── 2. 中央 (= 図面 + 寸法、 auto-fit) ──
-  const drawingTop = headerY - 4;
-  const drawingBottom = MARGIN + TITLE_BLOCK_H + 8;
-  const drawingW = PAPER_W - 2 * MARGIN;
-  const drawingH = drawingTop - drawingBottom;
-
-  const capture = await captureDrawingPng(canvasData, zoom, panX, panY);
-  if (capture) {
-    const png = await pdfDoc.embedPng(capture.buffer);
-    const imgAspect = capture.width / capture.height;
-    const areaAspect = drawingW / drawingH;
-    let imgW: number, imgH: number;
-    if (imgAspect > areaAspect) {
-      imgW = drawingW;
-      imgH = drawingW / imgAspect;
-    } else {
-      imgH = drawingH;
-      imgW = drawingH * imgAspect;
-    }
-    page.drawImage(png, {
-      x: MARGIN + (drawingW - imgW) / 2,
-      y: drawingBottom + (drawingH - imgH) / 2,
-      width: imgW,
-      height: imgH,
-    });
-  }
-
-  // ── 3. 下部表題欄 ──
+  // ── 3. 下: 表題欄 (= 右下、 既存維持) ──
   const tbWidthPx = 250;
   const tbHeightPx = 60;
   const tbImageBytes = renderTitleBlock(

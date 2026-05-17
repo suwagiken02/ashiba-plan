@@ -180,9 +180,6 @@ export default function AreaCalculationModal({ siteName }: { siteName: string })
         siteName,
         companyName: useAuthStore.getState().profile?.company_name ?? '',
         date: new Date().toLocaleDateString('ja-JP'),
-        zoom: store.zoom,
-        panX: store.panX,
-        panY: store.panY,
       });
       const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
       const deviceMsg = /iPhone|iPad|iPod/.test(ua)
